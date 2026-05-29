@@ -1,0 +1,402 @@
+"use client";
+
+import { useRef, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
+import {
+  Download,
+  Eye,
+  History,
+  Plus,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import { toast } from "sonner";
+import type { AxiosError } from "axios";
+import type { ColumnDef } from "@tanstack/react-table";
+
+import { DataTable } from "@/components/common/DataTable";
+import { ConfirmModal } from "@/components/common/ConfirmModal";
+import { CrudModal } from "@/components/common/CrudModal";
+import { PermissionGate } from "@/components/common/PermissionGate";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { usePermissions } from "@/hooks/usePermissions";
+import { PERMISSIONS } from "@/lib/constants/permissions";
+import { formatDate } from "@/lib/utils";
+import {
+  docsApi,
+  documentationCategoriesApi,
+  type Doc,
+  type DocVersion,
+  getDocFileUrl,
+  formatFileSize,
+} from "@/lib/api/docs";
+import type { ApiError } from "@/types/api";
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
+export default function DocsPage() {
+  const { can } = usePermissions();
+  const queryClient = useQueryClient();
+
+  // --- Pagination
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
+  const [search, setSearch] = useState("");
+
+  // --- Modal: suppression
+  const [deleteConfirm, setDeleteConfirm] = useState<Doc | null>(null);
+
+  // --- Modal: nouvelle version
+  const [newVersionDoc, setNewVersionDoc] = useState<Doc | null>(null);
+  const [nvTitle, setNvTitle] = useState("");
+  const [nvFile, setNvFile] = useState<File | null>(null);
+  const nvFileRef = useRef<HTMLInputElement>(null);
+
+  // --- Modal: historique des versions
+  const [historyDoc, setHistoryDoc] = useState<Doc | null>(null);
+
+  // --- Query principale
+  const { data, isLoading } = useQuery({
+    queryKey: ["docs", { page, size: pageSize, search }],
+    queryFn: () =>
+      docsApi
+        .findAll({ page, size: pageSize, search: search || undefined })
+        .then((r) => r.data),
+  });
+
+  const docs = data?.content ?? [];
+  const pageCount = data?.totalPages ?? 0;
+
+  // --- Query catégories (pour l'affichage du nom)
+  const { data: categories } = useQuery({
+    queryKey: ["documentation-categories"],
+    queryFn: () => documentationCategoriesApi.findAll().then((r) => r.data),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const categoryMap = Object.fromEntries(
+    (categories ?? []).map((c) => [c.id, c.name])
+  );
+
+  // --- Query versions (quand historyDoc est défini)
+  const { data: versions, isLoading: versionsLoading } = useQuery<DocVersion[]>({
+    queryKey: ["doc-versions", historyDoc?.id],
+    queryFn: () => docsApi.getVersions(historyDoc!.id).then((r) => r.data),
+    enabled: !!historyDoc,
+  });
+
+  // --- Mutation: suppression
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => docsApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["docs"] });
+      toast.success("Document supprimé");
+      setDeleteConfirm(null);
+    },
+    onError: (err: AxiosError<ApiError>) => {
+      toast.error(err.response?.data?.message ?? "Erreur lors de la suppression");
+    },
+  });
+
+  // --- Mutation: nouvelle version
+  const addVersionMutation = useMutation({
+    mutationFn: ({ id, file, title }: { id: string; file: File; title?: string }) =>
+      docsApi.addVersion(id, file, title || undefined),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["docs"] });
+      toast.success("Nouvelle version ajoutée");
+      setNewVersionDoc(null);
+      setNvTitle("");
+      setNvFile(null);
+    },
+    onError: (err: AxiosError<ApiError>) => {
+      toast.error(err.response?.data?.message ?? "Erreur lors de l'ajout de version");
+    },
+  });
+
+  // --- Colonnes
+  const columns: ColumnDef<Doc>[] = [
+    {
+      header: "Titre",
+      accessorKey: "title",
+      cell: ({ row }) => (
+        <span className="font-medium text-gray-900">{row.original.title}</span>
+      ),
+    },
+    {
+      header: "Catégorie",
+      id: "category",
+      cell: ({ row }) => {
+        const name = row.original.documentationCategoryId
+          ? categoryMap[row.original.documentationCategoryId]
+          : undefined;
+        return name ? (
+          <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+            {name}
+          </span>
+        ) : (
+          <span className="text-gray-400 text-xs">—</span>
+        );
+      },
+    },
+    {
+      header: "Taille",
+      id: "fileSize",
+      cell: ({ row }) => (
+        <span className="text-sm text-gray-600">{formatFileSize(row.original.fileSize)}</span>
+      ),
+    },
+    {
+      header: "Date",
+      accessorKey: "createdAt",
+      cell: ({ row }) => (
+        <span className="text-sm text-gray-600">{formatDate(row.original.createdAt)}</span>
+      ),
+    },
+    {
+      header: "Actions",
+      id: "actions",
+      cell: ({ row }) => {
+        const doc = row.original;
+        return (
+          <div className="flex items-center gap-1">
+            {/* Voir détail */}
+            <Link
+              href={`/docs/${doc.id}`}
+              className="inline-flex items-center justify-center rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-blue-600 transition-colors"
+              title="Voir le document"
+            >
+              <Eye className="h-4 w-4" />
+            </Link>
+
+            {/* Télécharger */}
+            <a
+              href={getDocFileUrl(doc.attachment)}
+              target="_blank"
+              rel="noreferrer"
+              download
+              className="inline-flex items-center justify-center rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-green-600 transition-colors"
+              title="Télécharger"
+            >
+              <Download className="h-4 w-4" />
+            </a>
+
+            {/* Historique des versions */}
+            <button
+              type="button"
+              onClick={() => setHistoryDoc(doc)}
+              className="inline-flex items-center justify-center rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-purple-600 transition-colors"
+              title="Historique des versions"
+            >
+              <History className="h-4 w-4" />
+            </button>
+
+            {/* Nouvelle version */}
+            <PermissionGate permission={PERMISSIONS.EDIT_DOCS}>
+              <button
+                type="button"
+                onClick={() => {
+                  setNewVersionDoc(doc);
+                  setNvTitle("");
+                  setNvFile(null);
+                }}
+                className="inline-flex items-center justify-center rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-blue-600 transition-colors"
+                title="Nouvelle version"
+              >
+                <Upload className="h-4 w-4" />
+              </button>
+            </PermissionGate>
+
+            {/* Supprimer */}
+            <PermissionGate permission={PERMISSIONS.DELETE_DOCS}>
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm(doc)}
+                className="inline-flex items-center justify-center rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-red-600 transition-colors"
+                title="Supprimer"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </PermissionGate>
+          </div>
+        );
+      },
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Documents"
+        breadcrumbs={[
+          { label: "Accueil", href: "/home" },
+          { label: "Documents" },
+        ]}
+        action={
+          can(PERMISSIONS.CREATE_DOCS) ? (
+            <Link
+              href="/docs/create"
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+            >
+              <Plus className="h-4 w-4" />
+              Nouveau document
+            </Link>
+          ) : undefined
+        }
+      />
+
+      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <DataTable
+          columns={columns}
+          data={docs}
+          isLoading={isLoading}
+          pageCount={pageCount}
+          pageIndex={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setPage(0);
+          }}
+          searchValue={search}
+          onSearchChange={(val) => {
+            setSearch(val);
+            setPage(0);
+          }}
+        />
+      </div>
+
+      {/* Modal: suppression */}
+      <ConfirmModal
+        isOpen={deleteConfirm !== null}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={() => {
+          if (deleteConfirm) deleteMutation.mutate(deleteConfirm.id);
+        }}
+        title="Supprimer ce document"
+        message={
+          deleteConfirm
+            ? `Voulez-vous vraiment supprimer "${deleteConfirm.title}" ? Cette action est irréversible.`
+            : ""
+        }
+        confirmLabel="Supprimer"
+        confirmVariant="danger"
+        isLoading={deleteMutation.isPending}
+      />
+
+      {/* Modal: nouvelle version */}
+      <CrudModal
+        isOpen={newVersionDoc !== null}
+        onClose={() => setNewVersionDoc(null)}
+        title={`Nouvelle version — ${newVersionDoc?.title ?? ""}`}
+        submitLabel="Ajouter la version"
+        isSubmitting={addVersionMutation.isPending}
+        onSubmit={() => {
+          if (!nvFile || !newVersionDoc) return;
+          addVersionMutation.mutate({
+            id: newVersionDoc.id,
+            file: nvFile,
+            title: nvTitle || undefined,
+          });
+        }}
+      >
+        <div className="space-y-4">
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-700">
+              Titre (optionnel)
+            </label>
+            <input
+              type="text"
+              value={nvTitle}
+              onChange={(e) => setNvTitle(e.target.value)}
+              placeholder="Titre de cette version"
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-700">
+              Fichier <span className="text-red-500">*</span>
+            </label>
+            <input
+              ref={nvFileRef}
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.docx,.xlsx,.doc,.xls"
+              onChange={(e) => setNvFile(e.target.files?.[0] ?? null)}
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100"
+            />
+            {nvFile && (
+              <p className="text-xs text-gray-500">
+                {nvFile.name} ({formatFileSize(nvFile.size)})
+              </p>
+            )}
+          </div>
+        </div>
+      </CrudModal>
+
+      {/* Modal: historique des versions */}
+      <CrudModal
+        isOpen={historyDoc !== null}
+        onClose={() => setHistoryDoc(null)}
+        title={`Historique des versions — ${historyDoc?.title ?? ""}`}
+        size="lg"
+      >
+        {versionsLoading ? (
+          <div className="space-y-2 py-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-10 animate-pulse rounded bg-gray-100" />
+            ))}
+          </div>
+        ) : !versions || versions.length === 0 ? (
+          <p className="py-6 text-center text-sm text-gray-500">Aucune version trouvée.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 text-left">
+                  <th className="pb-2 pr-4 font-medium text-gray-700">Version</th>
+                  <th className="pb-2 pr-4 font-medium text-gray-700">Titre</th>
+                  <th className="pb-2 pr-4 font-medium text-gray-700">Taille</th>
+                  <th className="pb-2 pr-4 font-medium text-gray-700">Date</th>
+                  <th className="pb-2 font-medium text-gray-700">Fichier</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...versions].sort((a, b) => b.version - a.version).map((v) => (
+                  <tr key={v.id} className="border-b border-gray-100 last:border-0">
+                    <td className="py-2 pr-4">
+                      {v.version === Math.max(...versions.map((x) => x.version)) ? (
+                        <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                          v{v.version} — actuelle
+                        </span>
+                      ) : (
+                        <span className="text-gray-600">v{v.version}</span>
+                      )}
+                    </td>
+                    <td className="py-2 pr-4 text-gray-800">{v.title ?? "—"}</td>
+                    <td className="py-2 pr-4 text-gray-600">{formatFileSize(v.fileSize)}</td>
+                    <td className="py-2 pr-4 text-gray-600">{formatDate(v.createdAt)}</td>
+                    <td className="py-2">
+                      <a
+                        href={getDocFileUrl(v.attachment)}
+                        target="_blank"
+                        rel="noreferrer"
+                        download
+                        className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        Télécharger
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CrudModal>
+    </div>
+  );
+}

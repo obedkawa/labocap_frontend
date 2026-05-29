@@ -1,0 +1,430 @@
+"use client";
+
+import { useState, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { toast } from "sonner";
+import { FileText } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
+import type { AxiosError } from "axios";
+import type { UseFormReturn } from "react-hook-form";
+import ReactSelect from "react-select";
+
+import { PageHeader } from "@/components/ui/PageHeader";
+import { DataTable } from "@/components/common/DataTable";
+import { CrudModal } from "@/components/common/CrudModal";
+import { PermissionGate } from "@/components/common/PermissionGate";
+import { FormField } from "@/components/ui/FormField";
+import { usePermissions } from "@/hooks/usePermissions";
+import { PERMISSIONS } from "@/lib/constants/permissions";
+import { hrApi, Payroll, PayrollRequest, Employee } from "@/lib/api/hr";
+
+// ---------------------------------------------------------------------------
+// Zod schema — aligné sur EmployeePayrollRequestDto
+// month et year sont des entiers, grossSalary est obligatoire
+// ---------------------------------------------------------------------------
+
+const payrollSchema = z.object({
+  employeeId: z.string().min(1, "L'employé est requis"),
+  month: z.string().min(1, "Le mois est requis"),
+  year: z.string().min(1, "L'année est requise"),
+  grossSalary: z.string().min(1, "Le salaire brut est requis"),
+  deductions: z.string().optional(),
+  paidAt: z.string().optional(),
+});
+
+type PayrollFormValues = z.infer<typeof payrollSchema>;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const inputClass =
+  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
+
+const selectClass =
+  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white";
+
+function formatAmount(amount?: number): string {
+  if (amount == null) return "—";
+  return new Intl.NumberFormat("fr-FR").format(amount) + " FCFA";
+}
+
+const MONTHS = [
+  { value: "1", label: "Janvier" },
+  { value: "2", label: "Février" },
+  { value: "3", label: "Mars" },
+  { value: "4", label: "Avril" },
+  { value: "5", label: "Mai" },
+  { value: "6", label: "Juin" },
+  { value: "7", label: "Juillet" },
+  { value: "8", label: "Août" },
+  { value: "9", label: "Septembre" },
+  { value: "10", label: "Octobre" },
+  { value: "11", label: "Novembre" },
+  { value: "12", label: "Décembre" },
+];
+
+function monthLabel(month: number): string {
+  return MONTHS.find((m) => m.value === String(month))?.label ?? String(month);
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
+export default function PayrollPage() {
+  const { can } = usePermissions();
+  const queryClient = useQueryClient();
+
+  const [createOpen, setCreateOpen] = useState(false);
+
+  // Filtres
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
+  const [filterMonth, setFilterMonth] = useState<string>("");
+  const [filterYear, setFilterYear] = useState<string>("");
+
+  const currentYear = new Date().getFullYear();
+  const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i);
+
+  // ---- Queries & Mutations ------------------------------------------------
+
+  const { data: employeesData } = useQuery({
+    queryKey: ["employees"],
+    queryFn: () => hrApi.findAll({ size: 200 }).then((r) => r.data),
+  });
+
+  const employees: Employee[] = employeesData?.content ?? [];
+
+  const employeeOptions = employees.map((e) => ({
+    value: e.id,
+    label: `${e.firstName} ${e.lastName}`,
+  }));
+
+  const { data: payrollData, isLoading } = useQuery({
+    queryKey: ["payrolls", selectedEmployeeId],
+    queryFn: () =>
+      hrApi.getPayrolls(selectedEmployeeId, { size: 200 }).then((r) => r.data),
+    enabled: !!selectedEmployeeId,
+  });
+
+  const payrolls: Payroll[] = payrollData?.content ?? [];
+
+  // Fiches filtrées
+  const filtered = useMemo(() => {
+    return payrolls.filter((p) => {
+      const matchMonth = !filterMonth || String(p.month) === filterMonth;
+      const matchYear = !filterYear || String(p.year) === filterYear;
+      return matchMonth && matchYear;
+    });
+  }, [payrolls, filterMonth, filterYear]);
+
+  const generateMutation = useMutation({
+    mutationFn: ({
+      employeeId,
+      payload,
+    }: {
+      employeeId: string;
+      payload: PayrollRequest;
+    }) => hrApi.createPayroll(employeeId, payload),
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["payrolls", vars.employeeId] });
+      toast.success("Fiche de paie générée");
+      setCreateOpen(false);
+      createForm.reset();
+    },
+    onError: (err: AxiosError) => {
+      const msg =
+        (err.response?.data as { message?: string })?.message ??
+        "Une erreur est survenue";
+      toast.error(msg);
+    },
+  });
+
+  // ---- Forms ---------------------------------------------------------------
+
+  const createForm = useForm<PayrollFormValues>({
+    resolver: zodResolver(payrollSchema),
+    defaultValues: {
+      employeeId: "",
+      month: String(new Date().getMonth() + 1),
+      year: String(currentYear),
+      grossSalary: "",
+      deductions: "",
+      paidAt: "",
+    },
+  });
+
+  // ---- Handlers ------------------------------------------------------------
+
+  function onCreateSubmit(values: PayrollFormValues) {
+    generateMutation.mutate({
+      employeeId: values.employeeId,
+      payload: {
+        month: Number(values.month),
+        year: Number(values.year),
+        grossSalary: Number(values.grossSalary),
+        deductions:
+          values.deductions === "" || values.deductions === undefined
+            ? undefined
+            : Number(values.deductions),
+        paidAt: values.paidAt || undefined,
+      },
+    });
+  }
+
+  // ---- Columns -------------------------------------------------------------
+
+  const columns: ColumnDef<Payroll>[] = [
+    {
+      header: "Mois / Année",
+      id: "period",
+      cell: ({ row }) =>
+        `${monthLabel(row.original.month)} ${row.original.year}`,
+    },
+    {
+      header: "Salaire brut",
+      accessorKey: "grossSalary",
+      cell: ({ row }) => formatAmount(row.original.grossSalary),
+    },
+    {
+      header: "Déductions",
+      accessorKey: "deductions",
+      cell: ({ row }) => formatAmount(row.original.deductions),
+    },
+    {
+      header: "Salaire net",
+      accessorKey: "netSalary",
+      cell: ({ row }) => (
+        <span className="font-semibold text-gray-900">
+          {formatAmount(row.original.netSalary)}
+        </span>
+      ),
+    },
+    {
+      header: "Date paiement",
+      accessorKey: "paidAt",
+      cell: ({ row }) =>
+        row.original.paidAt
+          ? new Date(row.original.paidAt).toLocaleDateString("fr-FR")
+          : "—",
+    },
+    {
+      header: "Actions",
+      id: "actions",
+      cell: () => (
+        <PermissionGate permission={PERMISSIONS.MANAGE_PAYROLL}>
+          <button
+            disabled
+            title="Bientôt disponible"
+            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-gray-100 text-gray-400 cursor-not-allowed"
+            aria-label="Voir PDF"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            PDF
+          </button>
+        </PermissionGate>
+      ),
+    },
+  ];
+
+  // ---- Render --------------------------------------------------------------
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Paie"
+        action={
+          can(PERMISSIONS.MANAGE_PAYROLL) ? (
+            <button
+              onClick={() => {
+                createForm.reset();
+                setCreateOpen(true);
+              }}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+            >
+              Générer fiche de paie
+            </button>
+          ) : undefined
+        }
+      />
+
+      {/* Filtres */}
+      <div className="flex flex-wrap gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="min-w-[220px]">
+          <ReactSelect
+            options={employeeOptions}
+            value={employeeOptions.find((o) => o.value === selectedEmployeeId) ?? null}
+            onChange={(opt) => setSelectedEmployeeId(opt?.value ?? "")}
+            placeholder="Sélectionner un employé..."
+            isClearable
+            classNamePrefix="react-select"
+          />
+        </div>
+
+        <select
+          value={filterMonth}
+          onChange={(e) => setFilterMonth(e.target.value)}
+          className={selectClass + " max-w-[180px]"}
+        >
+          <option value="">Tous les mois</option>
+          {MONTHS.map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={filterYear}
+          onChange={(e) => setFilterYear(e.target.value)}
+          className={selectClass + " max-w-[140px]"}
+        >
+          <option value="">Toutes les années</option>
+          {yearOptions.map((y) => (
+            <option key={y} value={String(y)}>
+              {y}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {!selectedEmployeeId && (
+        <div className="rounded-xl border border-gray-200 bg-white p-6 text-center shadow-sm">
+          <p className="text-sm text-gray-500">
+            Sélectionnez un employé pour afficher ses fiches de paie.
+          </p>
+        </div>
+      )}
+
+      {selectedEmployeeId && (
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5">
+          <DataTable columns={columns} data={filtered} isLoading={isLoading} />
+        </div>
+      )}
+
+      {/* ---- Modal génération fiche de paie ---- */}
+      <CrudModal
+        isOpen={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="Générer une fiche de paie"
+        size="lg"
+        onSubmit={createForm.handleSubmit(onCreateSubmit)}
+        submitLabel="Générer"
+        isSubmitting={generateMutation.isPending}
+      >
+        <PayrollForm
+          form={createForm}
+          employeeOptions={employeeOptions}
+          yearOptions={yearOptions}
+        />
+      </CrudModal>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PayrollForm — formulaire génération fiche de paie
+// ---------------------------------------------------------------------------
+
+interface EmployeeOption {
+  value: string;
+  label: string;
+}
+
+interface PayrollFormProps {
+  form: UseFormReturn<PayrollFormValues>;
+  employeeOptions: EmployeeOption[];
+  yearOptions: number[];
+}
+
+function PayrollForm({ form, employeeOptions, yearOptions }: PayrollFormProps) {
+  const {
+    register,
+    control,
+    formState: { errors },
+  } = form;
+
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <FormField
+        label="Employé"
+        required
+        error={errors.employeeId?.message}
+        className="sm:col-span-2"
+      >
+        <Controller
+          name="employeeId"
+          control={control}
+          render={({ field }) => (
+            <ReactSelect
+              options={employeeOptions}
+              value={employeeOptions.find((o) => o.value === field.value) ?? null}
+              onChange={(opt) => field.onChange(opt?.value ?? "")}
+              placeholder="Sélectionner un employé..."
+              isClearable
+              classNamePrefix="react-select"
+            />
+          )}
+        />
+      </FormField>
+
+      <FormField label="Mois" required error={errors.month?.message}>
+        <select
+          {...register("month")}
+          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+        >
+          <option value="">Sélectionner un mois...</option>
+          {MONTHS.map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+      </FormField>
+
+      <FormField label="Année" required error={errors.year?.message}>
+        <select
+          {...register("year")}
+          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+        >
+          {yearOptions.map((y) => (
+            <option key={y} value={String(y)}>
+              {y}
+            </option>
+          ))}
+        </select>
+      </FormField>
+
+      <FormField label="Salaire brut (FCFA)" required error={errors.grossSalary?.message}>
+        <input
+          type="number"
+          {...register("grossSalary")}
+          placeholder="Ex : 150000"
+          min={0}
+          className={inputClass}
+        />
+      </FormField>
+
+      <FormField label="Déductions (FCFA)" error={errors.deductions?.message}>
+        <input
+          type="number"
+          {...register("deductions")}
+          placeholder="0"
+          min={0}
+          className={inputClass}
+        />
+      </FormField>
+
+      <FormField label="Date de paiement" error={errors.paidAt?.message} className="sm:col-span-2">
+        <input
+          type="date"
+          {...register("paidAt")}
+          className={inputClass}
+        />
+      </FormField>
+    </div>
+  );
+}

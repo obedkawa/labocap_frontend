@@ -1,0 +1,606 @@
+"use client";
+
+import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Download } from "lucide-react";
+import ReactSelect from "react-select";
+import { toast } from "sonner";
+import type { ColumnDef } from "@tanstack/react-table";
+
+import { PageHeader } from "@/components/ui/PageHeader";
+import { DataTable } from "@/components/common/DataTable";
+import { formatDate } from "@/lib/utils";
+import {
+  reportsApi,
+  type ReportGlobalSearchRow,
+} from "@/lib/api/reports";
+import { typeOrdersApi } from "@/lib/api/examens";
+import { doctorsApi } from "@/lib/api/doctors";
+import { hospitalsApi } from "@/lib/api/hospitals";
+import { patientsApi } from "@/lib/api/patients";
+import { contractsApi } from "@/lib/api/contracts";
+
+// ---------------------------------------------------------------------------
+// Types locaux pour les options react-select
+// ---------------------------------------------------------------------------
+
+interface SelectOption {
+  value: string;
+  label: string;
+}
+
+interface PatientOption extends SelectOption {
+  code?: string;
+  firstname?: string;
+  lastname?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Page principale — Recherche avancée des comptes-rendus
+// ---------------------------------------------------------------------------
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 500, 1000];
+
+export default function SearchPage() {
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
+
+  // États des 10 filtres
+  const [typeOrderIds, setTypeOrderIds] = useState<string[]>([]);
+  const [contratIds, setContratIds] = useState<string[]>([]);
+  const [patientIds, setPatientIds] = useState<string[]>([]);
+  const [doctorIds, setDoctorIds] = useState<string[]>([]);
+  const [hospitalIds, setHospitalIds] = useState<string[]>([]);
+  const [referenceHospital, setReferenceHospital] = useState("");
+  const [dateBegin, setDateBegin] = useState("");
+  const [dateEnd, setDateEnd] = useState("");
+  const [content, setContent] = useState("");
+  const [urgentFilter, setUrgentFilter] = useState<"" | "urgent" | "retard">("");
+
+  // -----------------------------------------------------------------------
+  // Chargement des options des selects
+  // -----------------------------------------------------------------------
+  const { data: typeOrders } = useQuery({
+    queryKey: ["type-orders-all"],
+    queryFn: () => typeOrdersApi.findAll().then((r) => r.data),
+    staleTime: 5 * 60_000,
+  });
+
+  const { data: doctors } = useQuery({
+    queryKey: ["doctors-all"],
+    queryFn: () =>
+      doctorsApi.findAll({ size: 1000 }).then((r) => r.data.content),
+    staleTime: 5 * 60_000,
+  });
+
+  const { data: hospitals } = useQuery({
+    queryKey: ["hospitals-all"],
+    queryFn: () =>
+      hospitalsApi.findAll({ size: 1000 }).then((r) => r.data.content),
+    staleTime: 5 * 60_000,
+  });
+
+  const { data: patients } = useQuery({
+    queryKey: ["patients-all-for-search"],
+    queryFn: () =>
+      patientsApi.findAll({ size: 1000 }).then((r) => r.data.content),
+    staleTime: 5 * 60_000,
+  });
+
+  const { data: contrats } = useQuery({
+    queryKey: ["contracts-all-for-search"],
+    queryFn: () =>
+      contractsApi.findAll({ size: 1000 }).then((r) => r.data.content),
+    staleTime: 5 * 60_000,
+  });
+
+  // -----------------------------------------------------------------------
+  // Options des react-select
+  // -----------------------------------------------------------------------
+  const typeOrderOptions = useMemo<SelectOption[]>(
+    () =>
+      (typeOrders ?? []).map((t) => ({ value: t.id, label: t.title })),
+    [typeOrders],
+  );
+
+  const contratOptions = useMemo<SelectOption[]>(
+    () =>
+      (contrats ?? []).map((c) => ({
+        value: c.id,
+        label: c.name ?? "(sans nom)",
+      })),
+    [contrats],
+  );
+
+  const patientOptions = useMemo<PatientOption[]>(
+    () =>
+      (patients ?? []).map((p) => ({
+        value: p.id,
+        label: `${p.code ?? ""} - ${p.firstname ?? ""} ${p.lastname ?? ""}`.trim(),
+        code: p.code,
+        firstname: p.firstname,
+        lastname: p.lastname,
+      })),
+    [patients],
+  );
+
+  const doctorOptions = useMemo<SelectOption[]>(
+    () => (doctors ?? []).map((d) => ({ value: d.id, label: d.name })),
+    [doctors],
+  );
+
+  const hospitalOptions = useMemo<SelectOption[]>(
+    () => (hospitals ?? []).map((h) => ({ value: h.id, label: h.name })),
+    [hospitals],
+  );
+
+  // -----------------------------------------------------------------------
+  // Requête de recherche
+  // -----------------------------------------------------------------------
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: [
+      "reports-search-global",
+      {
+        page,
+        pageSize,
+        typeOrderIds,
+        contratIds,
+        patientIds,
+        doctorIds,
+        hospitalIds,
+        referenceHospital,
+        dateBegin,
+        dateEnd,
+        content,
+        urgentFilter,
+      },
+    ],
+    queryFn: () =>
+      reportsApi
+        .searchGlobal({
+          page,
+          size: pageSize,
+          typeOrderIds: typeOrderIds.length ? typeOrderIds : undefined,
+          contratIds: contratIds.length ? contratIds : undefined,
+          patientIds: patientIds.length ? patientIds : undefined,
+          doctorIds: doctorIds.length ? doctorIds : undefined,
+          hospitalIds: hospitalIds.length ? hospitalIds : undefined,
+          referenceHospital: referenceHospital || undefined,
+          dateBegin: dateBegin || undefined,
+          dateEnd: dateEnd || undefined,
+          content: content || undefined,
+          isUrgent: urgentFilter === "urgent" ? true : undefined,
+        })
+        .then((r) => r.data),
+    placeholderData: (prev) => prev,
+  });
+
+  // -----------------------------------------------------------------------
+  // Colonnes du tableau (10 colonnes)
+  // -----------------------------------------------------------------------
+  const columns: ColumnDef<ReportGlobalSearchRow>[] = [
+    {
+      header: "Code Rapport",
+      accessorKey: "codeReport",
+      cell: ({ row }) => (
+        <span className="font-mono text-sm">
+          {row.original.codeReport ?? "—"}
+        </span>
+      ),
+    },
+    {
+      header: "Code Examen",
+      accessorKey: "codeExamen",
+      cell: ({ row }) => (
+        <span className="font-mono text-sm">
+          {row.original.codeExamen ?? "—"}
+        </span>
+      ),
+    },
+    {
+      header: "Type d'examen",
+      accessorKey: "typeExamen",
+      cell: ({ row }) => row.original.typeExamen ?? "—",
+    },
+    {
+      header: "Contrat",
+      accessorKey: "contractName",
+      cell: ({ row }) => row.original.contractName ?? "—",
+    },
+    {
+      header: "Patient",
+      id: "patient",
+      cell: ({ row }) => {
+        const full = `${row.original.patientFirstname ?? ""} ${
+          row.original.patientLastname ?? ""
+        }`.trim();
+        return full || "—";
+      },
+    },
+    {
+      header: "Médecin",
+      accessorKey: "doctorName",
+      cell: ({ row }) => row.original.doctorName ?? "—",
+    },
+    {
+      header: "Hôpital",
+      accessorKey: "hospitalName",
+      cell: ({ row }) => row.original.hospitalName ?? "—",
+    },
+    {
+      header: "Réf. hôpital",
+      accessorKey: "referenceHospital",
+      cell: ({ row }) => row.original.referenceHospital ?? "—",
+    },
+    {
+      header: "Date de création",
+      id: "dateCreation",
+      cell: ({ row }) =>
+        row.original.dateCreation ? formatDate(row.original.dateCreation) : "—",
+    },
+    {
+      header: "Urgent",
+      id: "urgent",
+      cell: ({ row }) =>
+        row.original.isUrgent ? (
+          <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+            Oui
+          </span>
+        ) : (
+          <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+            Non
+          </span>
+        ),
+    },
+  ];
+
+  // -----------------------------------------------------------------------
+  // Export CSV
+  // -----------------------------------------------------------------------
+  const exportToCsv = () => {
+    const rows = data?.content ?? [];
+    if (rows.length === 0) {
+      toast.error("Aucune donnée à exporter");
+      return;
+    }
+    const headers = [
+      "Code Rapport",
+      "Code Examen",
+      "Type d'examen",
+      "Contrat",
+      "Patient",
+      "Médecin",
+      "Hôpital",
+      "Réf. hôpital",
+      "Date de création",
+      "Urgent",
+    ];
+    const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const csv = [
+      headers.map(escape).join(","),
+      ...rows.map((r) =>
+        [
+          r.codeReport ?? "",
+          r.codeExamen ?? "",
+          r.typeExamen ?? "",
+          r.contractName ?? "",
+          `${r.patientFirstname ?? ""} ${r.patientLastname ?? ""}`.trim(),
+          r.doctorName ?? "",
+          r.hospitalName ?? "",
+          r.referenceHospital ?? "",
+          r.dateCreation ?? "",
+          r.isUrgent ? "Oui" : "Non",
+        ]
+          .map((c) => escape(String(c)))
+          .join(","),
+      ),
+    ].join("\n");
+
+    // BOM UTF-8 pour qu'Excel ouvre correctement les accents
+    const blob = new Blob(["﻿" + csv], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `recherche-rapports-${new Date()
+      .toISOString()
+      .slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success(`${rows.length} ligne(s) exportée(s)`);
+  };
+
+  // -----------------------------------------------------------------------
+  // Helper : reset page à 0 quand un filtre change
+  // -----------------------------------------------------------------------
+  const onFilterChange = <T,>(setter: (v: T) => void) => (v: T) => {
+    setPage(0);
+    setter(v);
+  };
+
+  // -----------------------------------------------------------------------
+  // Rendu
+  // -----------------------------------------------------------------------
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Recherche générale" />
+
+      {/* Carte des filtres */}
+      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="mb-4">
+          <span className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700">
+            Champs de filtre
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {/* 1. Type d'examen */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Type d&apos;examen
+            </label>
+            <ReactSelect<SelectOption, true>
+              isMulti
+              options={typeOrderOptions}
+              value={typeOrderOptions.filter((o) =>
+                typeOrderIds.includes(o.value),
+              )}
+              onChange={(opts) =>
+                onFilterChange<string[]>(setTypeOrderIds)(
+                  opts.map((o) => o.value),
+                )
+              }
+              placeholder="Tous"
+              classNamePrefix="react-select"
+              noOptionsMessage={() => "Aucune option"}
+            />
+          </div>
+
+          {/* 2. Contrat */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Contrat
+            </label>
+            <ReactSelect<SelectOption, true>
+              isMulti
+              options={contratOptions}
+              value={contratOptions.filter((o) => contratIds.includes(o.value))}
+              onChange={(opts) =>
+                onFilterChange<string[]>(setContratIds)(
+                  opts.map((o) => o.value),
+                )
+              }
+              placeholder="Tous"
+              classNamePrefix="react-select"
+              noOptionsMessage={() => "Aucune option"}
+            />
+          </div>
+
+          {/* 3. Patient — recherche par code / nom / prénom */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Patient
+            </label>
+            <ReactSelect<PatientOption, true>
+              isMulti
+              options={patientOptions}
+              value={patientOptions.filter((o) => patientIds.includes(o.value))}
+              onChange={(opts) =>
+                onFilterChange<string[]>(setPatientIds)(
+                  opts.map((o) => o.value),
+                )
+              }
+              placeholder="Tous"
+              classNamePrefix="react-select"
+              noOptionsMessage={() => "Aucun patient"}
+              formatOptionLabel={(opt) => (
+                <span>
+                  <span className="font-mono text-xs text-gray-500">
+                    {opt.code ?? ""}
+                  </span>
+                  {" — "}
+                  <span>
+                    {opt.firstname ?? ""} {opt.lastname ?? ""}
+                  </span>
+                </span>
+              )}
+              filterOption={(option, input) => {
+                if (!input) return true;
+                const q = input.toLowerCase();
+                const d = option.data;
+                return (
+                  (d.code ?? "").toLowerCase().includes(q) ||
+                  (d.firstname ?? "").toLowerCase().includes(q) ||
+                  (d.lastname ?? "").toLowerCase().includes(q)
+                );
+              }}
+            />
+          </div>
+
+          {/* 4. Médecin traitant */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Médecin traitant
+            </label>
+            <ReactSelect<SelectOption, true>
+              isMulti
+              options={doctorOptions}
+              value={doctorOptions.filter((o) => doctorIds.includes(o.value))}
+              onChange={(opts) =>
+                onFilterChange<string[]>(setDoctorIds)(
+                  opts.map((o) => o.value),
+                )
+              }
+              placeholder="Tous"
+              classNamePrefix="react-select"
+              noOptionsMessage={() => "Aucun médecin"}
+            />
+          </div>
+
+          {/* 5. Hôpital de provenance */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Hôpital de provenance
+            </label>
+            <ReactSelect<SelectOption, true>
+              isMulti
+              options={hospitalOptions}
+              value={hospitalOptions.filter((o) =>
+                hospitalIds.includes(o.value),
+              )}
+              onChange={(opts) =>
+                onFilterChange<string[]>(setHospitalIds)(
+                  opts.map((o) => o.value),
+                )
+              }
+              placeholder="Tous"
+              classNamePrefix="react-select"
+              noOptionsMessage={() => "Aucun hôpital"}
+            />
+          </div>
+
+          {/* 6. Référence hôpital */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Référence hôpital
+            </label>
+            <input
+              type="text"
+              value={referenceHospital}
+              onChange={(e) =>
+                onFilterChange<string>(setReferenceHospital)(e.target.value)
+              }
+              placeholder=""
+              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* 7. Date début */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Date début
+            </label>
+            <input
+              type="date"
+              value={dateBegin}
+              onChange={(e) =>
+                onFilterChange<string>(setDateBegin)(e.target.value)
+              }
+              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* 8. Date fin */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Date fin
+            </label>
+            <input
+              type="date"
+              value={dateEnd}
+              onChange={(e) =>
+                onFilterChange<string>(setDateEnd)(e.target.value)
+              }
+              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* 9. Recherche générale */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Recherche générale
+            </label>
+            <input
+              type="text"
+              value={content}
+              onChange={(e) =>
+                onFilterChange<string>(setContent)(e.target.value)
+              }
+              placeholder=""
+              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* 10. Urgent */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Urgent
+            </label>
+            <select
+              value={urgentFilter}
+              onChange={(e) =>
+                onFilterChange<"" | "urgent" | "retard">(setUrgentFilter)(
+                  e.target.value as "" | "urgent" | "retard",
+                )
+              }
+              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">Tous</option>
+              <option value="urgent">Urgent</option>
+              <option value="retard">Retard</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Bouton Export + Tableau */}
+      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <label htmlFor="page-size-top" className="text-xs">
+              Afficher
+            </label>
+            <select
+              id="page-size-top"
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPage(0);
+              }}
+              className="rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none"
+            >
+              {PAGE_SIZE_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs">
+              {data?.totalElements != null
+                ? `· ${data.totalElements} résultat${
+                    data.totalElements > 1 ? "s" : ""
+                  }`
+                : ""}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={exportToCsv}
+            className="inline-flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
+          >
+            <Download className="h-4 w-4" />
+            Exporter Excel
+          </button>
+        </div>
+
+        <DataTable
+          columns={columns}
+          data={data?.content ?? []}
+          isLoading={isLoading || isFetching}
+          pageCount={data?.totalPages ?? 0}
+          pageIndex={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(s) => {
+            setPageSize(s);
+            setPage(0);
+          }}
+        />
+      </div>
+    </div>
+  );
+}

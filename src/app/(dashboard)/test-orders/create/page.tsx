@@ -1,0 +1,788 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { toast } from "sonner";
+import Select from "react-select";
+import type { AxiosError } from "axios";
+import { useState } from "react";
+
+import { PageHeader } from "@/components/ui/PageHeader";
+import { AlertBox } from "@/components/ui/AlertBox";
+import { FormToggle } from "@/components/ui/FormToggle";
+import { CrudModal } from "@/components/common/CrudModal";
+import { FormField } from "@/components/ui/FormField";
+import { testOrdersApi, type TestOrderRequest } from "@/lib/api/testOrders";
+import { patientsApi, type PatientRequest } from "@/lib/api/patients";
+import { doctorsApi } from "@/lib/api/doctors";
+import { hospitalsApi } from "@/lib/api/hospitals";
+import { typeOrdersApi, type TypeOrder } from "@/lib/api/examens";
+import type { ApiError as ApiErrorType } from "@/types/api";
+import apiClient from "@/lib/api/client";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface ContractOption {
+  id: string;
+  name: string;
+  status?: string;
+}
+
+interface CashboxStatus {
+  isOpen: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Zod schemas
+// ---------------------------------------------------------------------------
+
+const createOrderSchema = z.object({
+  typeOrderId: z.string().min(1, "Le type d'examen est requis"),
+  contratId: z.string().min(1, "Le contrat est requis"),
+  patientId: z.string().min(1, "Le patient est requis"),
+  doctorId: z.string().min(1, "Le médecin est requis"),
+  hospitalId: z.string().min(1, "L'hôpital est requis"),
+  referenceHopital: z.string().optional(),
+  examenReferenceInput: z.string().optional(),
+  examenReferenceOrderId: z.string().optional(),
+  prelevementDate: z.string().min(1, "La date de prélèvement est requise"),
+  isUrgent: z.boolean(),
+  option: z.boolean().optional(),
+});
+
+type CreateOrderFormData = z.infer<typeof createOrderSchema>;
+
+// Zod schema for the quick patient modal
+const quickPatientSchema = z.object({
+  firstname: z.string().min(1, "Le prénom est requis"),
+  lastname: z.string().min(1, "Le nom est requis"),
+  genre: z.enum(["M", "F"]).optional(),
+  age: z.string().optional(),
+  yearOrMonth: z.boolean().optional(),
+  telephone1: z.string().min(1, "Le téléphone est requis"),
+  telephone2: z.string().optional(),
+  profession: z.string().optional(),
+  adresse: z.string().optional(),
+});
+
+type QuickPatientFormData = z.infer<typeof quickPatientSchema>;
+
+// ---------------------------------------------------------------------------
+// Shared input className
+// ---------------------------------------------------------------------------
+const inputCls =
+  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
+export default function TestOrderCreatePage() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+
+  // Modal state
+  const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
+
+  // Main form
+  const {
+    register,
+    handleSubmit,
+    control,
+    watch,
+    setValue,
+    formState: { errors },
+  } = useForm<CreateOrderFormData>({
+    resolver: zodResolver(createOrderSchema),
+    defaultValues: {
+      isUrgent: false,
+    },
+  });
+
+  // Quick patient form
+  const {
+    register: registerPatient,
+    handleSubmit: handleSubmitPatient,
+    control: controlPatient,
+    reset: resetPatient,
+    formState: { errors: patientErrors },
+  } = useForm<QuickPatientFormData>({
+    resolver: zodResolver(quickPatientSchema),
+    defaultValues: {
+      yearOrMonth: true,
+    },
+  });
+
+  // Watch type d'examen pour les champs conditionnels Immuno
+  const selectedTypeOrderId = watch("typeOrderId");
+
+  // --- Queries
+  const { data: cashboxStatus } = useQuery<CashboxStatus>({
+    queryKey: ["cashbox-status"],
+    queryFn: async () => {
+      try {
+        const res = await apiClient.get<CashboxStatus>("/cashbox/status");
+        return res.data;
+      } catch {
+        return { isOpen: true };
+      }
+    },
+  });
+
+  const { data: patientsData } = useQuery({
+    queryKey: ["patients-all"],
+    queryFn: () =>
+      patientsApi.findAll({ size: 1000 }).then((r) => r.data.content),
+  });
+
+  const { data: doctorsData } = useQuery({
+    queryKey: ["doctors-all"],
+    queryFn: () =>
+      doctorsApi.findAll({ size: 1000 }).then((r) => r.data.content),
+  });
+
+  const { data: hospitalsData } = useQuery({
+    queryKey: ["hospitals-all"],
+    queryFn: () =>
+      hospitalsApi.findAll({ size: 1000 }).then((r) => r.data.content),
+  });
+
+  const { data: contractsData } = useQuery<ContractOption[]>({
+    queryKey: ["contracts-active"],
+    queryFn: async () => {
+      const res = await apiClient.get<{ content: ContractOption[] }>(
+        "/contracts",
+        { params: { size: 1000, status: "ACTIF" } }
+      );
+      return res.data.content;
+    },
+  });
+
+  const { data: typeOrdersData } = useQuery<TypeOrder[]>({
+    queryKey: ["type-orders"],
+    queryFn: () => typeOrdersApi.findAll().then((r) => r.data),
+  });
+
+  // Charger les demandes d'examen existantes pour la référence Immuno Interne
+  const { data: existingTestOrders } = useQuery({
+    queryKey: ["test-orders-reference"],
+    queryFn: () =>
+      testOrdersApi.findAll({ size: 500 }).then((r) => r.data.content),
+  });
+
+  // Détecter le titre du type sélectionné
+  const selectedTypeOrder = typeOrdersData?.find(
+    (t) => t.id === selectedTypeOrderId
+  );
+  const typeOrderTitle = selectedTypeOrder?.title ?? "";
+  const isImmunoExterne = typeOrderTitle.includes("Immuno Externe");
+  const isImmunoInterne = typeOrderTitle.includes("Immuno Interne");
+
+  // Options React Select
+  const patientOptions =
+    patientsData?.map((p) => ({
+      value: p.id,
+      label: `${p.code} - ${p.firstname} ${p.lastname}`,
+    })) ?? [];
+
+  const doctorOptions =
+    doctorsData?.map((d) => ({
+      value: d.id,
+      label: d.name,
+    })) ?? [];
+
+  const hospitalOptions =
+    hospitalsData?.map((h) => ({
+      value: h.id,
+      label: h.name,
+    })) ?? [];
+
+  const contractOptions =
+    contractsData?.map((c) => ({
+      value: c.id,
+      label: c.name,
+    })) ?? [];
+
+  // Types d'examens — exclut l'id == "1"
+  const typeOrderOptions =
+    typeOrdersData
+      ?.filter((t) => t.id !== "1")
+      .map((t) => ({
+        value: t.id,
+        label: t.title,
+      })) ?? [];
+
+  // Options des demandes d'examen pour Immuno Interne
+  const testOrderReferenceOptions =
+    existingTestOrders?.map((o) => ({
+      value: o.id,
+      label: `${o.code} — ${o.patientFirstname} ${o.patientLastname}`,
+    })) ?? [];
+
+  // --- Mutation création commande
+  const createMutation = useMutation({
+    mutationFn: (data: TestOrderRequest) => testOrdersApi.create(data),
+    onSuccess: (res) => {
+      toast.success("Demande d'examen créée avec succès");
+      router.push(`/test-orders/${res.data.id}/details`);
+    },
+    onError: (err: AxiosError<ApiErrorType>) => {
+      toast.error(
+        err.response?.data?.message ?? "Erreur lors de la création"
+      );
+    },
+  });
+
+  // --- Mutation création rapide patient
+  const createPatientMutation = useMutation({
+    mutationFn: (data: PatientRequest) => patientsApi.create(data),
+    onSuccess: async (res) => {
+      toast.success("Patient créé avec succès");
+      // Rafraîchir la liste des patients
+      await queryClient.invalidateQueries({ queryKey: ["patients-all"] });
+      // Sélectionner automatiquement le nouveau patient
+      setValue("patientId", res.data.id);
+      // Fermer et réinitialiser le modal
+      setIsPatientModalOpen(false);
+      resetPatient();
+    },
+    onError: (err: AxiosError<ApiErrorType>) => {
+      toast.error(
+        err.response?.data?.message ?? "Erreur lors de la création du patient"
+      );
+    },
+  });
+
+  const onSubmit = (data: CreateOrderFormData) => {
+    const payload: TestOrderRequest = {
+      patientId: data.patientId,
+      prelevementDate: data.prelevementDate,
+      isUrgent: data.isUrgent,
+      typeOrderId: data.typeOrderId,
+      contratId: data.contratId,
+      doctorId: data.doctorId,
+      hospitalId: data.hospitalId,
+    };
+
+    if (data.referenceHopital) payload.referenceHopital = data.referenceHopital;
+    if (data.option !== undefined) payload.option = data.option;
+    if (isImmunoExterne && data.examenReferenceInput)
+      payload.examenReferenceInput = data.examenReferenceInput;
+    if (isImmunoInterne && data.examenReferenceOrderId)
+      payload.examenReferenceInput = data.examenReferenceOrderId;
+
+    createMutation.mutate(payload);
+  };
+
+  const onSubmitPatient = (data: QuickPatientFormData) => {
+    const payload: PatientRequest = {
+      code: `PAT-${Date.now()}`,
+      firstname: data.firstname,
+      lastname: data.lastname,
+      genre: data.genre ?? "M",
+      langue: "fr",
+      telephone1: data.telephone1,
+      adresse: data.adresse ?? "",
+    };
+
+    if (data.age && data.age.trim() !== "") payload.age = Number(data.age);
+    if (data.yearOrMonth !== undefined) payload.yearOrMonth = data.yearOrMonth;
+    if (data.telephone2) payload.telephone2 = data.telephone2;
+    if (data.profession) payload.profession = data.profession;
+
+    createPatientMutation.mutate(payload);
+  };
+
+  const isCaisseOuverte = cashboxStatus?.isOpen !== false;
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Ajouter une nouvelle demande d'examen"
+        breadcrumbs={[
+          { label: "Accueil", href: "/home" },
+          { label: "Demandes d'examen", href: "/test-orders" },
+          { label: "Nouvelle demande" },
+        ]}
+      />
+
+      {/* Alerte caisse fermée */}
+      {!isCaisseOuverte && (
+        <AlertBox
+          type="warning"
+          title="Caisse fermée"
+          message="Caisse fermée - Veuillez ouvrir la caisse avant de procéder à l'encaissement."
+        />
+      )}
+
+      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            {/* 1. Type d'examen */}
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700">
+                Type d'examen <span className="text-red-500">*</span>
+              </label>
+              <Controller
+                name="typeOrderId"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    inputId="typeOrderId"
+                    options={typeOrderOptions}
+                    placeholder="Sélectionner un type..."
+                    value={
+                      typeOrderOptions.find((o) => o.value === field.value) ??
+                      null
+                    }
+                    onChange={(opt) => field.onChange(opt?.value ?? "")}
+                    isClearable
+                    classNamePrefix="react-select"
+                  />
+                )}
+              />
+              {errors.typeOrderId && (
+                <p className="text-xs text-red-500">
+                  {errors.typeOrderId.message}
+                </p>
+              )}
+            </div>
+
+            {/* 2. Contrat */}
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700">
+                Contrat <span className="text-red-500">*</span>
+              </label>
+              <Controller
+                name="contratId"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    inputId="contratId"
+                    options={contractOptions}
+                    placeholder="Sélectionner un contrat..."
+                    value={
+                      contractOptions.find((o) => o.value === field.value) ??
+                      null
+                    }
+                    onChange={(opt) => field.onChange(opt?.value ?? "")}
+                    isClearable
+                    classNamePrefix="react-select"
+                  />
+                )}
+              />
+              {errors.contratId && (
+                <p className="text-xs text-red-500">
+                  {errors.contratId.message}
+                </p>
+              )}
+            </div>
+
+            {/* 3. Patient */}
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-gray-700">
+                  Patient <span className="text-red-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsPatientModalOpen(true)}
+                  className="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-200"
+                >
+                  + Nouveau patient
+                </button>
+              </div>
+              <Controller
+                name="patientId"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    inputId="patientId"
+                    options={patientOptions}
+                    placeholder="Sélectionner un patient..."
+                    value={
+                      patientOptions.find((o) => o.value === field.value) ??
+                      null
+                    }
+                    onChange={(opt) => field.onChange(opt?.value ?? "")}
+                    isClearable
+                    isSearchable
+                    classNamePrefix="react-select"
+                  />
+                )}
+              />
+              {errors.patientId && (
+                <p className="text-xs text-red-500">
+                  {errors.patientId.message}
+                </p>
+              )}
+            </div>
+
+            {/* 4. Médecin traitant */}
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700">
+                Médecin traitant <span className="text-red-500">*</span>
+              </label>
+              <Controller
+                name="doctorId"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    inputId="doctorId"
+                    options={doctorOptions}
+                    placeholder="Sélectionner un médecin..."
+                    value={
+                      doctorOptions.find((o) => o.value === field.value) ?? null
+                    }
+                    onChange={(opt) => field.onChange(opt?.value ?? "")}
+                    isClearable
+                    isSearchable
+                    classNamePrefix="react-select"
+                  />
+                )}
+              />
+              {errors.doctorId && (
+                <p className="text-xs text-red-500">
+                  {errors.doctorId.message}
+                </p>
+              )}
+            </div>
+
+            {/* 5. Hôpital de provenance */}
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700">
+                Hôpital de provenance <span className="text-red-500">*</span>
+              </label>
+              <Controller
+                name="hospitalId"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    inputId="hospitalId"
+                    options={hospitalOptions}
+                    placeholder="Sélectionner un hôpital..."
+                    value={
+                      hospitalOptions.find((o) => o.value === field.value) ??
+                      null
+                    }
+                    onChange={(opt) => field.onChange(opt?.value ?? "")}
+                    isClearable
+                    isSearchable
+                    classNamePrefix="react-select"
+                  />
+                )}
+              />
+              {errors.hospitalId && (
+                <p className="text-xs text-red-500">
+                  {errors.hospitalId.message}
+                </p>
+              )}
+            </div>
+
+            {/* 6. Référence hôpital */}
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700">
+                Référence hôpital
+              </label>
+              <input
+                type="text"
+                {...register("referenceHopital")}
+                placeholder="Numéro de référence..."
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* 7. Date prélèvement */}
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700">
+                Date prélèvement <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="date"
+                {...register("prelevementDate")}
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              {errors.prelevementDate && (
+                <p className="text-xs text-red-500">
+                  {errors.prelevementDate.message}
+                </p>
+              )}
+            </div>
+
+            {/* 8. Cas urgent */}
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-gray-700">
+                Cas urgent
+              </label>
+              <Controller
+                name="isUrgent"
+                control={control}
+                render={({ field }) => (
+                  <FormToggle
+                    id="isUrgent-create"
+                    label={field.value ? "Urgent" : "Normal"}
+                    checked={field.value}
+                    onChange={field.onChange}
+                  />
+                )}
+              />
+            </div>
+          </div>
+
+          {/* Champs conditionnels Immuno */}
+          {isImmunoExterne && (
+            <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium text-gray-700">
+                  Examen de Référence
+                </label>
+                <input
+                  type="text"
+                  {...register("examenReferenceInput")}
+                  placeholder="Référence de l'examen externe..."
+                  className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                {errors.examenReferenceInput && (
+                  <p className="text-xs text-red-500">
+                    {errors.examenReferenceInput.message}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {isImmunoInterne && (
+            <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium text-gray-700">
+                  Demande d'examen de référence
+                </label>
+                <Controller
+                  name="examenReferenceOrderId"
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      inputId="examenReferenceOrderId"
+                      options={testOrderReferenceOptions}
+                      placeholder="Sélectionner une demande de référence..."
+                      value={
+                        testOrderReferenceOptions.find(
+                          (o) => o.value === field.value
+                        ) ?? null
+                      }
+                      onChange={(opt) => field.onChange(opt?.value ?? "")}
+                      isClearable
+                      isSearchable
+                      classNamePrefix="react-select"
+                    />
+                  )}
+                />
+                {errors.examenReferenceOrderId && (
+                  <p className="text-xs text-red-500">
+                    {errors.examenReferenceOrderId.message}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Boutons */}
+          <div className="flex items-center justify-end gap-3 border-t border-gray-200 pt-4">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              disabled={createMutation.isPending}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {createMutation.isPending && (
+                <svg
+                  className="h-4 w-4 animate-spin"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8v8H4z"
+                  />
+                </svg>
+              )}
+              Ajouter une nouvelle demande d'examen
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Modal création rapide patient                                        */}
+      {/* ------------------------------------------------------------------ */}
+      <CrudModal
+        isOpen={isPatientModalOpen}
+        onClose={() => {
+          setIsPatientModalOpen(false);
+          resetPatient();
+        }}
+        title="Nouveau patient"
+        size="xl"
+        onSubmit={() => void handleSubmitPatient(onSubmitPatient)()}
+        submitLabel="Créer le patient"
+        isSubmitting={createPatientMutation.isPending}
+      >
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {/* Prénom */}
+          <FormField
+            label="Prénom"
+            required
+            error={patientErrors.firstname?.message}
+          >
+            <input
+              type="text"
+              {...registerPatient("firstname")}
+              placeholder="Prénom du patient..."
+              className={inputCls}
+            />
+          </FormField>
+
+          {/* Nom */}
+          <FormField
+            label="Nom"
+            required
+            error={patientErrors.lastname?.message}
+          >
+            <input
+              type="text"
+              {...registerPatient("lastname")}
+              placeholder="Nom du patient..."
+              className={inputCls}
+            />
+          </FormField>
+
+          {/* Genre */}
+          <FormField label="Genre" error={patientErrors.genre?.message}>
+            <Controller
+              name="genre"
+              control={controlPatient}
+              render={({ field }) => (
+                <select
+                  value={field.value ?? ""}
+                  onChange={(e) =>
+                    field.onChange(
+                      e.target.value === "" ? undefined : e.target.value
+                    )
+                  }
+                  className={inputCls}
+                >
+                  <option value="">Sélectionner...</option>
+                  <option value="M">Masculin</option>
+                  <option value="F">Féminin</option>
+                </select>
+              )}
+            />
+          </FormField>
+
+          {/* Age + unité */}
+          <FormField label="Âge" error={patientErrors.age?.message}>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                min={0}
+                {...registerPatient("age")}
+                placeholder="Âge..."
+                className={inputCls}
+              />
+              <Controller
+                name="yearOrMonth"
+                control={controlPatient}
+                render={({ field }) => (
+                  <select
+                    value={field.value === false ? "mois" : "ans"}
+                    onChange={(e) =>
+                      field.onChange(e.target.value === "ans")
+                    }
+                    className="w-28 rounded-md border border-gray-300 px-2 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="ans">Ans</option>
+                    <option value="mois">Mois</option>
+                  </select>
+                )}
+              />
+            </div>
+          </FormField>
+
+          {/* Téléphone 1 */}
+          <FormField
+            label="Téléphone"
+            required
+            error={patientErrors.telephone1?.message}
+          >
+            <input
+              type="tel"
+              {...registerPatient("telephone1")}
+              placeholder="+229..."
+              className={inputCls}
+            />
+          </FormField>
+
+          {/* Téléphone 2 */}
+          <FormField
+            label="Téléphone 2"
+            error={patientErrors.telephone2?.message}
+          >
+            <input
+              type="tel"
+              {...registerPatient("telephone2")}
+              placeholder="Numéro secondaire (optionnel)..."
+              className={inputCls}
+            />
+          </FormField>
+
+          {/* Profession */}
+          <FormField
+            label="Profession"
+            error={patientErrors.profession?.message}
+          >
+            <input
+              type="text"
+              {...registerPatient("profession")}
+              placeholder="Profession..."
+              className={inputCls}
+            />
+          </FormField>
+
+          {/* Adresse */}
+          <FormField
+            label="Adresse"
+            error={patientErrors.adresse?.message}
+            className="md:col-span-2"
+          >
+            <textarea
+              {...registerPatient("adresse")}
+              rows={2}
+              placeholder="Adresse du patient..."
+              className={inputCls}
+            />
+          </FormField>
+        </div>
+      </CrudModal>
+    </div>
+  );
+}
