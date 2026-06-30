@@ -90,10 +90,11 @@ export default function ContractDetailPage({
     queryFn: () => contractsApi.findById(contractId).then((r) => r.data),
   });
 
+  // Chargé indépendamment (pas seulement à l'ouverture du modal) afin de
+  // pouvoir résoudre le nom des catégories dans le tableau des lignes.
   const { data: categoriesData } = useQuery({
     queryKey: ["category-tests-all"],
     queryFn: () => categoryTestsApi.findAll({ size: 200 }).then((r) => r.data),
-    enabled: addCatOpen,
   });
 
   const { data: examensData } = useQuery({
@@ -104,6 +105,14 @@ export default function ContractDetailPage({
 
   const categories = categoriesData?.content ?? [];
   const examens = examensData?.content ?? [];
+
+  // Résout le nom d'une catégorie à partir de son id (lignes de contrat ajoutées
+  // par catégorie, qui n'ont pas de labTestName).
+  function getCategoryName(categoryTestId?: string): string | null {
+    if (!categoryTestId) return null;
+    const found = categories.find((c) => c.id === categoryTestId);
+    return found?.name ?? null;
+  }
 
   // ---- Mutations -----------------------------------------------------------
 
@@ -326,7 +335,11 @@ export default function ContractDetailPage({
                 {details.map((d) => (
                   <tr key={d.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 text-gray-900">
-                      {d.labTestName ?? (d.categoryTestId ? `Catégorie #${d.categoryTestId.slice(0, 8)}` : "—")}
+                      {d.labTestName ??
+                        getCategoryName(d.categoryTestId) ??
+                        (d.categoryTestId
+                          ? `Catégorie #${d.categoryTestId.slice(0, 8)}`
+                          : "—")}
                     </td>
                     <td className="px-4 py-3 text-right text-gray-700">{formatAmount(d.price)}</td>
                     <td className="px-4 py-3 text-right text-gray-700">

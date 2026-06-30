@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm, type UseFormRegister, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -254,6 +254,12 @@ export default function PatientsPage() {
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState("");
+  // Recherche débouncée (~350 ms) : évite une requête à chaque frappe.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => clearTimeout(t);
+  }, [search]);
 
   // --- Modal state
   const [createOpen, setCreateOpen] = useState(false);
@@ -286,10 +292,10 @@ export default function PatientsPage() {
 
   // --- Query
   const { data, isLoading } = useQuery<PageResponse<Patient>>({
-    queryKey: ["patients", { page, size: pageSize, search }],
+    queryKey: ["patients", { page, size: pageSize, search: debouncedSearch }],
     queryFn: () =>
       patientsApi
-        .findAll({ page, size: pageSize, search: search || undefined })
+        .findAll({ page, size: pageSize, search: debouncedSearch || undefined })
         .then((r) => r.data),
   });
 

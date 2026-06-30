@@ -222,6 +222,17 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
     if (data.assignedToUserId) payload.assignedToUserId = data.assignedToUserId;
     if (data.option !== undefined) payload.option = data.option;
 
+    // Le PUT remplace l'intégralité de la demande, examens compris.
+    // On réinjecte donc les examens existants pour ne pas les effacer
+    // (ils sont gérés sur la page "détails", pas dans ce formulaire).
+    if (order?.details?.length) {
+      payload.details = order.details.map((d) => ({
+        labTestId: d.labTestId,
+        price: d.price,
+        discount: d.discount,
+      }));
+    }
+
     updateMutation.mutate(payload);
   };
 
@@ -257,6 +268,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
                 control={control}
                 render={({ field }) => (
                   <Select
+                    instanceId="order-type"
                     inputId="typeOrderId"
                     options={typeOrderOptions}
                     placeholder="Sélectionner un type..."
@@ -287,6 +299,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
                 control={control}
                 render={({ field }) => (
                   <Select
+                    instanceId="order-contract"
                     inputId="contratId"
                     options={contractOptions}
                     placeholder="Sélectionner un contrat..."
@@ -317,6 +330,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
                 control={control}
                 render={({ field }) => (
                   <Select
+                    instanceId="order-patient"
                     inputId="patientId"
                     options={patientOptions}
                     placeholder="Sélectionner un patient..."
@@ -348,6 +362,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
                 control={control}
                 render={({ field }) => (
                   <Select
+                    instanceId="order-doctor"
                     inputId="doctorId"
                     options={doctorOptions}
                     placeholder="Sélectionner un médecin..."
@@ -373,6 +388,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
                 control={control}
                 render={({ field }) => (
                   <Select
+                    instanceId="order-hospital"
                     inputId="hospitalId"
                     options={hospitalOptions}
                     placeholder="Sélectionner un hôpital..."
@@ -467,6 +483,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
                 control={control}
                 render={({ field }) => (
                   <Select
+                    instanceId="order-assigned-user"
                     inputId="assignedToUserId"
                     options={userOptions}
                     placeholder="Sélectionner un utilisateur..."

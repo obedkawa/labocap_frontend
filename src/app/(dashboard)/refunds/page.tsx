@@ -25,6 +25,7 @@ import {
   RefundRequest,
   RefundReason,
 } from "@/lib/api/refunds";
+import { invoicesApi, type Invoice } from "@/lib/api/invoices";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -52,6 +53,9 @@ function statusBadge(status: string) {
     return <Badge variant="success">Approuvé</Badge>;
   if (status === "Clôturé")
     return <Badge variant="info">Clôturé</Badge>;
+  // Valeur posée par reject() (cf. refundsApi.reject → status: "Rejeté")
+  if (status === "Rejeté")
+    return <Badge variant="danger">Rejeté</Badge>;
   return <Badge variant="danger">{status}</Badge>;
 }
 
@@ -94,7 +98,7 @@ function RefundsContent() {
 
   // ---- Query ---------------------------------------------------------------
 
-  const params: Record<string, unknown> = {};
+  const params: Record<string, unknown> = { size: 1000 };
   if (statusFilter) params.status = statusFilter;
 
   const { data, isLoading } = useQuery({
@@ -112,6 +116,15 @@ function RefundsContent() {
   });
 
   const reasons: RefundReason[] = Array.isArray(reasonsData) ? reasonsData : [];
+
+  // ---- Invoices query (sélecteur de facture) ------------------------------
+
+  const { data: invoicesData } = useQuery({
+    queryKey: ["invoices", "refund-select"],
+    queryFn: () => invoicesApi.findAll({ size: 1000 }).then((r) => r.data),
+  });
+
+  const invoices: Invoice[] = invoicesData?.content ?? [];
 
   function getReasonLabel(refundReasonId?: string): string {
     if (!refundReasonId) return "—";
@@ -316,6 +329,7 @@ function RefundsContent() {
             <option value="En attente">En attente</option>
             <option value="Aprouvé">Approuvé</option>
             <option value="Clôturé">Clôturé</option>
+            <option value="Rejeté">Rejeté</option>
           </select>
         </div>
       </div>
@@ -334,7 +348,7 @@ function RefundsContent() {
         submitLabel="Soumettre"
         isSubmitting={createMutation.isPending}
       >
-        <RefundForm form={createForm} reasons={reasons} />
+        <RefundForm form={createForm} reasons={reasons} invoices={invoices} />
       </CrudModal>
     </div>
   );
@@ -347,9 +361,10 @@ function RefundsContent() {
 interface RefundFormProps {
   form: UseFormReturn<RefundFormValues>;
   reasons: RefundReason[];
+  invoices: Invoice[];
 }
 
-function RefundForm({ form, reasons }: RefundFormProps) {
+function RefundForm({ form, reasons, invoices }: RefundFormProps) {
   const {
     register,
     formState: { errors },
@@ -358,16 +373,19 @@ function RefundForm({ form, reasons }: RefundFormProps) {
   return (
     <div className="space-y-4">
       <FormField
-        label="Identifiant de facture"
+        label="Facture"
         required
         error={errors.invoiceId?.message}
       >
-        <input
-          type="text"
-          {...register("invoiceId")}
-          placeholder="ID ou référence de la facture"
-          className={inputClass}
-        />
+        <select {...register("invoiceId")} className={inputClass}>
+          <option value="">Sélectionner une facture</option>
+          {invoices.map((inv) => (
+            <option key={inv.id} value={inv.id}>
+              {inv.code} — {formatAmount(inv.total)}
+              {inv.patientName ? ` (${inv.patientName})` : ""}
+            </option>
+          ))}
+        </select>
       </FormField>
 
       <FormField

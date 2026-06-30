@@ -545,6 +545,7 @@ function ContractForm({
           control={control}
           render={({ field }) => (
             <Select<SelectOption>
+              instanceId="contract-client"
               inputId="clientId"
               options={clientOptions}
               value={

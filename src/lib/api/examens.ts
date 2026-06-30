@@ -12,8 +12,8 @@ export interface LabTest {
   id: string;
   name: string;
   price: number;
-  categoryId: string;
-  categoryName: string;
+  categoryTestId: string;
+  categoryTestName: string;
   status: string;
   branchId: string;
 }
@@ -48,11 +48,15 @@ export const labTestsApi = {
     search?: string;
     status?: string;
   }) => apiClient.get<PageResponse<LabTest>>("/lab-tests", { params }),
-  create: (data: { name: string; price: number; categoryId: string }) =>
-    apiClient.post<LabTest>("/lab-tests", data),
+  create: (data: {
+    name: string;
+    price: number;
+    categoryTestId: string;
+    status: string;
+  }) => apiClient.post<LabTest>("/lab-tests", data),
   update: (
     id: string,
-    data: { name: string; price: number; categoryId: string }
+    data: { name: string; price: number; categoryTestId: string; status: string }
   ) => apiClient.put<LabTest>(`/lab-tests/${id}`, data),
   delete: (id: string) => apiClient.delete(`/lab-tests/${id}`),
   findAllSimple: () => apiClient.get<LabTest[]>("/lab-tests/all"),
@@ -69,13 +73,9 @@ export const unitesMesureApi = {
   delete: (id: string) => apiClient.delete(`/unit-measurements/${id}`),
 };
 
+// Lecture seule : les types d'examen ne sont plus gérables depuis le catalogue
+// (page /examens/types supprimée). findAll reste utilisé comme filtre/sélecteur
+// dans les demandes d'examen, la recherche, le suivi et la macroscopie.
 export const typeOrdersApi = {
   findAll: () => apiClient.get<TypeOrder[]>("/type-orders/all"),
-  findPaged: (params?: { page?: number; size?: number }) =>
-    apiClient.get<PageResponse<TypeOrder>>("/type-orders", { params }),
-  create: (data: { title: string }) =>
-    apiClient.post<TypeOrder>("/type-orders", data),
-  update: (id: string, data: { title: string }) =>
-    apiClient.put<TypeOrder>(`/type-orders/${id}`, data),
-  delete: (id: string) => apiClient.delete(`/type-orders/${id}`),
 };

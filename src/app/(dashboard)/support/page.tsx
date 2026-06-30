@@ -298,9 +298,12 @@ export default function SupportPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
 
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
+
   // ---- Query ---------------------------------------------------------------
 
-  const params: Record<string, unknown> = {};
+  const params: Record<string, unknown> = { page, size: pageSize };
   if (statusFilter) params.status = statusFilter;
   if (priorityFilter) params.priority = priorityFilter;
 
@@ -334,6 +337,23 @@ export default function SupportPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tickets"] });
       toast.success("Ticket clôturé");
+    },
+    onError: (err: AxiosError) => {
+      const msg =
+        (err.response?.data as { message?: string })?.message ??
+        "Une erreur est survenue";
+      toast.error(msg);
+    },
+  });
+
+  // Transitions de statut intermédiaires (En cours / Résolu) — réplique le
+  // workflow complet des tickets (supportApi.updateStatus).
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: TicketStatus }) =>
+      supportApi.updateStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tickets"] });
+      toast.success("Statut mis à jour");
     },
     onError: (err: AxiosError) => {
       const msg =
@@ -413,6 +433,34 @@ export default function SupportPage() {
 
             {ticket.status !== "CLOSED" && (
               <PermissionGate permission={PERMISSIONS.MANAGE_SUPPORT}>
+                {ticket.status === "OPEN" && (
+                  <button
+                    onClick={() =>
+                      statusMutation.mutate({
+                        id: ticket.id,
+                        status: "IN_PROGRESS",
+                      })
+                    }
+                    disabled={statusMutation.isPending}
+                    className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50"
+                  >
+                    Prendre en charge
+                  </button>
+                )}
+                {ticket.status === "IN_PROGRESS" && (
+                  <button
+                    onClick={() =>
+                      statusMutation.mutate({
+                        id: ticket.id,
+                        status: "RESOLVED",
+                      })
+                    }
+                    disabled={statusMutation.isPending}
+                    className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 transition-colors disabled:opacity-50"
+                  >
+                    Résoudre
+                  </button>
+                )}
                 <button
                   onClick={() => closeMutation.mutate(ticket.id)}
                   disabled={closeMutation.isPending}
@@ -429,15 +477,6 @@ export default function SupportPage() {
   ];
 
   // ---- Render --------------------------------------------------------------
-
-  // Inject detail row after the selected ticket
-  const rowsWithDetail = detailId
-    ? tickets.flatMap((t) =>
-        t.id === detailId
-          ? [t, { ...t, _detailRow: true } as Ticket & { _detailRow?: boolean }]
-          : [t]
-      )
-    : tickets;
 
   return (
     <div className="space-y-6">
@@ -461,7 +500,10 @@ export default function SupportPage() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(0);
+            }}
             className={inputClass}
           >
             <option value="">Tous les statuts</option>
@@ -473,7 +515,10 @@ export default function SupportPage() {
 
           <select
             value={priorityFilter}
-            onChange={(e) => setPriorityFilter(e.target.value)}
+            onChange={(e) => {
+              setPriorityFilter(e.target.value);
+              setPage(0);
+            }}
             className={inputClass}
           >
             <option value="">Toutes les priorités</option>
@@ -486,39 +531,33 @@ export default function SupportPage() {
       </div>
 
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5 space-y-3">
-        {isLoading ? (
-          <p className="text-sm text-gray-400 text-center py-8">
-            Chargement…
-          </p>
-        ) : tickets.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-8">
-            Aucun ticket
-          </p>
-        ) : (
-          <>
-            <DataTable
-              columns={columns}
-              data={rowsWithDetail.filter(
-                (t) => !(t as Ticket & { _detailRow?: boolean })._detailRow
-              )}
-              isLoading={false}
-            />
-            {/* Detail panel below table */}
-            {detailId && (
-              <div className="mt-2">
-                {(() => {
-                  const found = tickets.find((t) => t.id === detailId);
-                  if (!found) return null;
-                  return (
-                    <TicketDetail
-                      ticket={found}
-                      onClose={() => setDetailId(null)}
-                    />
-                  );
-                })()}
-              </div>
-            )}
-          </>
+        <DataTable
+          columns={columns}
+          data={tickets}
+          isLoading={isLoading}
+          pageCount={data?.totalPages ?? 0}
+          pageIndex={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(s) => {
+            setPageSize(s);
+            setPage(0);
+          }}
+        />
+        {/* Detail panel below table */}
+        {detailId && (
+          <div className="mt-2">
+            {(() => {
+              const found = tickets.find((t) => t.id === detailId);
+              if (!found) return null;
+              return (
+                <TicketDetail
+                  ticket={found}
+                  onClose={() => setDetailId(null)}
+                />
+              );
+            })()}
+          </div>
         )}
       </div>
 

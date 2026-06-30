@@ -8,6 +8,7 @@ import {
   Eye,
   History,
   Plus,
+  Share2,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -28,9 +29,10 @@ import {
   documentationCategoriesApi,
   type Doc,
   type DocVersion,
-  getDocFileUrl,
+  downloadDocFile,
   formatFileSize,
 } from "@/lib/api/docs";
+import { usersApi } from "@/lib/api/users";
 import type { ApiError } from "@/types/api";
 
 // ---------------------------------------------------------------------------
@@ -57,6 +59,10 @@ export default function DocsPage() {
 
   // --- Modal: historique des versions
   const [historyDoc, setHistoryDoc] = useState<Doc | null>(null);
+
+  // --- Modal: partage par rôle
+  const [shareDoc, setShareDoc] = useState<Doc | null>(null);
+  const [shareRoleId, setShareRoleId] = useState("");
 
   // --- Query principale
   const { data, isLoading } = useQuery({
@@ -98,6 +104,30 @@ export default function DocsPage() {
     },
     onError: (err: AxiosError<ApiError>) => {
       toast.error(err.response?.data?.message ?? "Erreur lors de la suppression");
+    },
+  });
+
+  // --- Query rôles (pour le partage)
+  const { data: rolesPage } = useQuery({
+    queryKey: ["roles-for-share"],
+    queryFn: () => usersApi.getRoles().then((r) => r.data),
+    enabled: !!shareDoc,
+    staleTime: 5 * 60 * 1000,
+  });
+  const roles = rolesPage?.content ?? [];
+
+  // --- Mutation: partage par rôle
+  const shareMutation = useMutation({
+    mutationFn: ({ id, roleId }: { id: string; roleId: string }) =>
+      docsApi.share(id, roleId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["docs"] });
+      toast.success("Document partagé");
+      setShareDoc(null);
+      setShareRoleId("");
+    },
+    onError: (err: AxiosError<ApiError>) => {
+      toast.error(err.response?.data?.message ?? "Erreur lors du partage");
     },
   });
 
@@ -173,16 +203,14 @@ export default function DocsPage() {
             </Link>
 
             {/* Télécharger */}
-            <a
-              href={getDocFileUrl(doc.attachment)}
-              target="_blank"
-              rel="noreferrer"
-              download
+            <button
+              type="button"
+              onClick={() => downloadDocFile(doc.attachment)}
               className="inline-flex items-center justify-center rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-green-600 transition-colors"
               title="Télécharger"
             >
               <Download className="h-4 w-4" />
-            </a>
+            </button>
 
             {/* Historique des versions */}
             <button
@@ -193,6 +221,21 @@ export default function DocsPage() {
             >
               <History className="h-4 w-4" />
             </button>
+
+            {/* Partager par rôle */}
+            <PermissionGate permission={PERMISSIONS.EDIT_DOCS}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShareDoc(doc);
+                  setShareRoleId(doc.roleId ?? "");
+                }}
+                className="inline-flex items-center justify-center rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-amber-600 transition-colors"
+                title="Partager"
+              >
+                <Share2 className="h-4 w-4" />
+              </button>
+            </PermissionGate>
 
             {/* Nouvelle version */}
             <PermissionGate permission={PERMISSIONS.EDIT_DOCS}>
@@ -287,6 +330,43 @@ export default function DocsPage() {
         isLoading={deleteMutation.isPending}
       />
 
+      {/* Modal: partage par rôle */}
+      <CrudModal
+        isOpen={shareDoc !== null}
+        onClose={() => setShareDoc(null)}
+        title={`Partager — ${shareDoc?.title ?? ""}`}
+        submitLabel="Partager"
+        isSubmitting={shareMutation.isPending}
+        onSubmit={() => {
+          if (!shareDoc || !shareRoleId) return;
+          shareMutation.mutate({ id: shareDoc.id, roleId: shareRoleId });
+        }}
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Le document sera accessible à tous les utilisateurs du rôle sélectionné,
+            qui recevront une notification par email.
+          </p>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-700">
+              Rôle <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={shareRoleId}
+              onChange={(e) => setShareRoleId(e.target.value)}
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">— Sélectionner un rôle —</option>
+              {roles.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </CrudModal>
+
       {/* Modal: nouvelle version */}
       <CrudModal
         isOpen={newVersionDoc !== null}
@@ -379,16 +459,14 @@ export default function DocsPage() {
                     <td className="py-2 pr-4 text-gray-600">{formatFileSize(v.fileSize)}</td>
                     <td className="py-2 pr-4 text-gray-600">{formatDate(v.createdAt)}</td>
                     <td className="py-2">
-                      <a
-                        href={getDocFileUrl(v.attachment)}
-                        target="_blank"
-                        rel="noreferrer"
-                        download
+                      <button
+                        type="button"
+                        onClick={() => downloadDocFile(v.attachment)}
                         className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
                       >
                         <Download className="h-3.5 w-3.5" />
                         Télécharger
-                      </a>
+                      </button>
                     </td>
                   </tr>
                 ))}

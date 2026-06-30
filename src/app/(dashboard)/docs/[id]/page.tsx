@@ -15,6 +15,7 @@ import {
   type Doc,
   type DocVersion,
   getDocFileUrl,
+  downloadDocFile,
   formatFileSize,
 } from "@/lib/api/docs";
 
@@ -127,16 +128,14 @@ export default function DocDetailPage({
                   <Eye className="h-4 w-4" />
                   Visualiser
                 </a>
-                <a
-                  href={getDocFileUrl(doc.attachment)}
-                  target="_blank"
-                  rel="noreferrer"
-                  download
+                <button
+                  type="button"
+                  onClick={() => downloadDocFile(doc.attachment, doc.title)}
                   className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
                 >
                   <Download className="h-4 w-4" />
                   Télécharger
-                </a>
+                </button>
 
                 {/* Nouvelle version */}
                 <PermissionGate permission={PERMISSIONS.EDIT_DOCS}>
@@ -197,16 +196,14 @@ export default function DocDetailPage({
                             {v.version === maxVersion ? (
                               <span className="text-xs text-gray-400">Version actuelle</span>
                             ) : (
-                              <a
-                                href={getDocFileUrl(v.attachment)}
-                                target="_blank"
-                                rel="noreferrer"
-                                download
+                              <button
+                                type="button"
+                                onClick={() => downloadDocFile(v.attachment)}
                                 className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
                               >
                                 <Download className="h-3.5 w-3.5" />
                                 Télécharger
-                              </a>
+                              </button>
                             )}
                           </td>
                         </tr>

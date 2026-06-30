@@ -138,6 +138,13 @@ export interface CashboxVoucherCreateDto {
   supplierId?: string;
   expenseCategoryId?: string;
   cashboxId?: string;
+  ticketFile?: string;
+}
+
+export interface CashboxVoucherDetailCreateDto {
+  itemName: string;
+  quantity: number;
+  unitPrice: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -179,6 +186,10 @@ export const cashboxApi = {
   deleteDaily: (id: string) =>
     apiClient.delete(`/cashbox-dailies/${id}`),
 
+  /** Télécharge le PDF de clôture d'une journée de caisse (réplique Laravel cashbox-daily-print). */
+  downloadDailyPdf: (id: string) =>
+    apiClient.get(`/cashbox-dailies/${id}/pdf`, { responseType: "blob" }),
+
   // ---- Opérations ----
   getOperations: (params?: CashboxOperationParams) =>
     apiClient.get<PageResponse<CashboxOperationResponseDto>>(
@@ -198,4 +209,10 @@ export const cashboxApi = {
 
   addVoucher: (data: CashboxVoucherCreateDto) =>
     apiClient.post<CashboxVoucherResponseDto>("/cashbox-tickets", data),
+
+  addVoucherDetail: (voucherId: string, data: CashboxVoucherDetailCreateDto) =>
+    apiClient.post<CashboxVoucherResponseDto>(
+      `/cashbox-tickets/${voucherId}/details`,
+      data
+    ),
 };

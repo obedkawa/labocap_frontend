@@ -98,7 +98,9 @@ export default function UsersPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["users"],
-    queryFn: () => usersApi.findAll().then((r) => r.data),
+    // size élevé : les filtres (recherche / statut / rôle) opèrent côté client
+    // sur l'ensemble des utilisateurs, pas seulement la 1re page serveur.
+    queryFn: () => usersApi.findAll({ size: 1000 }).then((r) => r.data),
   });
 
   const { data: rolesData } = useQuery({
@@ -454,6 +456,7 @@ export default function UsersPage() {
           ) : (
             <>
               <ReactSelect
+                instanceId="user-direct-permissions"
                 isMulti
                 options={permissionOptions}
                 value={permissionOptions.filter((o) =>
@@ -606,6 +609,7 @@ function UserForm({ form, roleOptions, isCreate }: UserFormProps) {
           control={control}
           render={({ field }) => (
             <ReactSelect
+              instanceId="user-roles"
               isMulti
               options={roleOptions}
               value={roleOptions.filter((o) =>

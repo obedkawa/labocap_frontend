@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -32,9 +32,10 @@ import type { PageResponse, ApiError } from "@/types/api";
 // ---------------------------------------------------------------------------
 
 const labTestSchema = z.object({
-  categoryId: z.string().min(1, "La catégorie est requise"),
+  categoryTestId: z.string().min(1, "La catégorie est requise"),
   name: z.string().min(1, "Le nom est requis"),
   price: z.string().min(1, "Le prix est requis"),
+  status: z.string().min(1, "Le statut est requis"),
 });
 
 type LabTestFormData = z.infer<typeof labTestSchema>;
@@ -62,18 +63,18 @@ function LabTestFormFields({
           Catégorie parente <span className="text-red-500">*</span>
         </label>
         <select
-          {...register("categoryId")}
+          {...register("categoryTestId")}
           className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         >
-          <option value="">-- Sélectionner une catégorie --</option>
+          <option value="">Sélectionner une catégorie</option>
           {categories.map((cat) => (
             <option key={cat.id} value={cat.id}>
-              {cat.code} — {cat.name}
+              {cat.name}
             </option>
           ))}
         </select>
-        {errors.categoryId && (
-          <p className="text-xs text-red-500">{errors.categoryId.message}</p>
+        {errors.categoryTestId && (
+          <p className="text-xs text-red-500">{errors.categoryTestId.message}</p>
         )}
       </div>
 
@@ -107,6 +108,23 @@ function LabTestFormFields({
           <p className="text-xs text-red-500">{errors.price.message}</p>
         )}
       </div>
+
+      {/* Statut */}
+      <div className="flex flex-col gap-1">
+        <label className="text-sm font-medium text-gray-700">
+          Statut <span className="text-red-500">*</span>
+        </label>
+        <select
+          {...register("status")}
+          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        >
+          <option value="ACTIF">ACTIF</option>
+          <option value="INACTIF">INACTIF</option>
+        </select>
+        {errors.status && (
+          <p className="text-xs text-red-500">{errors.status.message}</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -122,8 +140,19 @@ export default function ExamensPage() {
   // --- State
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+
+  // Filtrage en direct : on déclenche la recherche pendant la frappe,
+  // avec un léger debounce pour éviter une requête à chaque caractère.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(0);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -136,7 +165,10 @@ export default function ExamensPage() {
     handleSubmit: handleSubmitCreate,
     formState: { errors: createErrors },
     reset: resetCreate,
-  } = useForm<LabTestFormData>({ resolver: zodResolver(labTestSchema) });
+  } = useForm<LabTestFormData>({
+    resolver: zodResolver(labTestSchema),
+    defaultValues: { categoryTestId: "", name: "", price: "", status: "ACTIF" },
+  });
 
   const {
     register: registerEdit,
@@ -171,8 +203,12 @@ export default function ExamensPage() {
 
   // --- Mutations
   const createMutation = useMutation({
-    mutationFn: (payload: { name: string; price: number; categoryId: string }) =>
-      labTestsApi.create(payload),
+    mutationFn: (payload: {
+      name: string;
+      price: number;
+      categoryTestId: string;
+      status: string;
+    }) => labTestsApi.create(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["lab-tests"] });
       toast.success("Examen créé avec succès");
@@ -190,7 +226,7 @@ export default function ExamensPage() {
       payload,
     }: {
       id: string;
-      payload: { name: string; price: number; categoryId: string };
+      payload: { name: string; price: number; categoryTestId: string; status: string };
     }) => labTestsApi.update(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["lab-tests"] });
@@ -224,9 +260,10 @@ export default function ExamensPage() {
   const handleOpenEdit = (test: LabTest) => {
     setSelectedTest(test);
     resetEdit({
-      categoryId: test.categoryId,
+      categoryTestId: test.categoryTestId,
       name: test.name,
       price: String(test.price ?? ""),
+      status: test.status ?? "ACTIF",
     });
     setEditOpen(true);
   };
@@ -246,7 +283,8 @@ export default function ExamensPage() {
     createMutation.mutate({
       name: formData.name,
       price: Number(formData.price),
-      categoryId: formData.categoryId,
+      categoryTestId: formData.categoryTestId,
+      status: formData.status,
     });
   };
 
@@ -257,7 +295,8 @@ export default function ExamensPage() {
       payload: {
         name: formData.name,
         price: Number(formData.price),
-        categoryId: formData.categoryId,
+        categoryTestId: formData.categoryTestId,
+        status: formData.status,
       },
     });
   };
@@ -270,7 +309,7 @@ export default function ExamensPage() {
     },
     {
       header: "Catégorie",
-      accessorKey: "categoryName",
+      accessorKey: "categoryTestName",
     },
     {
       header: "Prix",
@@ -344,11 +383,8 @@ export default function ExamensPage() {
           <input
             type="text"
             placeholder="Rechercher..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(0);
-            }}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             className="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-xs w-full"
           />
           <select

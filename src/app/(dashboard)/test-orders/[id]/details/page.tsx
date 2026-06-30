@@ -111,7 +111,10 @@ export default function TestOrderDetailsPage({ params }: Props) {
         const res = await testOrdersApi
           .getDiscount(option.value, order.contratId)
           .then((r) => r.data);
-        setExamPrice(res.priceAfterDiscount ?? option.price);
+        // "Prix" = prix de base (brut) ; "Remise" = montant remisé.
+        // Le total est calculé ensuite (base - remise) — ne pas utiliser
+        // priceAfterDiscount comme prix sous peine de double déduction.
+        setExamPrice(res.basePrice ?? option.price);
         setExamDiscount(res.discount ?? 0);
       } catch {
         // Pas de remise → on garde le prix de base
@@ -140,7 +143,8 @@ export default function TestOrderDetailsPage({ params }: Props) {
         const res = await testOrdersApi
           .getDiscount(option.value, order.contratId)
           .then((r) => r.data);
-        setEditPrice(res.priceAfterDiscount ?? option.price);
+        // Prix de base (brut), pas le net : le total est calculé (base - remise).
+        setEditPrice(res.basePrice ?? option.price);
         setEditDiscount(res.discount ?? 0);
       } catch {
         // garde le prix de base
@@ -619,6 +623,7 @@ export default function TestOrderDetailsPage({ params }: Props) {
                 Examen
               </label>
               <Select<SelectOption>
+                instanceId="test-order-add-exam"
                 options={examOptions}
                 value={selectedExam}
                 onChange={handleExamSelect}
@@ -740,6 +745,7 @@ export default function TestOrderDetailsPage({ params }: Props) {
               Examen
             </label>
             <Select<SelectOption>
+              instanceId="test-order-edit-exam"
               options={examOptions}
               value={editExam}
               onChange={handleEditExamSelect}

@@ -302,6 +302,7 @@ export default function TimeOffPage() {
       <div className="flex flex-wrap gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
         <div className="min-w-[220px]">
           <ReactSelect
+            instanceId="timeoff-filter-employee"
             options={employeeOptions}
             value={employeeOptions.find((o) => o.value === selectedEmployeeId) ?? null}
             onChange={(opt) => setSelectedEmployeeId(opt?.value ?? "")}
@@ -395,6 +396,7 @@ function TimeOffForm({ form, employeeOptions }: TimeOffFormProps) {
           control={control}
           render={({ field }) => (
             <ReactSelect
+              instanceId="timeoff-form-employee"
               options={employeeOptions}
               value={employeeOptions.find((o) => o.value === field.value) ?? null}
               onChange={(opt) => field.onChange(opt?.value ?? "")}

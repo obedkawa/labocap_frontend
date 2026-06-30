@@ -46,6 +46,7 @@ export interface ReportDetail extends Report {
   signatory3Name?: string;
   reviewedById?: string;
   reviewedByName?: string;
+  tagIds?: string[];
   logs: ReportLog[];
 }
 
@@ -132,6 +133,8 @@ export interface ReportSuiviListParams {
   dateBegin?: string;
   dateEnd?: string;
   isUrgent?: boolean;
+  /** En retard : report DRAFT créé il y a plus de 21 jours */
+  isLate?: boolean;
 }
 
 /**
@@ -251,6 +254,22 @@ export const reportsApi = {
   informedPatient: (id: string) =>
     apiClient.patch(`/reports/${id}/informed-patient`),
 
+  /** Lance l'appel vocal OurVoice au patient (résultat disponible). */
+  callPatient: (id: string) =>
+    apiClient.post<{ appelId: string; reportId: string; audioUrl: string }>(
+      `/reports/${id}/call`
+    ),
+
+  /** Envoie un SMS OurVoice au patient. */
+  sendSms: (id: string) =>
+    apiClient.post<{ status: string }>(`/reports/${id}/sms`),
+
+  /** Statut du dernier appel passé pour ce compte-rendu. */
+  getAppelStatus: (id: string) =>
+    apiClient.get<{ id: string; reportId: string; appelId: string; createdAt: string }>(
+      `/reports/${id}/appel`
+    ),
+
   getSuivi: (params?: { year?: number; month?: number }) =>
     apiClient.get<ReportSuivi>("/reports/suivi", { params }),
 
@@ -270,6 +289,10 @@ export const reportsApi = {
   downloadPdf: (id: string) =>
     apiClient.get(`/reports/${id}/pdf`, { responseType: "blob" }),
 
+  /** Associe un modèle (template) au compte-rendu. */
+  setTemplate: (id: string, templateId: string) =>
+    apiClient.patch(`/reports/${id}/template/${templateId}`),
+
   /**
    * Liste paginée des comptes-rendu pour la page "Tous les comptes rendu".
    * Réplique de l'endpoint Laravel "report.getReportsforDatatable".
@@ -283,4 +306,21 @@ export const reportsApi = {
    */
   getPerformanceStats: (params?: ReportPerformanceParams) =>
     apiClient.get<ReportPerformance>("/reports/performance-stats", { params }),
+
+  /**
+   * Historique (journal) global des actions sur les comptes-rendus.
+   */
+  getLogs: (params?: { page?: number; size?: number }) =>
+    apiClient.get<PageResponse<LogReportRow>>("/reports/logs", { params }),
 };
+
+export interface LogReportRow {
+  id: string;
+  action: string;
+  description?: string;
+  date?: string;
+  userFullName?: string;
+  reportId?: string;
+  reportCode?: string;
+  testOrderCode?: string;
+}

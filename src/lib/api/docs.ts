@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import apiClient from "@/lib/api/client";
 
 // ---------------------------------------------------------------------------
@@ -12,6 +13,7 @@ export interface Doc {
   fileSize?: number;
   documentationCategoryId?: string;
   userId?: string;
+  roleId?: string;
   branchId?: string;
   createdAt: string;
 }
@@ -34,6 +36,33 @@ export interface DocVersion {
 export function getDocFileUrl(attachment: string): string {
   const base = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080/api/v1").replace(/\/$/, "");
   return `${base}/files/${attachment}`;
+}
+
+/**
+ * Télécharge un fichier joint en passant par apiClient (cookies + refresh token
+ * via l'intercepteur), plutôt qu'un `<a href>` direct qui contournerait le
+ * rafraîchissement d'authentification (le endpoint /files/** exige un JWT valide).
+ */
+export async function downloadDocFile(
+  attachment: string,
+  filename?: string
+): Promise<void> {
+  try {
+    const response = await apiClient.get(`/files/${attachment}`, {
+      responseType: "blob",
+    });
+    const blob = response.data as Blob;
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename || attachment.split("/").pop() || "document";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  } catch {
+    toast.error("Échec du téléchargement du fichier");
+  }
 }
 
 export function formatFileSize(bytes?: number): string {
@@ -78,6 +107,36 @@ export const docsApi = {
   getVersions: (id: string) => apiClient.get<DocVersion[]>(`/docs/${id}/versions`),
 
   delete: (id: string) => apiClient.delete(`/docs/${id}`),
+
+  // --- GED avancée ---
+
+  /** Partage un document avec un rôle (notifie par email les utilisateurs du rôle). */
+  share: (id: string, roleId: string) =>
+    apiClient.post<Doc>(`/docs/${id}/share`, { roleId }),
+
+  /** Documents partagés avec l'utilisateur courant (via ses rôles). */
+  sharedWithMe: (params?: Record<string, unknown>) =>
+    apiClient.get<{ content: Doc[]; totalElements: number; totalPages: number }>(
+      "/docs/shared-with-me",
+      { params }
+    ),
+
+  /** Documents les plus récents. */
+  recent: (limit = 5) =>
+    apiClient.get<Doc[]>("/docs/recent", { params: { limit } }),
+
+  /** Documents en corbeille (supprimés). */
+  trash: (params?: Record<string, unknown>) =>
+    apiClient.get<{ content: Doc[]; totalElements: number; totalPages: number }>(
+      "/docs/trash",
+      { params }
+    ),
+
+  /** Restaure un document depuis la corbeille. */
+  restore: (id: string) => apiClient.post<Doc>(`/docs/${id}/restore`),
+
+  /** Supprime définitivement un document. */
+  permanentDelete: (id: string) => apiClient.delete(`/docs/${id}/permanent`),
 };
 
 // ---------------------------------------------------------------------------

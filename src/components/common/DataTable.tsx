@@ -231,7 +231,7 @@ export function DataTable<T>({
             }}
             className="rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none"
           >
-            {[10, 25, 50].map((size) => (
+            {[10, 20, 25, 50].map((size) => (
               <option key={size} value={size}>
                 {size}
               </option>

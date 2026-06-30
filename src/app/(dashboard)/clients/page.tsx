@@ -54,14 +54,21 @@ export default function ClientsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
+  // ---- Pagination
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(20);
+
   // ---- Queries & Mutations ------------------------------------------------
 
   const { data, isLoading } = useQuery({
-    queryKey: ["clients"],
-    queryFn: () => clientsApi.findAll().then((r) => r.data),
+    queryKey: ["clients", { page, pageSize }],
+    queryFn: () =>
+      clientsApi.findAll({ page, size: pageSize }).then((r) => r.data),
+    placeholderData: (prev) => prev,
   });
 
   const clients: Client[] = data?.content ?? [];
+  const totalPages = data?.totalPages ?? 0;
 
   const createMutation = useMutation({
     mutationFn: (payload: ClientRequest) => clientsApi.create(payload),
@@ -169,7 +176,7 @@ export default function ClientsPage() {
     {
       header: "#",
       id: "index",
-      cell: ({ row }) => row.index + 1,
+      cell: ({ row }) => page * pageSize + row.index + 1,
     },
     {
       header: "Nom",
@@ -242,7 +249,19 @@ export default function ClientsPage() {
       />
 
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5">
-        <DataTable columns={columns} data={clients} isLoading={isLoading} />
+        <DataTable
+          columns={columns}
+          data={clients}
+          isLoading={isLoading}
+          pageCount={totalPages}
+          pageIndex={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setPage(0);
+          }}
+        />
       </div>
 
       {/* ---- Modal création ---- */}

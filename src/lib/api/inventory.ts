@@ -1,4 +1,5 @@
 import apiClient from "./client";
+import type { PageResponse } from "@/types/api";
 
 export interface Article {
   id: string;
@@ -34,10 +35,15 @@ export interface MovementRequest {
 export interface StockMovement {
   id: string;
   articleId: string;
+  articleName?: string;
   type: 'IN' | 'OUT' | 'ADJUSTMENT';
   quantity: number;
   notes?: string;
   movementDate: string;
+  userId?: string;
+  userFullName?: string;
+  branchId?: string;
+  createdAt?: string;
   article?: { name: string };
 }
 
@@ -64,4 +70,11 @@ export const inventoryApi = {
     apiClient.get<{ content: StockMovement[]; totalElements: number; totalPages: number }>("/movements", {
       params: id ? { articleId: id } : {},
     }),
+  // Liste paginée des mouvements (page globale d'historique)
+  listMovements: (params?: {
+    page?: number;
+    size?: number;
+    articleId?: string;
+  }) =>
+    apiClient.get<PageResponse<StockMovement>>("/movements", { params }),
 };

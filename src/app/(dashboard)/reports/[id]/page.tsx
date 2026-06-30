@@ -3,11 +3,12 @@
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Save, ClipboardCheck, PenLine, Send, ArrowLeft, Clock, X, FileDown } from "lucide-react";
+import { Save, ClipboardCheck, PenLine, Send, ArrowLeft, Clock, X, FileDown, FileText } from "lucide-react";
+import Select from "react-select";
 import type { AxiosError } from "axios";
 
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -17,6 +18,9 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { formatDate } from "@/lib/utils";
 import { reportsApi, type ReportDetail, type StoreSignatureRequest } from "@/lib/api/reports";
+import { usersApi } from "@/lib/api/users";
+import { tagsApi } from "@/lib/api/tags";
+import { reportTemplatesApi } from "@/lib/api/reportTemplates";
 import { useAuthStore } from "@/stores/auth.store";
 import type { ApiError } from "@/types/api";
 
@@ -33,6 +37,8 @@ const reportEditSchema = z.object({
   signatory1Id: z.string().optional(),
   signatory2Id: z.string().optional(),
   signatory3Id: z.string().optional(),
+  reviewedById: z.string().optional(),
+  tagIds: z.array(z.string()).optional(),
 });
 
 type ReportEditFormValues = z.infer<typeof reportEditSchema>;
@@ -111,11 +117,40 @@ export default function ReportDetailPage({
     enabled: !!id,
   });
 
+  // --- Utilisateurs (réviseur / signataires)
+  const { data: usersData } = useQuery({
+    queryKey: ["users-for-report"],
+    queryFn: () => usersApi.findAll({ size: 200 }).then((r) => r.data.content),
+    staleTime: 5 * 60_000,
+  });
+  const userOptions = (usersData ?? []).map((u) => ({
+    value: u.id,
+    label: `${u.firstname} ${u.lastname}`.trim(),
+  }));
+
+  // --- Tags
+  const { data: tagsData } = useQuery({
+    queryKey: ["tags"],
+    queryFn: () => tagsApi.findAll().then((r) => r.data.content),
+    staleTime: 5 * 60_000,
+  });
+  const tagOptions = (tagsData ?? []).map((t) => ({ value: t.id, label: t.name }));
+
+  // --- Modèles de compte-rendu
+  const { data: templatesData } = useQuery({
+    queryKey: ["report-templates"],
+    queryFn: () => reportTemplatesApi.findAll({ size: 200 }).then((r) => r.data.content),
+    staleTime: 5 * 60_000,
+  });
+  const templateOptions = (templatesData ?? []).map((t) => ({ value: t.id, label: t.title ?? t.name }));
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+
   // --- Formulaire
   const {
     register,
     handleSubmit,
     reset,
+    control,
   } = useForm<ReportEditFormValues>({
     resolver: zodResolver(reportEditSchema),
     defaultValues: {
@@ -127,6 +162,8 @@ export default function ReportDetailPage({
       signatory1Id: "",
       signatory2Id: "",
       signatory3Id: "",
+      reviewedById: "",
+      tagIds: [],
     },
   });
 
@@ -142,6 +179,8 @@ export default function ReportDetailPage({
         signatory1Id: report.signatory1Id ?? "",
         signatory2Id: report.signatory2Id ?? "",
         signatory3Id: report.signatory3Id ?? "",
+        reviewedById: report.reviewedById ?? "",
+        tagIds: report.tagIds ?? [],
       });
     }
   }, [report, reset]);
@@ -159,6 +198,8 @@ export default function ReportDetailPage({
         signatory1Id: data.signatory1Id || undefined,
         signatory2Id: data.signatory2Id || undefined,
         signatory3Id: data.signatory3Id || undefined,
+        reviewedById: data.reviewedById || undefined,
+        tagIds: data.tagIds ?? [],
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["report", id] });
@@ -203,6 +244,17 @@ export default function ReportDetailPage({
     },
     onError: (err: AxiosError<ApiError>) => {
       toast.error(err.response?.data?.message ?? "Erreur lors de la livraison");
+    },
+  });
+
+  const setTemplateMutation = useMutation({
+    mutationFn: (templateId: string) => reportsApi.setTemplate(id, templateId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["report", id] });
+      toast.success("Modèle associé au compte-rendu");
+    },
+    onError: (err: AxiosError<ApiError>) => {
+      toast.error(err.response?.data?.message ?? "Erreur lors de l'association du modèle");
     },
   });
 
@@ -533,38 +585,68 @@ export default function ReportDetailPage({
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-700">
-                Signataire 1 (ID)
+                Signataire 1
               </label>
-              <input
-                type="text"
-                {...register("signatory1Id")}
-                disabled={!isEditable}
-                placeholder="UUID du signataire 1..."
-                className={inputClass}
+              <Controller
+                name="signatory1Id"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    instanceId="report-signatory1"
+                    options={userOptions}
+                    value={userOptions.find((o) => o.value === field.value) ?? null}
+                    onChange={(opt) => field.onChange(opt?.value ?? "")}
+                    isDisabled={!isEditable}
+                    isClearable
+                    placeholder="Sélectionner un signataire..."
+                    noOptionsMessage={() => "Aucun utilisateur"}
+                    classNamePrefix="react-select"
+                  />
+                )}
               />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-700">
-                Signataire 2 (ID)
+                Signataire 2
               </label>
-              <input
-                type="text"
-                {...register("signatory2Id")}
-                disabled={!isEditable}
-                placeholder="UUID du signataire 2..."
-                className={inputClass}
+              <Controller
+                name="signatory2Id"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    instanceId="report-signatory2"
+                    options={userOptions}
+                    value={userOptions.find((o) => o.value === field.value) ?? null}
+                    onChange={(opt) => field.onChange(opt?.value ?? "")}
+                    isDisabled={!isEditable}
+                    isClearable
+                    placeholder="Sélectionner un signataire..."
+                    noOptionsMessage={() => "Aucun utilisateur"}
+                    classNamePrefix="react-select"
+                  />
+                )}
               />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-700">
-                Signataire 3 (ID)
+                Signataire 3
               </label>
-              <input
-                type="text"
-                {...register("signatory3Id")}
-                disabled={!isEditable}
-                placeholder="UUID du signataire 3..."
-                className={inputClass}
+              <Controller
+                name="signatory3Id"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    instanceId="report-signatory3"
+                    options={userOptions}
+                    value={userOptions.find((o) => o.value === field.value) ?? null}
+                    onChange={(opt) => field.onChange(opt?.value ?? "")}
+                    isDisabled={!isEditable}
+                    isClearable
+                    placeholder="Sélectionner un signataire..."
+                    noOptionsMessage={() => "Aucun utilisateur"}
+                    classNamePrefix="react-select"
+                  />
+                )}
               />
             </div>
             <div className="flex flex-col gap-1">
@@ -579,6 +661,89 @@ export default function ReportDetailPage({
                 className={inputClass}
               />
             </div>
+
+            {/* Réviseur / relecteur */}
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700">
+                Réviseur (relecteur)
+              </label>
+              <Controller
+                name="reviewedById"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    instanceId="report-reviewer"
+                    options={userOptions}
+                    value={userOptions.find((o) => o.value === field.value) ?? null}
+                    onChange={(opt) => field.onChange(opt?.value ?? "")}
+                    isDisabled={!isEditable}
+                    isClearable
+                    placeholder="Assigner un relecteur..."
+                    noOptionsMessage={() => "Aucun utilisateur"}
+                    classNamePrefix="react-select"
+                  />
+                )}
+              />
+            </div>
+          </div>
+
+          {/* Tags */}
+          <div className="mt-4 flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-700">Tags</label>
+            <Controller
+              name="tagIds"
+              control={control}
+              render={({ field }) => (
+                <Select
+                  instanceId="report-tags"
+                  isMulti
+                  options={tagOptions}
+                  value={tagOptions.filter((o) => (field.value ?? []).includes(o.value))}
+                  onChange={(opts) => field.onChange(opts.map((o) => o.value))}
+                  isDisabled={!isEditable}
+                  placeholder="Sélectionner des tags..."
+                  noOptionsMessage={() => "Aucun tag"}
+                  classNamePrefix="react-select"
+                />
+              )}
+            />
+          </div>
+        </div>
+      </PermissionGate>
+
+      {/* ===================================================================
+          Modèle (template) du compte-rendu
+      =================================================================== */}
+      <PermissionGate permission={PERMISSIONS.EDIT_REPORTS}>
+        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-gray-800">
+            <FileText className="h-4 w-4" />
+            Modèle d&apos;impression
+          </h2>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="flex flex-1 flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700">
+                Modèle à associer
+              </label>
+              <Select
+                instanceId="report-template"
+                options={templateOptions}
+                value={templateOptions.find((o) => o.value === selectedTemplateId) ?? null}
+                onChange={(opt) => setSelectedTemplateId(opt?.value ?? "")}
+                placeholder="Sélectionner un modèle..."
+                noOptionsMessage={() => "Aucun modèle"}
+                classNamePrefix="react-select"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => selectedTemplateId && setTemplateMutation.mutate(selectedTemplateId)}
+              disabled={!selectedTemplateId || setTemplateMutation.isPending}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+            >
+              <FileText className="h-4 w-4" />
+              Appliquer
+            </button>
           </div>
         </div>
       </PermissionGate>

@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Eye, Pencil, FileText, Trash2, Plus, Printer } from "lucide-react";
+import { Eye, Pencil, FileText, Trash2, Plus, Printer, Check, FileDown } from "lucide-react";
 import type { AxiosError } from "axios";
 import type { ColumnDef } from "@tanstack/react-table";
 
@@ -16,8 +16,9 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { formatCFA, formatDate } from "@/lib/utils";
 import { testOrdersApi, type TestOrder } from "@/lib/api/testOrders";
+import { reportsApi } from "@/lib/api/reports";
 import { typeOrdersApi, type TypeOrder } from "@/lib/api/examens";
-import { doctorsApi, type Doctor } from "@/lib/api/doctors";
+import { usersApi } from "@/lib/api/users";
 import apiClient from "@/lib/api/client";
 import type { PageResponse, ApiError } from "@/types/api";
 
@@ -26,6 +27,13 @@ import type { PageResponse, ApiError } from "@/types/api";
 // ---------------------------------------------------------------------------
 
 interface ContractOption {
+  id: string;
+  name: string;
+}
+
+// Le dropdown "Affecter à" (et le filtre Docteur) référencent un utilisateur
+// ayant le rôle docteur — même source que `attribuateDoctorId`.
+interface DoctorOption {
   id: string;
   name: string;
 }
@@ -39,7 +47,7 @@ function AttribuateSelect({
   doctors,
 }: {
   order: TestOrder;
-  doctors: Doctor[];
+  doctors: DoctorOption[];
 }) {
   const queryClient = useQueryClient();
   const [value, setValue] = useState<string>(order.attribuateDoctorId ?? "");
@@ -90,7 +98,9 @@ function ActionButtons({
 }) {
   const { can } = usePermissions();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [creatingInvoice, setCreatingInvoice] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   const handleCreateInvoice = async () => {
     setCreatingInvoice(true);
@@ -103,6 +113,31 @@ function ActionButtons({
       toast.error("Erreur lors de la création de la facture");
     } finally {
       setCreatingInvoice(false);
+    }
+  };
+
+  const deliverMutation = useMutation({
+    mutationFn: () => testOrdersApi.deliver(order.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["test-orders"] });
+      toast.success("Demande marquée comme retirée");
+    },
+    onError: (err: AxiosError<ApiError>) =>
+      toast.error(err.response?.data?.message ?? "Erreur lors du retrait"),
+  });
+
+  const handlePrint = async () => {
+    if (!order.reportId) return;
+    setDownloading(true);
+    try {
+      const res = await reportsApi.downloadPdf(order.reportId);
+      const url = URL.createObjectURL(res.data as Blob);
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      toast.error("Erreur lors de la génération du PDF");
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -138,6 +173,36 @@ function ActionButtons({
           <FileText className="h-3.5 w-3.5" />
         </Link>
       )}
+
+      {/* Marquer comme retiré — VERT (si validé mais pas encore livré) */}
+      {order.reportStatus === "VALIDATED" &&
+        !order.reportIsDelivered &&
+        can(PERMISSIONS.DELIVER_REPORTS) && (
+          <button
+            type="button"
+            onClick={() => deliverMutation.mutate()}
+            disabled={deliverMutation.isPending}
+            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+            title="Marquer comme retiré"
+          >
+            <Check className="h-3.5 w-3.5" />
+          </button>
+        )}
+
+      {/* Imprimer le compte rendu — GRIS (si compte rendu validé/livré) */}
+      {order.reportId &&
+        (order.reportStatus === "VALIDATED" ||
+          order.reportStatus === "DELIVERED") && (
+          <button
+            type="button"
+            onClick={handlePrint}
+            disabled={downloading}
+            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-gray-600 text-white hover:bg-gray-700 transition-colors disabled:opacity-50"
+            title="Imprimer le compte rendu"
+          >
+            <FileDown className="h-3.5 w-3.5" />
+          </button>
+        )}
 
       {/* Facture — VERT */}
       {order.invoiceId ? (
@@ -240,10 +305,18 @@ export default function TestOrdersPage() {
     },
   });
 
-  const { data: doctorsData } = useQuery<Doctor[]>({
-    queryKey: ["doctors-all"],
+  // Utilisateurs ayant le rôle docteur — source cohérente avec attribuateDoctorId
+  const { data: doctorsData } = useQuery<DoctorOption[]>({
+    queryKey: ["users-doctors"],
     queryFn: () =>
-      doctorsApi.findAll({ size: 200 }).then((r) => r.data.content),
+      usersApi
+        .findAll({ size: 500, role: "doctor" })
+        .then((r) =>
+          r.data.content.map((u) => ({
+            id: u.id,
+            name: `${u.firstname} ${u.lastname}`.trim(),
+          }))
+        ),
   });
 
   // Stats globales (Livrer / Valider / Cas urgent)
@@ -336,8 +409,10 @@ export default function TestOrdersPage() {
       cell: ({ row }) => (
         <div className="text-xs text-gray-700 max-w-[160px]">
           {row.original.details?.length
-            ? row.original.details.map((d, i) => (
-                <div key={i}>{d.testName}</div>
+            ? row.original.details.map((d) => (
+                <div key={d.id ?? `${row.original.id}-${d.labTestId}`}>
+                  {d.testName}
+                </div>
               ))
             : "—"}
         </div>
@@ -541,7 +616,12 @@ export default function TestOrdersPage() {
           pageSize={pageSize}
           onPageChange={setPage}
           onPageSizeChange={(size) => { setPageSize(size); setPage(0); }}
-          rowClassName={(row) => (row.isUrgent ? "bg-red-50" : "")}
+          rowClassName={(row) => {
+            if (row.isUrgent && !row.reportIsDelivered) return "bg-red-50";
+            if (row.reportIsDelivered) return "bg-green-50";
+            if (row.reportStatus === "VALIDATED") return "bg-yellow-50";
+            return "";
+          }}
         />
       </div>
 

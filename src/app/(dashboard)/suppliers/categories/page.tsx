@@ -180,15 +180,11 @@ export default function SupplierCategoriesPage() {
       />
 
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        {/* Pas de pageCount/handlers : données complètes → pagination cliente du DataTable */}
         <DataTable
           columns={columns}
           data={items}
           isLoading={isLoading}
-          pageCount={1}
-          pageIndex={0}
-          pageSize={items.length || 10}
-          onPageChange={() => {}}
-          onPageSizeChange={() => {}}
         />
       </div>
 

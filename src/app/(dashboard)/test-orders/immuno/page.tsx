@@ -16,7 +16,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { formatCFA, formatDate } from "@/lib/utils";
 import { testOrdersApi, type TestOrder } from "@/lib/api/testOrders";
-import { doctorsApi, type Doctor } from "@/lib/api/doctors";
+import { usersApi } from "@/lib/api/users";
 import apiClient from "@/lib/api/client";
 import type { PageResponse, ApiError } from "@/types/api";
 
@@ -25,6 +25,13 @@ import type { PageResponse, ApiError } from "@/types/api";
 // ---------------------------------------------------------------------------
 
 interface ContractOption {
+  id: string;
+  name: string;
+}
+
+// Le dropdown "Affecter à" (et le filtre Docteur) référencent un utilisateur
+// ayant le rôle docteur — même source que `attribuateDoctorId`.
+interface DoctorOption {
   id: string;
   name: string;
 }
@@ -38,7 +45,7 @@ function AttribuateSelect({
   doctors,
 }: {
   order: TestOrder;
-  doctors: Doctor[];
+  doctors: DoctorOption[];
 }) {
   const queryClient = useQueryClient();
   const [value, setValue] = useState<string>(order.attribuateDoctorId ?? "");
@@ -232,10 +239,18 @@ export default function TestOrdersImmunoPage() {
     },
   });
 
-  const { data: doctorsData } = useQuery<Doctor[]>({
-    queryKey: ["doctors-all"],
+  // Utilisateurs ayant le rôle docteur — source cohérente avec attribuateDoctorId
+  const { data: doctorsData } = useQuery<DoctorOption[]>({
+    queryKey: ["users-doctors"],
     queryFn: () =>
-      doctorsApi.findAll({ size: 200 }).then((r) => r.data.content),
+      usersApi
+        .findAll({ size: 500, role: "doctor" })
+        .then((r) =>
+          r.data.content.map((u) => ({
+            id: u.id,
+            name: `${u.firstname} ${u.lastname}`.trim(),
+          }))
+        ),
   });
 
   // Stats globales (Livrer / Valider / Cas urgent) — variantes immuno
@@ -327,8 +342,10 @@ export default function TestOrdersImmunoPage() {
       cell: ({ row }) => (
         <div className="text-xs text-gray-700 max-w-[160px]">
           {row.original.details?.length
-            ? row.original.details.map((d, i) => (
-                <div key={i}>{d.testName}</div>
+            ? row.original.details.map((d) => (
+                <div key={d.id ?? `${row.original.id}-${d.labTestId}`}>
+                  {d.testName}
+                </div>
               ))
             : "—"}
         </div>

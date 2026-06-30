@@ -63,8 +63,11 @@ function formatPrice(price: number): string {
   return new Intl.NumberFormat("fr-FR").format(price) + " FCFA";
 }
 
-function buildArticlePayload(values: ArticleFormValues): ArticleRequest {
-  return {
+function buildArticlePayload(
+  values: ArticleFormValues,
+  includeInitialQuantity = true,
+): ArticleRequest {
+  const payload: ArticleRequest = {
     name: values.name,
     code: values.code || undefined,
     supplierId: values.supplierId || undefined,
@@ -77,6 +80,13 @@ function buildArticlePayload(values: ArticleFormValues): ArticleRequest {
         : Number(values.minimumStock),
     description: values.description || undefined,
   };
+  // En édition, on n'envoie JAMAIS initialQuantity : le backend ne touche pas
+  // la quantité à l'update, mais on évite tout risque de réinitialisation du
+  // stock. La quantité se gère uniquement via les mouvements (Entrée/Sortie).
+  if (!includeInitialQuantity) {
+    delete (payload as Partial<ArticleRequest>).initialQuantity;
+  }
+  return payload;
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +113,8 @@ export default function ArticlesPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["articles"],
-    queryFn: () => inventoryApi.findAll().then((r) => r.data),
+    // size élevé : recherche + filtre fournisseur opèrent côté client sur tout le stock.
+    queryFn: () => inventoryApi.findAll({ size: 1000 }).then((r) => r.data),
   });
 
   const { data: suppliersData } = useQuery({
@@ -154,8 +165,8 @@ export default function ArticlesPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: ArticleRequest }) =>
-      inventoryApi.update(id, data),
+    mutationFn: ({ id, data }: { id: string; data: Partial<ArticleRequest> }) =>
+      inventoryApi.update(id, data as ArticleRequest),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["articles"] });
       toast.success("Article modifié");
@@ -270,9 +281,10 @@ export default function ArticlesPage() {
 
   function onEditSubmit(values: ArticleFormValues) {
     if (!selectedArticle) return;
+    // includeInitialQuantity = false → la quantité n'est pas modifiée ici.
     updateMutation.mutate({
       id: selectedArticle.id,
-      data: buildArticlePayload(values),
+      data: buildArticlePayload(values, false),
     });
   }
 
@@ -485,7 +497,7 @@ export default function ArticlesPage() {
         submitLabel="Modifier"
         isSubmitting={updateMutation.isPending}
       >
-        <ArticleForm form={editForm} suppliers={suppliers} />
+        <ArticleForm form={editForm} suppliers={suppliers} isEdit />
       </CrudModal>
 
       {/* ---- Modal mouvement de stock ---- */}
@@ -598,9 +610,11 @@ export default function ArticlesPage() {
 interface ArticleFormProps {
   form: UseFormReturn<ArticleFormValues>;
   suppliers: Supplier[];
+  /** En édition, la quantité ne se modifie pas via ce champ (mouvements de stock). */
+  isEdit?: boolean;
 }
 
-function ArticleForm({ form, suppliers }: ArticleFormProps) {
+function ArticleForm({ form, suppliers, isEdit = false }: ArticleFormProps) {
   const {
     register,
     formState: { errors },
@@ -637,12 +651,22 @@ function ArticleForm({ form, suppliers }: ArticleFormProps) {
         </select>
       </FormField>
 
-      <FormField label="Quantité initiale" required error={errors.initialQuantity?.message}>
+      <FormField
+        label={isEdit ? "Quantité en stock" : "Quantité initiale"}
+        required={!isEdit}
+        error={errors.initialQuantity?.message}
+        hint={
+          isEdit
+            ? "Non modifiable ici — utilisez les mouvements de stock (Entrée / Sortie)."
+            : undefined
+        }
+      >
         <input
           type="number"
           {...register("initialQuantity")}
           min={0}
           placeholder="0"
+          disabled={isEdit}
           className={inputClass}
         />
       </FormField>

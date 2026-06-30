@@ -500,6 +500,7 @@ function ExpenseForm({ form, categoryOptions, supplierOptions }: ExpenseFormProp
           control={control}
           render={({ field }) => (
             <ReactSelect
+              instanceId="expense-category"
               options={categoryOptions}
               value={categoryOptions.find((o) => o.value === field.value) ?? null}
               onChange={(opt) => field.onChange(opt?.value ?? "")}
@@ -517,6 +518,7 @@ function ExpenseForm({ form, categoryOptions, supplierOptions }: ExpenseFormProp
           control={control}
           render={({ field }) => (
             <ReactSelect<SupplierOption>
+              instanceId="expense-supplier"
               options={supplierOptions}
               value={supplierOptions.find((o) => o.value === field.value) ?? null}
               onChange={(opt) => field.onChange(opt?.value ?? undefined)}

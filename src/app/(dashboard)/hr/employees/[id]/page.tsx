@@ -112,6 +112,7 @@ export default function EmployeeProfilePage({
   // ===========================================================================
 
   const [contratPage, setContratPage] = useState(0);
+  const [contratSize, setContratSize] = useState(10);
   const [createContratOpen, setCreateContratOpen] = useState(false);
   const [editContratOpen, setEditContratOpen] = useState(false);
   const [selectedContrat, setSelectedContrat] = useState<EmployeeContrat | null>(null);
@@ -121,8 +122,8 @@ export default function EmployeeProfilePage({
   const contratEditForm = useForm<ContratForm>({ resolver: zodResolver(contratSchema) });
 
   const { data: contratsData, isLoading: contratsLoading } = useQuery({
-    queryKey: ["employee-contrats", employeeId, contratPage],
-    queryFn: () => hrApi.getContrats(employeeId, { page: contratPage, size: 10 }).then((r) => r.data),
+    queryKey: ["employee-contrats", employeeId, contratPage, contratSize],
+    queryFn: () => hrApi.getContrats(employeeId, { page: contratPage, size: contratSize }).then((r) => r.data),
     enabled: activeTab === "contrats",
   });
 
@@ -227,6 +228,7 @@ export default function EmployeeProfilePage({
   // ===========================================================================
 
   const [docPage, setDocPage] = useState(0);
+  const [docSize, setDocSize] = useState(10);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [editDocOpen, setEditDocOpen] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<EmployeeDocument | null>(null);
@@ -237,8 +239,8 @@ export default function EmployeeProfilePage({
   const docEditForm = useForm<DocForm>({ resolver: zodResolver(docSchema) });
 
   const { data: docsData, isLoading: docsLoading } = useQuery({
-    queryKey: ["employee-docs", employeeId, docPage],
-    queryFn: () => hrApi.getDocuments(employeeId, { page: docPage, size: 10 }).then((r) => r.data),
+    queryKey: ["employee-docs", employeeId, docPage, docSize],
+    queryFn: () => hrApi.getDocuments(employeeId, { page: docPage, size: docSize }).then((r) => r.data),
     enabled: activeTab === "documents",
   });
 
@@ -422,9 +424,9 @@ export default function EmployeeProfilePage({
                 isLoading={contratsLoading}
                 pageCount={contratsPageCount}
                 pageIndex={contratPage}
-                pageSize={10}
+                pageSize={contratSize}
                 onPageChange={setContratPage}
-                onPageSizeChange={() => {}}
+                onPageSizeChange={(size) => { setContratSize(size); setContratPage(0); }}
               />
             </div>
           )}
@@ -450,9 +452,9 @@ export default function EmployeeProfilePage({
                 isLoading={docsLoading}
                 pageCount={docsPageCount}
                 pageIndex={docPage}
-                pageSize={10}
+                pageSize={docSize}
                 onPageChange={setDocPage}
-                onPageSizeChange={() => {}}
+                onPageSizeChange={(size) => { setDocSize(size); setDocPage(0); }}
               />
             </div>
           )}

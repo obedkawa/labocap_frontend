@@ -55,7 +55,7 @@ export default function ReportCreatePage() {
   const router = useRouter();
   const { can } = usePermissions();
 
-  // Recherche patient avec debounce
+  // Recherche patient (la requête part dès le 1er caractère, sans debounce)
   const [patientSearch, setPatientSearch] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState<string>("");
 
@@ -96,7 +96,7 @@ export default function ReportCreatePage() {
     queryKey: ["test-orders-patient", selectedPatientId],
     queryFn: () =>
       testOrdersApi
-        .findAll({ size: 100, ...(selectedPatientId ? {} : {}) })
+        .findAll({ size: 100, patientId: selectedPatientId || undefined })
         .then((r) => r.data.content),
     enabled: !!selectedPatientId,
   });
@@ -177,13 +177,14 @@ export default function ReportCreatePage() {
                 control={control}
                 render={({ field }) => (
                   <Select
+                    instanceId="report-patient"
                     inputId="patientId"
                     options={patientOptions}
                     isLoading={patientsLoading}
                     placeholder="Rechercher un patient…"
                     noOptionsMessage={() =>
-                      patientSearch.length < 2
-                        ? "Saisissez au moins 2 caractères"
+                      patientSearch.length === 0
+                        ? "Saisissez un nom pour rechercher"
                         : "Aucun patient trouvé"
                     }
                     value={
@@ -221,6 +222,7 @@ export default function ReportCreatePage() {
                 control={control}
                 render={({ field }) => (
                   <Select
+                    instanceId="report-test-order"
                     inputId="testOrderId"
                     options={testOrderOptions}
                     isLoading={ordersLoading}

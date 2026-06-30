@@ -145,6 +145,7 @@ export default function SettingsPage() {
     mutationFn: (payload: SettingsData) => usersApi.updateSettings(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["settings"] });
+      setLogoFile(null);
       toast.success("Paramètres sauvegardés");
     },
     onError: () => {
@@ -180,6 +181,9 @@ export default function SettingsPage() {
       mecefIfu: values.mecefIfu || undefined,
       mecefNimf: values.mecefNimf || undefined,
       reportFooter: values.reportFooter || undefined,
+      // Le logo n'est envoyé que si un nouveau fichier a été choisi
+      // (logoPreview contient alors sa data URL base64).
+      labLogo: logoFile && logoPreview ? logoPreview : undefined,
     };
     updateMutation.mutate(payload);
   }

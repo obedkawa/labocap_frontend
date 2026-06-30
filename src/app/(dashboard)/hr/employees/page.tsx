@@ -85,7 +85,8 @@ export default function EmployeesPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["employees"],
-    queryFn: () => hrApi.findAll().then((r) => r.data),
+    // size élevé : la recherche filtre côté client sur l'ensemble des employés.
+    queryFn: () => hrApi.findAll({ size: 1000 }).then((r) => r.data),
   });
 
   const employees: Employee[] = data?.content ?? [];

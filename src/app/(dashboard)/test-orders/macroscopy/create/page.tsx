@@ -159,6 +159,7 @@ export default function AddMacroscopyPage() {
                 type OrderOption = (typeof orderOptions)[number];
                 return (
                   <ReactSelect<OrderOption, true>
+                    instanceId="macroscopy-test-orders"
                     isMulti
                     options={orderOptions}
                     value={orderOptions.filter((o) =>

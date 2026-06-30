@@ -391,6 +391,7 @@ function RoleForm({ form, permissionOptions }: RoleFormProps) {
           control={control}
           render={({ field }) => (
             <ReactSelect
+              instanceId="role-permissions"
               isMulti
               options={permissionOptions}
               value={permissionOptions.filter((o) =>

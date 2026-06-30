@@ -25,8 +25,7 @@ const inputClass =
 export default function ReportTemplatesPage() {
   const { can } = usePermissions();
   const qc = useQueryClient();
-  const canManage =
-    can(PERMISSIONS.EDIT_SETTINGS) || can(PERMISSIONS.MANAGE_SETTINGS);
+  const canManage = can(PERMISSIONS.MANAGE_SETTINGS);
 
   // === État
   const [createOpen, setCreateOpen] = useState(false);

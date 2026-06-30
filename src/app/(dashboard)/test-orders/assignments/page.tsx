@@ -51,10 +51,6 @@ export default function AssignmentsPage() {
   const queryClient = useQueryClient();
   const { can } = usePermissions();
 
-  // ---- Pagination
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
-
   // ---- Filtres (3 filtres comme Laravel : Demande d'examen + Docteur + Rechercher)
   const [testOrderFilter, setTestOrderFilter] = useState("");
   const [doctorFilter, setDoctorFilter] = useState("");
@@ -65,11 +61,14 @@ export default function AssignmentsPage() {
 
   // ---- Queries -------------------------------------------------------------
 
+  // On charge l'ensemble du jeu (les filtres et la pagination sont gérés côté
+  // client par le DataTable), car l'API d'affectations n'accepte pas de
+  // paramètres de filtrage docteur/recherche/demande.
   const { data, isLoading } = useQuery<PageResponse<Assignment>>({
-    queryKey: ["assignments", { page, size: pageSize }],
+    queryKey: ["assignments", "all"],
     queryFn: () =>
       assignmentsApi
-        .findAll({ page, size: pageSize })
+        .findAll({ size: 1000 })
         .then((r) => r.data),
     enabled: can(PERMISSIONS.VIEW_TEST_ORDER_ASSIGNMENTS),
   });
@@ -100,9 +99,7 @@ export default function AssignmentsPage() {
     );
   }, [usersData]);
 
-  const pageCount: number = data?.totalPages ?? 0;
-
-  // ---- Filtrage local (note / docteur) -------------------------------------
+  // ---- Filtrage local (note / docteur / demande) ---------------------------
 
   const filteredAssignments = useMemo(() => {
     const list = data?.content ?? [];
@@ -300,10 +297,7 @@ export default function AssignmentsPage() {
             <select
               id="filter-test-order"
               value={testOrderFilter}
-              onChange={(e) => {
-                setTestOrderFilter(e.target.value);
-                setPage(0);
-              }}
+              onChange={(e) => setTestOrderFilter(e.target.value)}
               className={inputClass}
             >
               <option value="">Tous</option>
@@ -328,10 +322,7 @@ export default function AssignmentsPage() {
             <select
               id="filter-doctor"
               value={doctorFilter}
-              onChange={(e) => {
-                setDoctorFilter(e.target.value);
-                setPage(0);
-              }}
+              onChange={(e) => setDoctorFilter(e.target.value)}
               className={inputClass}
             >
               <option value="">Tous les docteurs</option>
@@ -362,19 +353,11 @@ export default function AssignmentsPage() {
           </div>
         </div>
 
-        {/* Tableau */}
+        {/* Tableau (pagination cliente cohérente avec le jeu filtré) */}
         <DataTable<Assignment>
           columns={columns}
           data={filteredAssignments}
           isLoading={isLoading}
-          pageCount={pageCount}
-          pageIndex={page}
-          pageSize={pageSize}
-          onPageChange={setPage}
-          onPageSizeChange={(size) => {
-            setPageSize(size);
-            setPage(0);
-          }}
         />
       </div>
     </div>

@@ -373,6 +373,7 @@ export default function AssignmentDetailsPage() {
                     </span>
                   </label>
                   <Select<OrderOption>
+                    instanceId="assignment-test-order"
                     options={orderOptions}
                     value={selectedOrder}
                     onChange={(v: SingleValue<OrderOption>) =>

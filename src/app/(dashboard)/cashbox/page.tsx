@@ -2,12 +2,18 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { toast } from "sonner";
 import { Search, Banknote, Lock, Unlock, LockOpen } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
+import type { AxiosError } from "axios";
 
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DataTable } from "@/components/common/DataTable";
+import { CrudModal } from "@/components/common/CrudModal";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import {
@@ -15,6 +21,24 @@ import {
   type CashboxResponseDto,
   type CashboxOperationResponseDto,
 } from "@/lib/api/cashbox";
+import { banksApi, type Bank } from "@/lib/api/banks";
+import type { PageResponse, ApiError } from "@/types/api";
+
+// ---------------------------------------------------------------------------
+// Schéma du dépôt bancaire
+// ---------------------------------------------------------------------------
+
+const depositSchema = z.object({
+  bankId: z.string().min(1, "La banque est obligatoire"),
+  amount: z.string().min(1, "Le montant est requis"),
+  date: z.string().min(1, "La date est requise"),
+  description: z.string().optional(),
+});
+
+type DepositFormData = z.infer<typeof depositSchema>;
+
+const depositInputClass =
+  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -81,8 +105,88 @@ export default function CashboxVentePage() {
   const totalElements = operationsData?.totalElements ?? 0;
   const totalPages = operationsData?.totalPages ?? 0;
 
-  // === Status caisse (sessionnée ou non — basé sur statut)
-  const isOpen = venteCashbox?.balance != null; // toujours active si elle existe
+  // === Status caisse — basé sur l'existence d'une session journalière OUVERTE
+  // aujourd'hui pour la caisse de vente.
+  // Convention backend (CashboxDailyServiceImpl) : 1 = Ouverte, 0 = Clôturée.
+  const today = new Date().toISOString().split("T")[0];
+
+  const { data: dailiesData } = useQuery({
+    queryKey: ["cashbox-dailies", "vente-today-status", venteCashbox?.id],
+    queryFn: () => cashboxApi.getDailies({ size: 100 }).then((r) => r.data),
+    enabled: !!venteCashbox?.id,
+  });
+
+  const openSessionToday = (dailiesData?.content ?? []).find(
+    (d) =>
+      d.cashboxId === venteCashbox?.id &&
+      (d.date ? d.date.slice(0, 10) === today : false) &&
+      d.status === 1,
+  );
+
+  const isOpen = !!openSessionToday;
+
+  // === Dépôt bancaire
+  const queryClient = useQueryClient();
+  const [depositOpen, setDepositOpen] = useState(false);
+
+  const depositForm = useForm<DepositFormData>({
+    resolver: zodResolver(depositSchema),
+    defaultValues: {
+      bankId: "",
+      amount: "",
+      date: new Date().toISOString().split("T")[0],
+      description: "",
+    },
+  });
+
+  const { data: banksData } = useQuery<Bank[]>({
+    queryKey: ["banks-all"],
+    queryFn: () =>
+      banksApi
+        .findAll({ size: 1000 })
+        .then((r) => (r.data as PageResponse<Bank>).content),
+    enabled: can(PERMISSIONS.CREATE_BANKS),
+    staleTime: 5 * 60_000,
+  });
+  const banks = banksData ?? [];
+
+  const depositMutation = useMutation({
+    mutationFn: (values: DepositFormData) =>
+      banksApi.createDeposit({
+        bankId: values.bankId,
+        amount: Number(values.amount),
+        date: values.date,
+        description: values.description || undefined,
+      }),
+    onSuccess: () => {
+      // le solde caisse + l'historique des opérations changent
+      queryClient.invalidateQueries({ queryKey: ["cashboxes"] });
+      queryClient.invalidateQueries({ queryKey: ["cashbox-operations"] });
+      toast.success("Dépôt bancaire enregistré");
+      setDepositOpen(false);
+      depositForm.reset({
+        bankId: "",
+        amount: "",
+        date: new Date().toISOString().split("T")[0],
+        description: "",
+      });
+    },
+    onError: (err: AxiosError<ApiError>) => {
+      toast.error(
+        err.response?.data?.message ?? "Erreur lors de l'enregistrement du dépôt",
+      );
+    },
+  });
+
+  function openDeposit() {
+    depositForm.reset({
+      bankId: "",
+      amount: "",
+      date: new Date().toISOString().split("T")[0],
+      description: "",
+    });
+    setDepositOpen(true);
+  }
 
   // ---- Columns
   const columns: ColumnDef<CashboxOperationResponseDto>[] = [
@@ -181,15 +285,18 @@ export default function CashboxVentePage() {
               </span>
             )}
             {/* Dépôt bancaire */}
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 rounded-md bg-gray-600 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700"
-              title="Enregistrer un dépôt bancaire"
-              disabled
-            >
-              <Banknote className="h-4 w-4" />
-              Enregistrer un dépôt bancaire
-            </button>
+            {can(PERMISSIONS.CREATE_BANKS) && (
+              <button
+                type="button"
+                onClick={openDeposit}
+                disabled={!venteCashbox}
+                className="inline-flex items-center gap-2 rounded-md bg-gray-600 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                title="Enregistrer un dépôt bancaire"
+              >
+                <Banknote className="h-4 w-4" />
+                Enregistrer un dépôt bancaire
+              </button>
+            )}
             {/* Ouverture/Fermeture */}
             <Link
               href="/cashbox/sessions"
@@ -257,6 +364,106 @@ export default function CashboxVentePage() {
           onPageSizeChange={(size) => { setPageSize(size); setPage(0); }}
         />
       </div>
+
+      {/* === Modal dépôt bancaire === */}
+      <CrudModal
+        isOpen={depositOpen}
+        onClose={() => {
+          setDepositOpen(false);
+          depositForm.reset();
+        }}
+        title="Enregistrer un dépôt bancaire"
+        size="lg"
+        onSubmit={depositForm.handleSubmit((v) => depositMutation.mutate(v))}
+        submitLabel="Enregistrer"
+        isSubmitting={depositMutation.isPending}
+      >
+        <div className="grid grid-cols-1 gap-4">
+          {venteCashbox && (
+            <p className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-600">
+              Solde caisse de vente :{" "}
+              <span className="font-semibold text-gray-800">
+                {formatFCFA(venteCashbox.balance)}
+              </span>{" "}
+              — le montant déposé sera retiré de la caisse.
+            </p>
+          )}
+
+          {/* Banque */}
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-700">
+              Banque <span className="text-red-500">*</span>
+            </label>
+            <select
+              {...depositForm.register("bankId")}
+              className={depositInputClass}
+            >
+              <option value="">— Sélectionner la banque —</option>
+              {banks.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                  {b.accountNumber ? ` (${b.accountNumber})` : ""}
+                </option>
+              ))}
+            </select>
+            {depositForm.formState.errors.bankId && (
+              <p className="text-xs text-red-500">
+                {depositForm.formState.errors.bankId.message}
+              </p>
+            )}
+          </div>
+
+          {/* Montant */}
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-700">
+              Montant (FCFA) <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="number"
+              min={0}
+              step="any"
+              {...depositForm.register("amount")}
+              placeholder="0"
+              className={depositInputClass}
+            />
+            {depositForm.formState.errors.amount && (
+              <p className="text-xs text-red-500">
+                {depositForm.formState.errors.amount.message}
+              </p>
+            )}
+          </div>
+
+          {/* Date */}
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-700">
+              Date <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="date"
+              {...depositForm.register("date")}
+              className={depositInputClass}
+            />
+            {depositForm.formState.errors.date && (
+              <p className="text-xs text-red-500">
+                {depositForm.formState.errors.date.message}
+              </p>
+            )}
+          </div>
+
+          {/* Description */}
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-700">
+              Description
+            </label>
+            <textarea
+              rows={3}
+              {...depositForm.register("description")}
+              placeholder="Référence / commentaire (optionnel)"
+              className={`${depositInputClass} resize-none`}
+            />
+          </div>
+        </div>
+      </CrudModal>
     </div>
   );
 }

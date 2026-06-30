@@ -304,7 +304,7 @@ export default function HospitalsPage() {
             />
           </div>
           <div className="text-sm text-gray-500">
-            {totalElements} hôpital{totalElements > 1 ? "aux" : ""} au total
+            {totalElements} {totalElements > 1 ? "hôpitaux" : "hôpital"} au total
             {search && ` · ${hospitals.length} affiché${hospitals.length > 1 ? "s" : ""}`}
           </div>
         </div>

@@ -180,8 +180,13 @@ export default function TestOrderCreatePage() {
     (t) => t.id === selectedTypeOrderId
   );
   const typeOrderTitle = selectedTypeOrder?.title ?? "";
-  const isImmunoExterne = typeOrderTitle.includes("Immuno Externe");
-  const isImmunoInterne = typeOrderTitle.includes("Immuno Interne");
+  // Détection robuste : insensible à la casse et aux accents
+  const normalizedTypeTitle = typeOrderTitle
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  const isImmunoExterne = normalizedTypeTitle.includes("immuno externe");
+  const isImmunoInterne = normalizedTypeTitle.includes("immuno interne");
 
   // Options React Select
   const patientOptions =
@@ -333,6 +338,7 @@ export default function TestOrderCreatePage() {
                 control={control}
                 render={({ field }) => (
                   <Select
+                    instanceId="order-type"
                     inputId="typeOrderId"
                     options={typeOrderOptions}
                     placeholder="Sélectionner un type..."
@@ -363,6 +369,7 @@ export default function TestOrderCreatePage() {
                 control={control}
                 render={({ field }) => (
                   <Select
+                    instanceId="order-contract"
                     inputId="contratId"
                     options={contractOptions}
                     placeholder="Sélectionner un contrat..."
@@ -402,6 +409,7 @@ export default function TestOrderCreatePage() {
                 control={control}
                 render={({ field }) => (
                   <Select
+                    instanceId="order-patient"
                     inputId="patientId"
                     options={patientOptions}
                     placeholder="Sélectionner un patient..."
@@ -433,6 +441,7 @@ export default function TestOrderCreatePage() {
                 control={control}
                 render={({ field }) => (
                   <Select
+                    instanceId="order-doctor"
                     inputId="doctorId"
                     options={doctorOptions}
                     placeholder="Sélectionner un médecin..."
@@ -463,6 +472,7 @@ export default function TestOrderCreatePage() {
                 control={control}
                 render={({ field }) => (
                   <Select
+                    instanceId="order-hospital"
                     inputId="hospitalId"
                     options={hospitalOptions}
                     placeholder="Sélectionner un hôpital..."
@@ -567,6 +577,7 @@ export default function TestOrderCreatePage() {
                   control={control}
                   render={({ field }) => (
                     <Select
+                      instanceId="order-examen-reference"
                       inputId="examenReferenceOrderId"
                       options={testOrderReferenceOptions}
                       placeholder="Sélectionner une demande de référence..."

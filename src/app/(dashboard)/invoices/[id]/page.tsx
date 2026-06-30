@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowLeft, RefreshCw, CreditCard, XCircle } from "lucide-react";
+import { ArrowLeft, RefreshCw, CreditCard, XCircle, FileDown } from "lucide-react";
 import { toast } from "sonner";
 import type { AxiosError } from "axios";
 
@@ -174,15 +174,38 @@ export default function InvoiceDetailPage({
 
   return (
     <div className="space-y-6">
-      {/* Bouton retour */}
-      <button
-        type="button"
-        onClick={() => router.back()}
-        className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Retour à la liste
-      </button>
+      {/* Barre haut : retour + PDF */}
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Retour à la liste
+        </button>
+
+        {invoice && (
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const res = await invoicesApi.downloadPdf(id);
+                const blob = new Blob([res.data as BlobPart], { type: "application/pdf" });
+                const url = URL.createObjectURL(blob);
+                window.open(url, "_blank");
+                setTimeout(() => URL.revokeObjectURL(url), 10000);
+              } catch {
+                toast.error("Erreur lors de la génération du PDF");
+              }
+            }}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+          >
+            <FileDown className="h-4 w-4" />
+            Imprimer / PDF
+          </button>
+        )}
+      </div>
 
       {isLoading ? (
         <div className="space-y-6">
@@ -305,8 +328,9 @@ export default function InvoiceDetailPage({
                   </button>
                 )}
 
-                {/* Confirm MECeF */}
-                {showMecefConfirmForm ? (
+                {/* Confirm MECeF — uniquement si pas encore synchronisé ET facture payée */}
+                {!invoice.codeMecef && invoice.paid && (
+                  showMecefConfirmForm ? (
                   <div className="space-y-2 rounded-lg border border-blue-200 bg-blue-50 p-3">
                     <p className="text-xs font-medium text-blue-800">UID MECeF (confirmation)</p>
                     <input
@@ -348,6 +372,7 @@ export default function InvoiceDetailPage({
                     <RefreshCw className="h-4 w-4" />
                     Confirmer MECeF
                   </button>
+                  )
                 )}
 
                 {/* Cancel MECeF */}
