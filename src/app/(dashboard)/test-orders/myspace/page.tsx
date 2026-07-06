@@ -3,7 +3,17 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { Eye, FileText, Check, Trash2, Printer } from "lucide-react";
+import {
+  Eye,
+  FileText,
+  Check,
+  Trash2,
+  Printer,
+  RefreshCw,
+  Minus,
+  Plus,
+  X,
+} from "lucide-react";
 import type { AxiosError } from "axios";
 import type { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
@@ -11,6 +21,7 @@ import { toast } from "sonner";
 import { DataTable } from "@/components/common/DataTable";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 import { StatCard } from "@/components/ui/StatCard";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
@@ -160,7 +171,7 @@ function ActionButtons({
 function ReportBadge({ order }: { order: TestOrder }) {
   if (!order.reportId) {
     return (
-      <span className="inline-flex items-center rounded-full bg-gray-300 px-2 py-0.5 text-xs font-medium text-gray-700">
+      <span className="inline-flex items-center whitespace-nowrap rounded-full bg-gray-300 px-2 py-0.5 text-xs font-medium text-gray-700">
         Non enregistré
       </span>
     );
@@ -169,12 +180,82 @@ function ReportBadge({ order }: { order: TestOrder }) {
     order.reportStatus === "VALIDATED" || order.reportStatus === "DELIVERED";
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium text-white ${
+      className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium text-white ${
         isValidated ? "bg-blue-600" : "bg-gray-500"
       }`}
     >
       {isValidated ? "Valider" : "En attente"}
     </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Carte avec widgets (réplique Laravel/Hyper : réactualiser / réduire / fermer)
+// ---------------------------------------------------------------------------
+
+function WidgetCard({
+  title,
+  onReload,
+  reloading = false,
+  children,
+}: {
+  title: string;
+  onReload: () => void;
+  reloading?: boolean;
+  children: React.ReactNode;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+  const [visible, setVisible] = useState(true);
+
+  // « Fermer » masque la carte (comme le remove de Hyper) ; elle réapparaît au
+  // rechargement de la page.
+  if (!visible) return null;
+
+  const btnClass =
+    "rounded p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600";
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <h2 className="text-base font-semibold text-gray-800">{title}</h2>
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={onReload}
+            title="Réactualiser"
+            aria-label="Réactualiser"
+            className={btnClass}
+          >
+            <RefreshCw className={`h-4 w-4 ${reloading ? "animate-spin" : ""}`} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setCollapsed((c) => !c)}
+            title={collapsed ? "Agrandir" : "Réduire"}
+            aria-label={collapsed ? "Agrandir" : "Réduire"}
+            aria-expanded={!collapsed}
+            className={btnClass}
+          >
+            {collapsed ? (
+              <Plus className="h-4 w-4" />
+            ) : (
+              <Minus className="h-4 w-4" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setVisible(false)}
+            title="Fermer"
+            aria-label="Fermer"
+            className={btnClass}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {!collapsed && children}
+    </div>
   );
 }
 
@@ -218,8 +299,12 @@ export default function MySpacePage() {
   });
   const typeOrders: TypeOrder[] = typeOrdersData ?? [];
 
-  const { data: pendingData, isLoading: pendingLoading } =
-    useQuery<PageResponse<TestOrder>>({
+  const {
+    data: pendingData,
+    isLoading: pendingLoading,
+    isFetching: pendingFetching,
+    refetch: refetchPending,
+  } = useQuery<PageResponse<TestOrder>>({
       queryKey: [
         "myspace-pending",
         {
@@ -243,8 +328,12 @@ export default function MySpacePage() {
 
   // "terminées" = rapport terminé. status "VALIDATED" côté API Mon espace renvoie
   // les rapports validés ET livrés ; "DELIVERED" restreint aux livrés.
-  const { data: doneData, isLoading: doneLoading } =
-    useQuery<PageResponse<TestOrder>>({
+  const {
+    data: doneData,
+    isLoading: doneLoading,
+    isFetching: doneFetching,
+    refetch: refetchDone,
+  } = useQuery<PageResponse<TestOrder>>({
       queryKey: [
         "myspace-done",
         {
@@ -310,7 +399,9 @@ export default function MySpacePage() {
       accessorKey: "code",
       cell: ({ row }) =>
         row.original.code ?? (
-          <span className="text-gray-400 italic text-xs">En attente</span>
+          <span className="whitespace-nowrap text-gray-400 italic text-xs">
+            En attente
+          </span>
         ),
     },
     {
@@ -412,19 +503,18 @@ export default function MySpacePage() {
       {/* =================================================================
           DataTable 1 — Demandes en attente
       ================================================================= */}
-      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-base font-semibold text-gray-800 mb-4">
-          Demandes en attente
-        </h2>
-
+      <WidgetCard
+        title="Liste des demandes en attente"
+        onReload={() => refetchPending()}
+        reloading={pendingFetching}
+      >
         <div className="flex flex-wrap gap-3 mb-4">
-          <select
+          <NativeSelect
             value={pendingTypeOrderId}
             onChange={(e) => {
               setPendingTypeOrderId(e.target.value);
               setPendingPage(0);
             }}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
             <option value="">Tous les types</option>
             {typeOrders.map((t) => (
@@ -432,20 +522,19 @@ export default function MySpacePage() {
                 {t.title}
               </option>
             ))}
-          </select>
+          </NativeSelect>
 
-          <select
+          <NativeSelect
             value={pendingPriority}
             onChange={(e) => {
               setPendingPriority(e.target.value);
               setPendingPage(0);
             }}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
             <option value="">Toutes priorités</option>
             <option value="urgent">Urgent</option>
             <option value="late">Retard</option>
-          </select>
+          </NativeSelect>
         </div>
 
         <DataTable<TestOrder>
@@ -462,65 +551,84 @@ export default function MySpacePage() {
           }}
           rowClassName={rowClass}
         />
-      </div>
+      </WidgetCard>
 
       {/* =================================================================
           DataTable 2 — Demandes terminées
       ================================================================= */}
-      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-base font-semibold text-gray-800 mb-4">
-          Demandes terminées
-        </h2>
+      <WidgetCard
+        title="Liste des demandes terminées"
+        onReload={() => refetchDone()}
+        reloading={doneFetching}
+      >
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Type d&apos;examen
+            </label>
+            <NativeSelect
+              value={doneTypeOrderId}
+              onChange={(e) => {
+                setDoneTypeOrderId(e.target.value);
+                setDonePage(0);
+              }}
+            >
+              <option value="">Tous les types</option>
+              {typeOrders.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.title}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
 
-        <div className="flex flex-wrap gap-3 mb-4">
-          <select
-            value={doneTypeOrderId}
-            onChange={(e) => {
-              setDoneTypeOrderId(e.target.value);
-              setDonePage(0);
-            }}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="">Tous les types</option>
-            {typeOrders.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.title}
-              </option>
-            ))}
-          </select>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Statut
+            </label>
+            <NativeSelect
+              value={doneStatus}
+              onChange={(e) => {
+                setDoneStatus(e.target.value);
+                setDonePage(0);
+              }}
+            >
+              <option value="">Toutes les terminées</option>
+              <option value="DELIVERED">Livrées uniquement</option>
+            </NativeSelect>
+          </div>
 
-          <select
-            value={doneStatus}
-            onChange={(e) => {
-              setDoneStatus(e.target.value);
-              setDonePage(0);
-            }}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="">Toutes les terminées</option>
-            <option value="DELIVERED">Livrées uniquement</option>
-          </select>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Date de début
+            </label>
+            <input
+              type="date"
+              value={doneFrom}
+              onChange={(e) => {
+                setDoneFrom(e.target.value);
+                setDonePage(0);
+              }}
+              aria-label="Date de début"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
 
-          <input
-            type="date"
-            value={doneFrom}
-            onChange={(e) => {
-              setDoneFrom(e.target.value);
-              setDonePage(0);
-            }}
-            aria-label="Date début"
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
-          <input
-            type="date"
-            value={doneTo}
-            onChange={(e) => {
-              setDoneTo(e.target.value);
-              setDonePage(0);
-            }}
-            aria-label="Date fin"
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Date de fin
+            </label>
+            <input
+              type="date"
+              value={doneTo}
+              onChange={(e) => {
+                setDoneTo(e.target.value);
+                setDonePage(0);
+              }}
+              aria-label="Date de fin"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
         </div>
 
         <DataTable<TestOrder>
@@ -537,7 +645,7 @@ export default function MySpacePage() {
           }}
           rowClassName={rowClass}
         />
-      </div>
+      </WidgetCard>
 
       <ConfirmModal
         isOpen={deleteTarget !== null}

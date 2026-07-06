@@ -11,6 +11,7 @@ import Select, { type SingleValue } from "react-select";
 import type { AxiosError } from "axios";
 
 import { PageHeader } from "@/components/ui/PageHeader";
+import { RHFSelect } from "@/components/ui/RHFSelect";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
@@ -28,7 +29,7 @@ import type { ApiError } from "@/types/api";
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 function isDoctorRole(name?: string): boolean {
   if (!name) return false;
@@ -70,9 +71,9 @@ export default function AssignmentDetailsPage() {
 
   const {
     register,
+    control,
     handleSubmit,
     reset,
-    formState: { errors },
   } = useForm<UpdateForm>({
     defaultValues: { userId: "", date: "", note: "" },
   });
@@ -291,33 +292,19 @@ export default function AssignmentDetailsPage() {
             Informations
           </h2>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div>
-              <label
-                htmlFor="userId"
-                className="mb-1 block text-sm font-medium text-gray-700"
-              >
-                Docteur <span className="text-red-500">*</span>
-              </label>
-              <select
-                id="userId"
-                {...register("userId", { required: true })}
-                disabled={!canManage}
-                className={inputClass}
-              >
-                <option value="">Sélectionner le docteur</option>
-                {doctors.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.firstname} {d.lastname}
-                  </option>
-                ))}
-              </select>
-              {errors.userId && (
-                <p className="mt-1 text-xs text-red-600">
-                  Le docteur est requis
-                </p>
-              )}
-            </div>
+          <div className="grid grid-cols-1 gap-4">
+            <RHFSelect
+              control={control}
+              name="userId"
+              label="Docteur"
+              required
+              options={doctors.map((d) => ({
+                value: d.id,
+                label: `${d.firstname} ${d.lastname}`,
+              }))}
+              placeholder="Sélectionner le docteur"
+              isDisabled={!canManage}
+            />
 
             <div>
               <label

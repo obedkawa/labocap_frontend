@@ -8,15 +8,23 @@ interface CrudModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
-  size?: "md" | "lg" | "xl";
+  size?: "sm" | "md" | "lg" | "xl";
   children: React.ReactNode;
   footer?: React.ReactNode;
   onSubmit?: () => void;
   submitLabel?: string;
   isSubmitting?: boolean;
+  /**
+   * Fermer la modale au clic sur l'arrière-plan (défaut : false).
+   * Par choix produit, un formulaire ne se ferme que via « Annuler » ou la croix.
+   */
+  closeOnOverlayClick?: boolean;
+  /** Fermer la modale avec la touche Échap (défaut : false). */
+  closeOnEscape?: boolean;
 }
 
 const sizeClasses: Record<NonNullable<CrudModalProps["size"]>, string> = {
+  sm: "max-w-sm",
   md: "max-w-md",
   lg: "max-w-2xl",
   xl: "max-w-4xl",
@@ -32,6 +40,8 @@ export function CrudModal({
   onSubmit,
   submitLabel = "Enregistrer",
   isSubmitting = false,
+  closeOnOverlayClick = false,
+  closeOnEscape = false,
 }: CrudModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
@@ -50,18 +60,18 @@ export function CrudModal({
   // Fermer avec Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen) {
+      if (e.key === "Escape" && isOpen && closeOnEscape) {
         onClose();
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, closeOnEscape]);
 
   if (!isOpen) return null;
 
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === overlayRef.current) {
+    if (e.target === overlayRef.current && closeOnOverlayClick) {
       onClose();
     }
   };

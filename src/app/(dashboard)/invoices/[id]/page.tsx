@@ -10,6 +10,7 @@ import { ArrowLeft, RefreshCw, CreditCard, XCircle, FileDown } from "lucide-reac
 import { toast } from "sonner";
 import type { AxiosError } from "axios";
 
+import { RHFSelect } from "@/components/ui/RHFSelect";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { formatDate } from "@/lib/utils";
@@ -99,7 +100,7 @@ export default function InvoiceDetailPage({
 
   // --- Formulaire "Marquer payé"
   const {
-    register,
+    control,
     handleSubmit,
     reset,
     formState: { errors },
@@ -431,26 +432,22 @@ export default function InvoiceDetailPage({
                   Méthode de paiement
                 </h2>
                 <form onSubmit={handleSubmit(onSubmitMarkPaid)} className="space-y-4">
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-gray-700">
-                      Méthode <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      {...register("payment")}
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    >
-                      <option value="ESPECES">Espèces</option>
-                      <option value="MOBILEMONEY">Mobile Money</option>
-                      <option value="CARTEBANCAIRE">Carte bancaire</option>
-                      <option value="CHEQUES">Chèque</option>
-                      <option value="VIREMENT">Virement</option>
-                      <option value="CREDIT">Crédit</option>
-                      <option value="AUTRE">Autre</option>
-                    </select>
-                    {errors.payment && (
-                      <p className="mt-1 text-xs text-red-600">{errors.payment.message}</p>
-                    )}
-                  </div>
+                  <RHFSelect
+                    control={control}
+                    name="payment"
+                    label="Méthode"
+                    required
+                    options={[
+                      { value: "ESPECES", label: "Espèces" },
+                      { value: "MOBILEMONEY", label: "Mobile Money" },
+                      { value: "CARTEBANCAIRE", label: "Carte bancaire" },
+                      { value: "CHEQUES", label: "Chèque" },
+                      { value: "VIREMENT", label: "Virement" },
+                      { value: "CREDIT", label: "Crédit" },
+                      { value: "AUTRE", label: "Autre" },
+                    ]}
+                    error={errors.payment?.message}
+                  />
 
                   <button
                     type="submit"

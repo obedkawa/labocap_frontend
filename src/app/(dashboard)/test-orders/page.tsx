@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import Select from "react-select";
 import { Eye, Pencil, FileText, Trash2, Plus, Printer, Check, FileDown } from "lucide-react";
 import type { AxiosError } from "axios";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -12,9 +13,11 @@ import { toast } from "sonner";
 import { DataTable } from "@/components/common/DataTable";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { formatCFA, formatDate } from "@/lib/utils";
+import { buildSelectStyles, SELECT_MENU_CLASSNAMES } from "@/components/ui/selectStyles";
 import { testOrdersApi, type TestOrder } from "@/lib/api/testOrders";
 import { reportsApi } from "@/lib/api/reports";
 import { typeOrdersApi, type TypeOrder } from "@/lib/api/examens";
@@ -42,6 +45,8 @@ interface DoctorOption {
 // Composant : dropdown "Affecter à" inline dans le tableau
 // ---------------------------------------------------------------------------
 
+type DoctorSelectOption = { value: string; label: string };
+
 function AttribuateSelect({
   order,
   doctors,
@@ -62,26 +67,36 @@ function AttribuateSelect({
     onError: () => toast.error("Erreur lors de l'affectation"),
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const doctorId = e.target.value;
-    setValue(doctorId);
-    if (doctorId) mutation.mutate(doctorId);
-  };
+  // Options react-select : dropdown avec champ de recherche intégré.
+  const options: DoctorSelectOption[] = doctors.map((d) => ({
+    value: d.id,
+    label: d.name,
+  }));
+  const selected = options.find((o) => o.value === value) ?? null;
 
   return (
-    <select
-      value={value}
-      onChange={handleChange}
-      disabled={mutation.isPending}
-      className="rounded border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 min-w-[140px]"
-    >
-      <option value="">Sélectionner un docteur</option>
-      {doctors.map((d) => (
-        <option key={d.id} value={d.id}>
-          {d.name}
-        </option>
-      ))}
-    </select>
+    <div className="min-w-[180px]">
+      <Select<DoctorSelectOption, false>
+        options={options}
+        value={selected}
+        onChange={(opt) => {
+          const doctorId = opt?.value ?? "";
+          setValue(doctorId);
+          if (doctorId) mutation.mutate(doctorId);
+        }}
+        isDisabled={mutation.isPending}
+        isSearchable
+        placeholder="Sélectionner un docteur"
+        noOptionsMessage={() => "Aucun docteur"}
+        classNamePrefix="react-select"
+        classNames={SELECT_MENU_CLASSNAMES}
+        styles={buildSelectStyles(false)}
+        menuPortalTarget={
+          typeof document !== "undefined" ? document.body : undefined
+        }
+        menuPosition="fixed"
+      />
+    </div>
   );
 }
 
@@ -384,7 +399,9 @@ export default function TestOrdersPage() {
       accessorKey: "code",
       cell: ({ row }) =>
         row.original.code ?? (
-          <span className="text-gray-400 italic text-xs">En attente</span>
+          <span className="whitespace-nowrap text-gray-400 italic text-xs">
+            En attente
+          </span>
         ),
     },
     // 4. Affecter à — dropdown docteur
@@ -440,7 +457,7 @@ export default function TestOrdersPage() {
           status === "VALIDATED" || status === "DELIVERED";
         return (
           <span
-            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium text-white ${
+            className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium text-white ${
               isValidated ? "bg-blue-600" : "bg-gray-500"
             }`}
           >
@@ -491,57 +508,53 @@ export default function TestOrdersPage() {
         <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Contrat</label>
-            <select
+            <NativeSelect
               value={contratFilter}
               onChange={(e) => { setContratFilter(e.target.value); setPage(0); }}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">Tous les contrats</option>
               {contracts.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Status</label>
-            <select
+            <NativeSelect
               value={statusFilter}
               onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">Tous</option>
               <option value="VALIDATED">Valider</option>
               <option value="PENDING">En attente</option>
               <option value="DELIVERED">Livrer</option>
               <option value="CANCELLED">Non Livrer</option>
-            </select>
+            </NativeSelect>
           </div>
 
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Type d&apos;examen</label>
-            <select
+            <NativeSelect
               value={typeFilter}
               onChange={(e) => { setTypeFilter(e.target.value); setPage(0); }}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">Tous</option>
               {typeOrders.map((t) => (
                 <option key={t.id} value={t.id}>{t.title}</option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Urgent</label>
-            <select
+            <NativeSelect
               value={urgentFilter}
               onChange={(e) => { setUrgentFilter(e.target.value); setPage(0); }}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">Tous</option>
               <option value="1">Urgent</option>
-            </select>
+            </NativeSelect>
           </div>
         </div>
 
@@ -549,16 +562,15 @@ export default function TestOrdersPage() {
         <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Docteur</label>
-            <select
+            <NativeSelect
               value={docteurFilter}
               onChange={(e) => { setDocteurFilter(e.target.value); setPage(0); }}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">Tous</option>
               {doctors.map((d) => (
                 <option key={d.id} value={d.id}>{d.name}</option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           <div>
@@ -568,7 +580,7 @@ export default function TestOrdersPage() {
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(0); }}
               placeholder="Code, patient..."
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
@@ -578,7 +590,7 @@ export default function TestOrdersPage() {
               type="date"
               value={dateBegin}
               onChange={(e) => { setDateBegin(e.target.value); setPage(0); }}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
@@ -588,7 +600,7 @@ export default function TestOrdersPage() {
               type="date"
               value={dateEnd}
               onChange={(e) => { setDateEnd(e.target.value); setPage(0); }}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
         </div>

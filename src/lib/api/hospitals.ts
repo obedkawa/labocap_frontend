@@ -14,7 +14,7 @@ export interface Hospital {
 
 export interface HospitalRequest {
   name: string;
-  telephone: string;
+  telephone?: string;
   email?: string;
   adresse?: string;
   commission?: number;

@@ -13,6 +13,7 @@ import type { AxiosError } from "axios";
 import { DataTable } from "@/components/common/DataTable";
 import { CrudModal } from "@/components/common/CrudModal";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { RHFSelect } from "@/components/ui/RHFSelect";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import {
@@ -37,7 +38,7 @@ const movementSchema = z.object({
 type MovementFormData = z.infer<typeof movementSchema>;
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 // ---------------------------------------------------------------------------
 // Helpers d'affichage
@@ -234,23 +235,18 @@ export default function MovementsPage() {
         <div className="grid grid-cols-1 gap-4">
           {/* Article */}
           <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-gray-700">
-              Article <span className="text-red-500">*</span>
-            </label>
-            <select {...form.register("articleId")} className={inputClass}>
-              <option value="">— Sélectionner l&apos;article —</option>
-              {articles.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                  {a.code ? ` (${a.code})` : ""}
-                </option>
-              ))}
-            </select>
-            {form.formState.errors.articleId && (
-              <p className="text-xs text-red-500">
-                {form.formState.errors.articleId.message}
-              </p>
-            )}
+            <RHFSelect
+              control={form.control}
+              name="articleId"
+              label="Article"
+              required
+              options={articles.map((a) => ({
+                value: a.id,
+                label: `${a.name}${a.code ? ` (${a.code})` : ""}`,
+              }))}
+              placeholder="Rechercher l'article..."
+              error={form.formState.errors.articleId?.message}
+            />
             {selectedArticle && (
               <p className="text-xs text-gray-500">
                 Stock courant :{" "}

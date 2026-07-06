@@ -20,6 +20,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/common/DataTable";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { formatDate, cn } from "@/lib/utils";
@@ -481,18 +482,17 @@ export default function InvoicesPage() {
               <label className="mb-1 block text-xs font-medium text-gray-600">
                 Statut
               </label>
-              <select
+              <NativeSelect
                 value={paidFilter}
                 onChange={(e) => {
                   setPaidFilter(e.target.value);
                   setPage(0);
                 }}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
                 <option value="">Tous</option>
                 <option value="false">En attente</option>
                 <option value="true">Payé</option>
-              </select>
+              </NativeSelect>
             </div>
 
             {/* Type de facture (vente/avoir) */}
@@ -500,18 +500,17 @@ export default function InvoicesPage() {
               <label className="mb-1 block text-xs font-medium text-gray-600">
                 Type de facture
               </label>
-              <select
+              <NativeSelect
                 value={statusInvoiceFilter}
                 onChange={(e) => {
                   setStatusInvoiceFilter(e.target.value);
                   setPage(0);
                 }}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
                 <option value="">Tous</option>
                 <option value="0">Facture de vente</option>
                 <option value="1">Facture d&apos;avoir</option>
-              </select>
+              </NativeSelect>
             </div>
 
             {/* Date début */}
@@ -526,7 +525,7 @@ export default function InvoicesPage() {
                   setStartDate(e.target.value);
                   setPage(0);
                 }}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
 
@@ -542,7 +541,7 @@ export default function InvoicesPage() {
                   setEndDate(e.target.value);
                   setPage(0);
                 }}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
           </div>
@@ -586,34 +585,32 @@ export default function InvoicesPage() {
               <label className="mb-1 block text-xs font-medium text-gray-600">
                 Année
               </label>
-              <select
+              <NativeSelect
                 value={reportYear}
                 onChange={(e) => setReportYear(Number(e.target.value))}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
                 {years.map((y) => (
                   <option key={y} value={y}>
                     {y}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
 
             <div>
               <label className="mb-1 block text-xs font-medium text-gray-600">
                 Mois
               </label>
-              <select
+              <NativeSelect
                 value={reportMonth}
                 onChange={(e) => setReportMonth(Number(e.target.value))}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
                 {MONTHS_FR.map((m) => (
                   <option key={m.value} value={m.value}>
                     {m.label}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
 
             <div>

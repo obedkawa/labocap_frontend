@@ -8,6 +8,7 @@ import { ArrowLeft } from "lucide-react";
 import type { AxiosError } from "axios";
 
 import { PageHeader } from "@/components/ui/PageHeader";
+import { SelectField } from "@/components/ui/SelectField";
 import { docsApi, documentationCategoriesApi, formatFileSize } from "@/lib/api/docs";
 import type { ApiError } from "@/types/api";
 
@@ -57,7 +58,7 @@ export default function DocCreatePage() {
   };
 
   const inputClass =
-    "rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+    "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
   return (
     <div className="space-y-6">
@@ -97,21 +98,17 @@ export default function DocCreatePage() {
           </div>
 
           {/* Catégorie */}
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-gray-700">Catégorie</label>
-            <select
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-              className={inputClass}
-            >
-              <option value="">— Aucune catégorie —</option>
-              {(categories ?? []).map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <SelectField
+            label="Catégorie"
+            placeholder="Rechercher une catégorie..."
+            options={(categories ?? []).map((cat) => ({
+              value: cat.id,
+              label: cat.name,
+            }))}
+            value={categoryId || null}
+            onChange={(v) => setCategoryId(v ?? "")}
+            isClearable
+          />
 
           {/* Fichier */}
           <div className="flex flex-col gap-1">

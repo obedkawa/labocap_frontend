@@ -21,6 +21,7 @@ import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { CrudModal } from "@/components/common/CrudModal";
 import { PermissionGate } from "@/components/common/PermissionGate";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { SelectField } from "@/components/ui/SelectField";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { formatDate } from "@/lib/utils";
@@ -347,23 +348,14 @@ export default function DocsPage() {
             Le document sera accessible à tous les utilisateurs du rôle sélectionné,
             qui recevront une notification par email.
           </p>
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-gray-700">
-              Rôle <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={shareRoleId}
-              onChange={(e) => setShareRoleId(e.target.value)}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="">— Sélectionner un rôle —</option>
-              {roles.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <SelectField
+            label="Rôle"
+            required
+            placeholder="Rechercher un rôle..."
+            options={roles.map((r) => ({ value: r.id, label: r.name }))}
+            value={shareRoleId || null}
+            onChange={(v) => setShareRoleId(v ?? "")}
+          />
         </div>
       </CrudModal>
 
@@ -393,7 +385,7 @@ export default function DocsPage() {
               value={nvTitle}
               onChange={(e) => setNvTitle(e.target.value)}
               placeholder="Titre de cette version"
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -405,7 +397,7 @@ export default function DocsPage() {
               type="file"
               accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.docx,.xlsx,.doc,.xls"
               onChange={(e) => setNvFile(e.target.files?.[0] ?? null)}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100"
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100"
             />
             {nvFile && (
               <p className="text-xs text-gray-500">

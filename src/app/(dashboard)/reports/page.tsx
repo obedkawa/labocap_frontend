@@ -8,6 +8,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/common/DataTable";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { formatDate } from "@/lib/utils";
@@ -54,7 +55,7 @@ const YEAR_OPTIONS: number[] = Array.from(
 
 // Classe partagée pour les inputs/selects (style Laravel form-control adapté Tailwind)
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 const labelClass = "mb-1 block text-sm font-medium text-gray-700";
 
@@ -311,21 +312,20 @@ export default function ReportsPage() {
             <label className={labelClass} htmlFor="filter-status">
               Statut
             </label>
-            <select
+            <NativeSelect
               id="filter-status"
               value={statusFilter}
               onChange={(e) => {
                 setStatusFilter(e.target.value);
                 setPage(0);
               }}
-              className={inputClass}
             >
               {STATUS_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           <div>
@@ -399,11 +399,10 @@ export default function ReportsPage() {
             <label className={labelClass} htmlFor="perf-year">
               Année
             </label>
-            <select
+            <NativeSelect
               id="perf-year"
               value={yearDraft}
               onChange={(e) => setYearDraft(e.target.value)}
-              className={inputClass}
             >
               <option value="">Tous</option>
               {YEAR_OPTIONS.map((y) => (
@@ -411,18 +410,17 @@ export default function ReportsPage() {
                   {y}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           <div>
             <label className={labelClass} htmlFor="perf-month">
               Mois
             </label>
-            <select
+            <NativeSelect
               id="perf-month"
               value={monthDraft}
               onChange={(e) => setMonthDraft(e.target.value)}
-              className={inputClass}
             >
               <option value="">Tous</option>
               {MONTHS.map((m) => (
@@ -430,18 +428,17 @@ export default function ReportsPage() {
                   {m.label}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           <div>
             <label className={labelClass} htmlFor="perf-doctor">
               Docteur
             </label>
-            <select
+            <NativeSelect
               id="perf-doctor"
               value={doctorDraft}
               onChange={(e) => setDoctorDraft(e.target.value)}
-              className={inputClass}
               disabled={doctorsQuery.isLoading}
             >
               <option value="">Tous</option>
@@ -450,7 +447,7 @@ export default function ReportsPage() {
                   {d.lastname} {d.firstname}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           <div className="flex items-end">

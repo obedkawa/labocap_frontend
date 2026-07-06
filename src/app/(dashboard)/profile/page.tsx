@@ -171,7 +171,7 @@ export default function ProfilePage() {
             </h2>
 
             <form onSubmit={handleSubmitProfile(onSubmitProfile)} noValidate>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4">
                 {/* Prénom */}
                 <FormField
                   label="Prénom"

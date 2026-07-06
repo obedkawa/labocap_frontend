@@ -48,7 +48,7 @@ type ReportEditFormValues = z.infer<typeof reportEditSchema>;
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
 
 const textareaClass =
   "w-full min-h-[200px] p-3 border border-gray-300 rounded font-mono text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 resize-y";
@@ -582,7 +582,7 @@ export default function ReportDetailPage({
           <h2 className="mb-4 text-base font-semibold text-gray-800">
             Signataires &amp; Livraison
           </h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4">
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-700">
                 Signataire 1

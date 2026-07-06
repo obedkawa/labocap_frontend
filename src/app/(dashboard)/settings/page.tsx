@@ -1,671 +1,1209 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { toast } from "sonner";
-import { Building2, Receipt, FileText, Upload, X } from "lucide-react";
+import {
+  Building2,
+  Mail,
+  Smartphone,
+  FileText,
+  Landmark,
+  CreditCard,
+  Receipt,
+  Upload,
+  X,
+  Plus,
+  Pencil,
+  Trash2,
+  Image as ImageIcon,
+} from "lucide-react";
 
 import { PageHeader } from "@/components/ui/PageHeader";
-import { FormField } from "@/components/ui/FormField";
+import { NativeSelect } from "@/components/ui/NativeSelect";
+import { CrudModal } from "@/components/common/CrudModal";
+import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { PermissionGate } from "@/components/common/PermissionGate";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
-import { usersApi, SettingsData } from "@/lib/api/users";
-import { Sliders } from "lucide-react";
+import {
+  settingAppsApi,
+  settingsStoreApi,
+  SETTINGS_STORE_KEYS,
+} from "@/lib/api/appSettings";
+import { banksApi, type Bank, type BankRequest } from "@/lib/api/banks";
+import {
+  titleReportsApi,
+  type TitleReport,
+  type TitleReportRequest,
+} from "@/lib/api/reportSettings";
+import {
+  settingInvoicesApi,
+  type SettingInvoice,
+} from "@/lib/api/settingInvoices";
 
 // ---------------------------------------------------------------------------
-// Zod schema
-// ---------------------------------------------------------------------------
-
-const settingsSchema = z.object({
-  // Labo
-  labName: z.string().optional(),
-  labAddress: z.string().optional(),
-  labPhone: z.string().optional(),
-  labEmail: z.string().email("Email invalide").optional().or(z.literal("")),
-  // Facturation
-  invoicePrefix: z.string().optional(),
-  taxRate: z.string().optional(),
-  mecefIfu: z.string().optional(),
-  mecefNimf: z.string().optional(),
-  // Rapports
-  reportFooter: z.string().optional(),
-});
-
-type SettingsFormValues = z.infer<typeof settingsSchema>;
-
-// ---------------------------------------------------------------------------
-// Helpers
+// Style partagé
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
-
-type ActiveSection = "labo" | "facturation" | "rapports" | "avance";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
 
 // ---------------------------------------------------------------------------
+// Définition des champs clé/valeur (fidèle aux onglets Laravel)
+// ---------------------------------------------------------------------------
+
+type FieldDef = {
+  key: string;
+  label: string;
+  type?: "text" | "email" | "textarea" | "password" | "number" | "select";
+  full?: boolean;
+  placeholder?: string;
+  options?: { value: string; label: string }[];
+};
+
+// Onglet Général → sous-onglet « Général »
+const GENERAL_FIELDS: FieldDef[] = [
+  { key: "app_name", label: "Nom du laboratoire", full: true, placeholder: "Ex : Labo AnaPath" },
+  { key: "devise", label: "Devise", placeholder: "Ex : FCFA" },
+  { key: "phone", label: "Téléphone", placeholder: "97000000" },
+  { key: "email", label: "Email", type: "email", placeholder: "contact@laboratoire.bj" },
+  { key: "web_site", label: "Site web", placeholder: "https://…" },
+  { key: "whatsapp_number", label: "Numéro WhatsApp", placeholder: "97000000" },
+  { key: "ifu", label: "IFU", placeholder: "Identifiant Fiscal Unique" },
+  { key: "rccm", label: "RCCM", placeholder: "Registre du commerce" },
+  { key: "adress", label: "Adresse", full: true, placeholder: "Adresse du laboratoire" },
+  { key: "footer", label: "Pied de page", type: "textarea", full: true },
+];
+
+// Onglet Général → sous-onglet « Logos »
+const LOGO_FIELDS: FieldDef[] = [
+  { key: "logo", label: "Logo" },
+  { key: "favicon", label: "Favicon" },
+  { key: "logo_white", label: "Logo (version blanche)" },
+];
+
+// Onglet Email (SMTP)
+const EMAIL_FIELDS: FieldDef[] = [
+  { key: "email_host", label: "Hôte SMTP", placeholder: "smtp.exemple.com" },
+  { key: "email_port", label: "Port SMTP", placeholder: "587" },
+  { key: "username", label: "Nom d'utilisateur", placeholder: "utilisateur SMTP" },
+  { key: "password", label: "Mot de passe", type: "password", placeholder: "••••••••" },
+  {
+    key: "encryption",
+    label: "Chiffrement",
+    type: "select",
+    options: [
+      { value: "", label: "Aucun" },
+      { value: "tls", label: "TLS" },
+      { value: "ssl", label: "SSL" },
+    ],
+  },
+  { key: "from_adresse", label: "Adresse d'expédition", type: "email", placeholder: "no-reply@laboratoire.bj" },
+  { key: "from_name", label: "Nom d'expéditeur", placeholder: "Labo AnaPath" },
+  { key: "email_technician", label: "Email du technicien", type: "email", placeholder: "technicien@laboratoire.bj" },
+];
+
+const EMAIL_SERVICES = [
+  { value: "remboursement", label: "Remboursement" },
+  { value: "boncaisse", label: "Bon de caisse" },
+  { value: "ticket", label: "Ticket" },
+  { value: "conge", label: "Congé" },
+];
+
+// Onglet Communication Mobile (SMS + OurVoice)
+const SMS_FIELDS: FieldDef[] = [
+  { key: "api_sms", label: "Clé API SMS", placeholder: "clé API du fournisseur SMS" },
+  { key: "link_api_sms", label: "Lien API SMS", placeholder: "https://…" },
+  { key: "api_key_ourvoice", label: "Clé OurVoice", type: "password", placeholder: "clé API OurVoice" },
+  { key: "link_ourvoice_call", label: "Lien appel OurVoice", placeholder: "https://api.getourvoice.com/v1/calls" },
+  { key: "link_ourvoice_sms", label: "Lien SMS OurVoice", placeholder: "https://api.getourvoice.com/v1/messages" },
+];
+
+// Onglet Compte rendu → sous-onglet « Général »
+const REPORT_FIELDS: FieldDef[] = [
+  { key: "report_footer", label: "Pied de page du compte rendu", type: "textarea", full: true },
+  { key: "report_review_title", label: "Titre de relecture", placeholder: "Ex : Relu par" },
+  {
+    key: "prefixe_code_demande_examen",
+    label: "Préfixe code demande d'examen",
+    placeholder: "Ex : DEM-",
+  },
+  {
+    key: "show_signator_invoice",
+    label: "Afficher le signataire sur la facture",
+    type: "select",
+    options: [
+      { value: "OUI", label: "Oui" },
+      { value: "NON", label: "Non" },
+    ],
+  },
+  { key: "entete", label: "En-tête (texte)", type: "textarea", full: true },
+];
+
+// Toutes les clés « texte » gérées par la page (pour le chargement initial)
+const ALL_KV_FIELDS = [
+  ...GENERAL_FIELDS,
+  ...LOGO_FIELDS,
+  ...EMAIL_FIELDS,
+  ...SMS_FIELDS,
+  ...REPORT_FIELDS,
+  { key: "token_payment" } as FieldDef,
+  { key: "services" } as FieldDef,
+];
+
+// ---------------------------------------------------------------------------
+// Navigation
+// ---------------------------------------------------------------------------
+
+type TabKey =
+  | "general"
+  | "email"
+  | "sms"
+  | "report"
+  | "banks"
+  | "payment"
+  | "invoice";
+
+const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
+  { key: "general", label: "Général", icon: <Building2 className="h-4 w-4" /> },
+  { key: "email", label: "Email", icon: <Mail className="h-4 w-4" /> },
+  { key: "sms", label: "Communication Mobile", icon: <Smartphone className="h-4 w-4" /> },
+  { key: "report", label: "Compte rendu", icon: <FileText className="h-4 w-4" /> },
+  { key: "banks", label: "Banques", icon: <Landmark className="h-4 w-4" /> },
+  { key: "payment", label: "Paramètres de paiements", icon: <CreditCard className="h-4 w-4" /> },
+  { key: "invoice", label: "Paramètres de factures", icon: <Receipt className="h-4 w-4" /> },
+];
+
+// ===========================================================================
 // Page
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
 export default function SettingsPage() {
   const { can } = usePermissions();
   const queryClient = useQueryClient();
-  const [activeSection, setActiveSection] = useState<ActiveSection>("labo");
-  const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const logoInputRef = useRef<HTMLInputElement>(null);
-
-  // ---- Avancé state -------------------------------------------------------
-  const [ourvoiceKey, setOurvoiceKey] = useState("");
-  const [ourvoiceCallLink, setOurvoiceCallLink] = useState("");
-  const [ourvoiceSmsLink, setOurvoiceSmsLink] = useState("");
-  const [entete, setEntete] = useState("");
-  const [tokenPayment, setTokenPayment] = useState("");
-
   const canManage = can(PERMISSIONS.MANAGE_SETTINGS);
 
-  // ---- Queries -------------------------------------------------------------
+  const [tab, setTab] = useState<TabKey>("general");
+  const [generalSub, setGeneralSub] = useState<"general" | "logos">("general");
+  const [reportSub, setReportSub] = useState<"general" | "titles">("general");
 
-  const { data: settingsData, isLoading } = useQuery({
-    queryKey: ["settings"],
-    queryFn: () => usersApi.getSettings().then((r) => r.data),
-  });
+  // État local des valeurs clé/valeur (chargé depuis les deux stores).
+  const [values, setValues] = useState<Record<string, string>>({});
 
-  useQuery({
-    queryKey: ["setting-apps"],
+  const { isLoading } = useQuery({
+    queryKey: ["all-settings"],
     queryFn: async () => {
-      const apps = await usersApi.getSettingApps();
-      setOurvoiceKey(apps["api_key_ourvoice"] ?? "");
-      setOurvoiceCallLink(apps["link_ourvoice_call"] ?? "");
-      setOurvoiceSmsLink(apps["link_ourvoice_sms"] ?? "");
-      setEntete(apps["entete"] ?? "");
-      return apps;
-    },
-    enabled: activeSection === "avance",
-  });
-
-  useQuery({
-    queryKey: ["setting-token-payment"],
-    queryFn: async () => {
-      const v = await usersApi.getTokenPayment();
-      setTokenPayment(v ?? "");
-      return v;
-    },
-    enabled: activeSection === "avance",
-  });
-
-  // ---- Form ----------------------------------------------------------------
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isDirty },
-  } = useForm<SettingsFormValues>({
-    resolver: zodResolver(settingsSchema),
-    defaultValues: {
-      labName: "",
-      labAddress: "",
-      labPhone: "",
-      labEmail: "",
-      invoicePrefix: "",
-      taxRate: "",
-      mecefIfu: "",
-      mecefNimf: "",
-      reportFooter: "",
+      const [apps, store] = await Promise.all([
+        settingAppsApi.getAll(),
+        settingsStoreApi.getAll(),
+      ]);
+      const merged = { ...apps, ...store };
+      const next: Record<string, string> = {};
+      for (const f of ALL_KV_FIELDS) next[f.key] = merged[f.key] ?? "";
+      setValues(next);
+      return merged;
     },
   });
 
-  // Pré-remplir le formulaire quand les données sont chargées
-  useEffect(() => {
-    if (settingsData) {
-      reset({
-        labName: settingsData.labName ?? "",
-        labAddress: settingsData.labAddress ?? "",
-        labPhone: settingsData.labPhone ?? "",
-        labEmail: settingsData.labEmail ?? "",
-        invoicePrefix: settingsData.invoicePrefix ?? "",
-        taxRate: settingsData.taxRate ?? "",
-        mecefIfu: settingsData.mecefIfu ?? "",
-        mecefNimf: settingsData.mecefNimf ?? "",
-        reportFooter: settingsData.reportFooter ?? "",
-      });
-      if (settingsData.labLogo) {
-        setLogoPreview(settingsData.labLogo);
-      }
-    }
-  }, [settingsData, reset]);
+  const setValue = (key: string, value: string) =>
+    setValues((prev) => ({ ...prev, [key]: value }));
 
-  // ---- Mutation ------------------------------------------------------------
-
-  const updateMutation = useMutation({
-    mutationFn: (payload: SettingsData) => usersApi.updateSettings(payload),
+  // Sauvegarde d'un ensemble de clés (route chaque clé vers le bon store).
+  const saveMutation = useMutation({
+    mutationFn: async (keys: string[]) => {
+      await Promise.all(
+        keys.map((key) => {
+          const value = values[key] ?? "";
+          return SETTINGS_STORE_KEYS.has(key)
+            ? settingsStoreApi.upsert(key, value)
+            : settingAppsApi.upsert(key, value);
+        })
+      );
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["settings"] });
-      setLogoFile(null);
+      queryClient.invalidateQueries({ queryKey: ["all-settings"] });
       toast.success("Paramètres sauvegardés");
     },
-    onError: () => {
-      toast.error("Une erreur est survenue lors de la sauvegarde");
-    },
+    onError: () => toast.error("Erreur lors de la sauvegarde"),
   });
-
-  // ---- Handlers ------------------------------------------------------------
-
-  function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setLogoFile(file);
-    const reader = new FileReader();
-    reader.onload = () => setLogoPreview(reader.result as string);
-    reader.readAsDataURL(file);
-  }
-
-  function clearLogo() {
-    setLogoFile(null);
-    setLogoPreview(null);
-    if (logoInputRef.current) logoInputRef.current.value = "";
-  }
-
-  function onSubmit(values: SettingsFormValues) {
-    const payload: SettingsData = {
-      labName: values.labName || undefined,
-      labAddress: values.labAddress || undefined,
-      labPhone: values.labPhone || undefined,
-      labEmail: values.labEmail || undefined,
-      invoicePrefix: values.invoicePrefix || undefined,
-      taxRate: values.taxRate || undefined,
-      mecefIfu: values.mecefIfu || undefined,
-      mecefNimf: values.mecefNimf || undefined,
-      reportFooter: values.reportFooter || undefined,
-      // Le logo n'est envoyé que si un nouveau fichier a été choisi
-      // (logoPreview contient alors sa data URL base64).
-      labLogo: logoFile && logoPreview ? logoPreview : undefined,
-    };
-    updateMutation.mutate(payload);
-  }
-
-  // ---- Nav sections --------------------------------------------------------
-
-  const sections: { key: ActiveSection; label: string; icon: React.ReactNode; permission?: string }[] = [
-    {
-      key: "labo",
-      label: "Labo",
-      icon: <Building2 className="h-4 w-4" />,
-      permission: PERMISSIONS.VIEW_SETTINGS,
-    },
-    {
-      key: "facturation",
-      label: "Facturation",
-      icon: <Receipt className="h-4 w-4" />,
-      permission: PERMISSIONS.VIEW_SETTING_INVOICE,
-    },
-    {
-      key: "rapports",
-      label: "Rapports",
-      icon: <FileText className="h-4 w-4" />,
-      permission: PERMISSIONS.VIEW_SETTING_REPORT_TEMPLATES,
-    },
-    {
-      key: "avance",
-      label: "Avancé",
-      icon: <Sliders className="h-4 w-4" />,
-      permission: PERMISSIONS.MANAGE_SETTINGS,
-    },
-  ];
-
-  // ---- Render --------------------------------------------------------------
 
   if (isLoading) {
     return (
       <div className="space-y-6">
         <PageHeader title="Paramètres" />
         <div className="flex items-center justify-center py-20">
-          <svg className="h-6 w-6 animate-spin text-blue-600" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-          </svg>
+          <Spinner />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="Paramètres" />
+    <PermissionGate permission={PERMISSIONS.VIEW_SETTINGS}>
+      <div className="space-y-6">
+        <PageHeader title="Paramètres" />
 
-      <div className="flex gap-6">
-        {/* Sidebar navigation */}
-        <nav className="w-48 flex-shrink-0">
-          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-            {sections.map((section) => (
-              <button
-                key={section.key}
-                onClick={() => setActiveSection(section.key)}
-                className={`w-full flex items-center gap-2.5 px-4 py-3 text-sm font-medium transition-colors text-left border-b border-gray-100 last:border-0 ${
-                  activeSection === section.key
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-gray-700 hover:bg-gray-50"
-                }`}
-              >
-                {section.icon}
-                {section.label}
-              </button>
-            ))}
-          </div>
-        </nav>
-
-        {/* Main content */}
-        <div className="flex-1">
-          <form onSubmit={handleSubmit(onSubmit)}>
-            {/* Section Labo */}
-            {activeSection === "labo" && (
-              <PermissionGate permission={PERMISSIONS.VIEW_SETTINGS}>
-                <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-                  <div className="border-b border-gray-200 px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <Building2 className="h-5 w-5 text-gray-500" />
-                      <h2 className="text-base font-semibold text-gray-900">
-                        Informations du laboratoire
-                      </h2>
-                    </div>
-                    <p className="mt-0.5 text-sm text-gray-500">
-                      Informations générales affichées sur les documents imprimés.
-                    </p>
-                  </div>
-
-                  <div className="p-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <FormField
-                      label="Nom du laboratoire"
-                      error={errors.labName?.message}
-                      className="sm:col-span-2"
-                    >
-                      <input
-                        type="text"
-                        {...register("labName")}
-                        placeholder="Ex : Labo Anapath Bénin"
-                        className={inputClass}
-                        disabled={!canManage}
-                      />
-                    </FormField>
-
-                    <FormField label="Adresse" error={errors.labAddress?.message} className="sm:col-span-2">
-                      <input
-                        type="text"
-                        {...register("labAddress")}
-                        placeholder="Adresse du laboratoire"
-                        className={inputClass}
-                        disabled={!canManage}
-                      />
-                    </FormField>
-
-                    <FormField label="Téléphone" error={errors.labPhone?.message}>
-                      <input
-                        type="tel"
-                        {...register("labPhone")}
-                        placeholder="97000000"
-                        className={inputClass}
-                        disabled={!canManage}
-                      />
-                    </FormField>
-
-                    <FormField label="Email" error={errors.labEmail?.message}>
-                      <input
-                        type="email"
-                        {...register("labEmail")}
-                        placeholder="contact@laboratoire.bj"
-                        className={inputClass}
-                        disabled={!canManage}
-                      />
-                    </FormField>
-
-                    {/* Logo upload */}
-                    <FormField label="Logo" className="sm:col-span-2">
-                      <div className="flex items-start gap-4">
-                        {logoPreview ? (
-                          <div className="relative">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={logoPreview}
-                              alt="Logo laboratoire"
-                              className="h-20 w-20 rounded-lg object-contain border border-gray-200"
-                            />
-                            {canManage && (
-                              <button
-                                type="button"
-                                onClick={clearLogo}
-                                className="absolute -top-2 -right-2 rounded-full bg-red-100 p-0.5 text-red-600 hover:bg-red-200 transition-colors"
-                                aria-label="Supprimer le logo"
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="flex h-20 w-20 items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50">
-                            <Building2 className="h-8 w-8 text-gray-300" />
-                          </div>
-                        )}
-                        {canManage && (
-                          <div className="flex-1">
-                            <input
-                              ref={logoInputRef}
-                              type="file"
-                              accept="image/*"
-                              onChange={handleLogoChange}
-                              className="hidden"
-                              id="logo-upload"
-                            />
-                            <label
-                              htmlFor="logo-upload"
-                              className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-                            >
-                              <Upload className="h-4 w-4" />
-                              {logoFile ? logoFile.name : "Choisir un fichier"}
-                            </label>
-                            <p className="mt-1 text-xs text-gray-500">
-                              PNG, JPG, SVG — max 3 Mo
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </FormField>
-                  </div>
-                </div>
-              </PermissionGate>
-            )}
-
-            {/* Section Facturation */}
-            {activeSection === "facturation" && (
-              <PermissionGate permission={PERMISSIONS.VIEW_SETTING_INVOICE}>
-                <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-                  <div className="border-b border-gray-200 px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <Receipt className="h-5 w-5 text-gray-500" />
-                      <h2 className="text-base font-semibold text-gray-900">
-                        Paramètres de facturation
-                      </h2>
-                    </div>
-                    <p className="mt-0.5 text-sm text-gray-500">
-                      Numérotation des factures et conformité fiscale (MECeF).
-                    </p>
-                  </div>
-
-                  <div className="p-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <FormField
-                      label="Préfixe numéro de facture"
-                      error={errors.invoicePrefix?.message}
-                      hint="Ex : FAC- → FAC-0001"
-                    >
-                      <input
-                        type="text"
-                        {...register("invoicePrefix")}
-                        placeholder="FAC-"
-                        className={inputClass}
-                        disabled={!canManage}
-                      />
-                    </FormField>
-
-                    <FormField
-                      label="TVA (%)"
-                      error={errors.taxRate?.message}
-                    >
-                      <input
-                        type="number"
-                        {...register("taxRate")}
-                        placeholder="18"
-                        min={0}
-                        max={100}
-                        step={0.01}
-                        className={inputClass}
-                        disabled={!canManage}
-                      />
-                    </FormField>
-
-                    <div className="sm:col-span-2">
-                      <p className="mb-3 text-sm font-medium text-gray-700">
-                        Paramètres MECeF
-                      </p>
-                      <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <FormField
-                          label="IFU (Identifiant Fiscal Unique)"
-                          error={errors.mecefIfu?.message}
-                        >
-                          <input
-                            type="text"
-                            {...register("mecefIfu")}
-                            placeholder="Ex : 1234567890123"
-                            className={inputClass}
-                            disabled={!canManage}
-                          />
-                        </FormField>
-
-                        <FormField
-                          label="NIMF (Numéro d'Identification MECeF Fiscal)"
-                          error={errors.mecefNimf?.message}
-                        >
-                          <input
-                            type="text"
-                            {...register("mecefNimf")}
-                            placeholder="Ex : A1234"
-                            className={inputClass}
-                            disabled={!canManage}
-                          />
-                        </FormField>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </PermissionGate>
-            )}
-
-            {/* Section Rapports */}
-            {activeSection === "rapports" && (
-              <PermissionGate permission={PERMISSIONS.VIEW_SETTING_REPORT_TEMPLATES}>
-                <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-                  <div className="border-b border-gray-200 px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-5 w-5 text-gray-500" />
-                      <h2 className="text-base font-semibold text-gray-900">
-                        Paramètres des rapports
-                      </h2>
-                    </div>
-                    <p className="mt-0.5 text-sm text-gray-500">
-                      Pied de page et modèles de compte rendu anatomopathologique.
-                    </p>
-                  </div>
-
-                  <div className="p-6 space-y-4">
-                    <FormField
-                      label="Pied de page des rapports"
-                      error={errors.reportFooter?.message}
-                      hint="Affiché en bas de chaque compte rendu imprimé."
-                    >
-                      <textarea
-                        {...register("reportFooter")}
-                        rows={5}
-                        placeholder="Ex : Ce rapport est confidentiel et destiné exclusivement au médecin prescripteur."
-                        className={inputClass + " resize-none"}
-                        disabled={!canManage}
-                      />
-                    </FormField>
-
-                    {/* Modèles de rapport — section informative */}
-                    <div>
-                      <p className="mb-3 text-sm font-medium text-gray-700">
-                        Modèles de rapport
-                      </p>
-                      <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
-                        <FileText className="mx-auto h-10 w-10 text-gray-300" />
-                        <p className="mt-2 text-sm text-gray-500">
-                          La gestion des modèles de rapport est disponible depuis la section{" "}
-                          <strong>Comptes Rendus</strong>.
-                        </p>
-                        <p className="mt-1 text-xs text-gray-400">
-                          Vous pouvez y définir les titres par défaut et les mises en page des rapports.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </PermissionGate>
-            )}
-
-            {/* Bouton Sauvegarder */}
-            {canManage && activeSection !== "avance" && (
-              <div className="mt-4 flex justify-end">
+        <div className="flex flex-col gap-6 lg:flex-row">
+          {/* Menu latéral (comme Laravel) */}
+          <nav className="w-full flex-shrink-0 lg:w-64">
+            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+              {TABS.map((t) => (
                 <button
-                  type="submit"
-                  disabled={updateMutation.isPending || (!isDirty && !logoFile)}
-                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                  key={t.key}
+                  onClick={() => setTab(t.key)}
+                  className={`flex w-full items-center gap-2.5 border-b border-gray-100 px-4 py-3 text-left text-sm font-medium transition-colors last:border-0 ${
+                    tab === t.key
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-gray-700 hover:bg-gray-50"
+                  }`}
                 >
-                  {updateMutation.isPending && (
-                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                    </svg>
-                  )}
-                  Sauvegarder
+                  {t.icon}
+                  {t.label}
                 </button>
-              </div>
-            )}
-          </form>
+              ))}
+            </div>
+          </nav>
 
-          {/* Section Avancé — gestion indépendante par champ */}
-          {activeSection === "avance" && (
-            <PermissionGate permission={PERMISSIONS.MANAGE_SETTINGS}>
-              <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-                <div className="border-b border-gray-200 px-6 py-4">
-                  <div className="flex items-center gap-2">
-                    <Sliders className="h-5 w-5 text-gray-500" />
-                    <h2 className="text-base font-semibold text-gray-900">Paramètres avancés</h2>
-                  </div>
-                  <p className="mt-0.5 text-sm text-gray-500">
-                    Intégrations tierces et configuration PDF.
-                  </p>
-                </div>
-                <div className="p-6 space-y-6">
-
-                  {/* OurVoice */}
-                  <div>
-                    <p className="mb-3 text-sm font-semibold text-gray-700">OurVoice (notifications vocales & SMS)</p>
-                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
-                      <AdvancedField
-                        label="Clé API OurVoice"
-                        value={ourvoiceKey}
-                        onChange={setOurvoiceKey}
-                        onSave={() => usersApi.upsertSettingApp("api_key_ourvoice", ourvoiceKey).then(() => toast.success("Sauvegardé"))}
-                        placeholder="sk-xxxxxxxxxxxxxxxx"
-                        type="password"
-                      />
-                      <AdvancedField
-                        label="Endpoint appel vocal"
-                        value={ourvoiceCallLink}
-                        onChange={setOurvoiceCallLink}
-                        onSave={() => usersApi.upsertSettingApp("link_ourvoice_call", ourvoiceCallLink).then(() => toast.success("Sauvegardé"))}
-                        placeholder="https://api.ourvoice.io/v1/call"
-                      />
-                      <AdvancedField
-                        label="Endpoint SMS"
-                        value={ourvoiceSmsLink}
-                        onChange={setOurvoiceSmsLink}
-                        onSave={() => usersApi.upsertSettingApp("link_ourvoice_sms", ourvoiceSmsLink).then(() => toast.success("Sauvegardé"))}
-                        placeholder="https://api.ourvoice.io/v1/sms"
-                      />
-                    </div>
-                  </div>
-
-                  {/* MECeF token */}
-                  <div>
-                    <p className="mb-3 text-sm font-semibold text-gray-700">MECeF — Token de paiement</p>
-                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                      <AdvancedField
-                        label="Token de paiement MECeF"
-                        value={tokenPayment}
-                        onChange={setTokenPayment}
-                        onSave={() => usersApi.setTokenPayment(tokenPayment).then(() => toast.success("Sauvegardé"))}
-                        placeholder="token_xxxxxxxxxxxxx"
-                        type="password"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Entête PDF */}
-                  <div>
-                    <p className="mb-3 text-sm font-semibold text-gray-700">Entête PDF des rapports</p>
-                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
-                      <div className="flex flex-col gap-1">
-                        <label className="text-sm font-medium text-gray-700">Texte de l'entête</label>
-                        <textarea
-                          value={entete}
-                          onChange={(e) => setEntete(e.target.value)}
-                          rows={4}
-                          placeholder="Entête affiché en haut de chaque rapport PDF…"
-                          className={inputClass + " resize-none"}
+          {/* Contenu */}
+          <div className="min-w-0 flex-1">
+            {/* ---- Général ---- */}
+            {tab === "general" && (
+              <Card
+                title="Général"
+                subtitle="Informations générales du laboratoire affichées sur les documents."
+              >
+                <SubTabs
+                  active={generalSub}
+                  onChange={(v) => setGeneralSub(v as "general" | "logos")}
+                  tabs={[
+                    { key: "general", label: "Général" },
+                    { key: "logos", label: "Logos" },
+                  ]}
+                />
+                {generalSub === "general" ? (
+                  <>
+                    <FieldsGrid
+                      fields={GENERAL_FIELDS}
+                      values={values}
+                      onChange={setValue}
+                      disabled={!canManage}
+                    />
+                    <SaveBar
+                      show={canManage}
+                      pending={saveMutation.isPending}
+                      onSave={() =>
+                        saveMutation.mutate(GENERAL_FIELDS.map((f) => f.key))
+                      }
+                    />
+                  </>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                      {LOGO_FIELDS.map((f) => (
+                        <ImageField
+                          key={f.key}
+                          label={f.label}
+                          value={values[f.key] ?? ""}
+                          onChange={(v) => setValue(f.key, v)}
+                          disabled={!canManage}
                         />
-                      </div>
-                      <div className="flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => usersApi.upsertSettingApp("entete", entete).then(() => toast.success("Entête sauvegardée"))}
-                          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-                        >
-                          Sauvegarder l'entête
-                        </button>
-                      </div>
+                      ))}
                     </div>
-                  </div>
+                    <SaveBar
+                      show={canManage}
+                      pending={saveMutation.isPending}
+                      onSave={() =>
+                        saveMutation.mutate(LOGO_FIELDS.map((f) => f.key))
+                      }
+                    />
+                  </>
+                )}
+              </Card>
+            )}
 
+            {/* ---- Email ---- */}
+            {tab === "email" && (
+              <Card
+                title="Email"
+                subtitle="Configuration du serveur d'envoi d'e-mails (SMTP) et des notifications."
+              >
+                <FieldsGrid
+                  fields={EMAIL_FIELDS}
+                  values={values}
+                  onChange={setValue}
+                  disabled={!canManage}
+                />
+                <div className="mt-4">
+                  <p className="mb-2 text-sm font-medium text-gray-700">
+                    Services notifiés par email
+                  </p>
+                  <ServicesCheckboxes
+                    value={values["services"] ?? ""}
+                    onChange={(v) => setValue("services", v)}
+                    disabled={!canManage}
+                  />
                 </div>
-              </div>
-            </PermissionGate>
+                <SaveBar
+                  show={canManage}
+                  pending={saveMutation.isPending}
+                  onSave={() =>
+                    saveMutation.mutate([
+                      ...EMAIL_FIELDS.map((f) => f.key),
+                      "services",
+                    ])
+                  }
+                />
+              </Card>
+            )}
+
+            {/* ---- Communication Mobile ---- */}
+            {tab === "sms" && (
+              <Card
+                title="Communication Mobile"
+                subtitle="Passerelles SMS et notifications vocales/SMS OurVoice."
+              >
+                <FieldsGrid
+                  fields={SMS_FIELDS}
+                  values={values}
+                  onChange={setValue}
+                  disabled={!canManage}
+                />
+                <SaveBar
+                  show={canManage}
+                  pending={saveMutation.isPending}
+                  onSave={() => saveMutation.mutate(SMS_FIELDS.map((f) => f.key))}
+                />
+              </Card>
+            )}
+
+            {/* ---- Compte rendu ---- */}
+            {tab === "report" && (
+              <Card
+                title="Compte rendu"
+                subtitle="En-tête, pied de page, préfixe des demandes et titres de compte rendu."
+              >
+                <SubTabs
+                  active={reportSub}
+                  onChange={(v) => setReportSub(v as "general" | "titles")}
+                  tabs={[
+                    { key: "general", label: "Général" },
+                    { key: "titles", label: "Titre" },
+                  ]}
+                />
+                {reportSub === "general" ? (
+                  <>
+                    <FieldsGrid
+                      fields={REPORT_FIELDS}
+                      values={values}
+                      onChange={setValue}
+                      disabled={!canManage}
+                    />
+                    <SaveBar
+                      show={canManage}
+                      pending={saveMutation.isPending}
+                      onSave={() =>
+                        saveMutation.mutate(REPORT_FIELDS.map((f) => f.key))
+                      }
+                    />
+                  </>
+                ) : (
+                  <TitleReportsSection canManage={canManage} />
+                )}
+              </Card>
+            )}
+
+            {/* ---- Banques ---- */}
+            {tab === "banks" && (
+              <Card title="Banques" subtitle="Comptes bancaires du laboratoire.">
+                <BanksSection />
+              </Card>
+            )}
+
+            {/* ---- Paramètres de paiements ---- */}
+            {tab === "payment" && (
+              <Card
+                title="Paramètres de paiements"
+                subtitle="Token d'accès à la plateforme de paiement MECeF."
+              >
+                <FieldsGrid
+                  fields={[
+                    {
+                      key: "token_payment",
+                      label: "Token de paiement MECeF",
+                      type: "password",
+                      full: true,
+                      placeholder: "token_xxxxxxxxxxxxx",
+                    },
+                  ]}
+                  values={values}
+                  onChange={setValue}
+                  disabled={!canManage}
+                />
+                <SaveBar
+                  show={canManage}
+                  pending={saveMutation.isPending}
+                  onSave={() => saveMutation.mutate(["token_payment"])}
+                />
+              </Card>
+            )}
+
+            {/* ---- Paramètres de factures ---- */}
+            {tab === "invoice" && (
+              <Card
+                title="Paramètres de factures"
+                subtitle="Configuration MECeF (IFU, token, activation) appliquée aux factures."
+              >
+                <InvoiceSettingsSection canManage={canManage} />
+              </Card>
+            )}
+          </div>
+        </div>
+      </div>
+    </PermissionGate>
+  );
+}
+
+// ===========================================================================
+// Sous-composants de présentation
+// ===========================================================================
+
+function Spinner({ className = "h-6 w-6 text-blue-600" }: { className?: string }) {
+  return (
+    <svg className={`animate-spin ${className}`} viewBox="0 0 24 24" fill="none">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+    </svg>
+  );
+}
+
+function Card({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="border-b border-gray-200 px-6 py-4">
+        <h2 className="text-base font-semibold text-gray-900">{title}</h2>
+        {subtitle && <p className="mt-0.5 text-sm text-gray-500">{subtitle}</p>}
+      </div>
+      <div className="p-6">{children}</div>
+    </div>
+  );
+}
+
+function SubTabs({
+  active,
+  onChange,
+  tabs,
+}: {
+  active: string;
+  onChange: (v: string) => void;
+  tabs: { key: string; label: string }[];
+}) {
+  return (
+    <div className="mb-5 flex gap-1 border-b border-gray-200">
+      {tabs.map((t) => (
+        <button
+          key={t.key}
+          onClick={() => onChange(t.key)}
+          className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+            active === t.key
+              ? "border-blue-600 text-blue-700"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function FieldsGrid({
+  fields,
+  values,
+  onChange,
+  disabled,
+}: {
+  fields: FieldDef[];
+  values: Record<string, string>;
+  onChange: (key: string, value: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {fields.map((f) => (
+        <div
+          key={f.key}
+          className={`flex flex-col gap-1 ${f.full ? "sm:col-span-2" : ""}`}
+        >
+          <label className="text-sm font-medium text-gray-700">{f.label}</label>
+          {f.type === "textarea" ? (
+            <textarea
+              rows={4}
+              value={values[f.key] ?? ""}
+              onChange={(e) => onChange(f.key, e.target.value)}
+              placeholder={f.placeholder}
+              disabled={disabled}
+              className={`${inputClass} resize-none`}
+            />
+          ) : f.type === "select" ? (
+            <NativeSelect
+              value={values[f.key] ?? ""}
+              onChange={(e) => onChange(f.key, e.target.value)}
+              disabled={disabled}
+            >
+              {(f.options ?? []).map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </NativeSelect>
+          ) : (
+            <input
+              type={f.type ?? "text"}
+              value={values[f.key] ?? ""}
+              onChange={(e) => onChange(f.key, e.target.value)}
+              placeholder={f.placeholder}
+              disabled={disabled}
+              className={inputClass}
+            />
           )}
         </div>
+      ))}
+    </div>
+  );
+}
+
+function ServicesCheckboxes({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
+  const selected = useMemo(
+    () => new Set(value.split(",").map((s) => s.trim()).filter(Boolean)),
+    [value]
+  );
+  const toggle = (v: string) => {
+    const next = new Set(selected);
+    if (next.has(v)) next.delete(v);
+    else next.add(v);
+    onChange(Array.from(next).join(","));
+  };
+  return (
+    <div className="flex flex-wrap gap-4">
+      {EMAIL_SERVICES.map((s) => (
+        <label key={s.value} className="flex items-center gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            checked={selected.has(s.value)}
+            onChange={() => toggle(s.value)}
+            disabled={disabled}
+            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          {s.label}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function ImageField({
+  label,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => onChange(reader.result as string);
+    reader.readAsDataURL(file);
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="text-sm font-medium text-gray-700">{label}</label>
+      <div className="flex items-start gap-3">
+        {value ? (
+          <div className="relative">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={value}
+              alt={label}
+              className="h-20 w-20 rounded-lg border border-gray-200 object-contain"
+            />
+            {!disabled && (
+              <button
+                type="button"
+                onClick={() => {
+                  onChange("");
+                  if (inputRef.current) inputRef.current.value = "";
+                }}
+                className="absolute -right-2 -top-2 rounded-full bg-red-100 p-0.5 text-red-600 transition-colors hover:bg-red-200"
+                aria-label="Supprimer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="flex h-20 w-20 items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50">
+            <ImageIcon className="h-7 w-7 text-gray-300" />
+          </div>
+        )}
+        {!disabled && (
+          <div>
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFile}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            >
+              <Upload className="h-4 w-4" />
+              Choisir
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// AdvancedField — champ avec bouton Sauvegarder inline
-// ---------------------------------------------------------------------------
-
-function AdvancedField({
-  label,
-  value,
-  onChange,
+function SaveBar({
+  show,
+  pending,
   onSave,
-  placeholder,
-  type = "text",
 }: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
+  show: boolean;
+  pending: boolean;
   onSave: () => void;
-  placeholder?: string;
-  type?: "text" | "password";
 }) {
+  if (!show) return null;
   return (
-    <div className="flex flex-col gap-1">
-      <label className="text-sm font-medium text-gray-700">{label}</label>
-      <div className="flex gap-2">
+    <div className="mt-6 flex justify-end">
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={pending}
+        className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {pending && <Spinner className="h-4 w-4 text-white" />}
+        Sauvegarder
+      </button>
+    </div>
+  );
+}
+
+// ===========================================================================
+// Banques (CRUD)
+// ===========================================================================
+
+function BanksSection() {
+  const { can } = usePermissions();
+  const queryClient = useQueryClient();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<Bank | null>(null);
+  const [deleting, setDeleting] = useState<Bank | null>(null);
+  const [form, setForm] = useState<BankRequest>({ name: "", accountNumber: "", description: "" });
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["banks", "settings"],
+    queryFn: () => banksApi.findAll({ size: 100 }).then((r) => r.data),
+  });
+  const banks = data?.content ?? [];
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["banks", "settings"] });
+
+  const createMut = useMutation({
+    mutationFn: (d: BankRequest) => banksApi.create(d),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Banque ajoutée");
+      setCreateOpen(false);
+    },
+    onError: () => toast.error("Erreur lors de l'ajout"),
+  });
+  const updateMut = useMutation({
+    mutationFn: ({ id, d }: { id: string; d: BankRequest }) => banksApi.update(id, d),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Banque modifiée");
+      setEditing(null);
+    },
+    onError: () => toast.error("Erreur lors de la modification"),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => banksApi.delete(id),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Banque supprimée");
+      setDeleting(null);
+    },
+    onError: () => toast.error("Erreur lors de la suppression"),
+  });
+
+  const openCreate = () => {
+    setForm({ name: "", accountNumber: "", description: "" });
+    setCreateOpen(true);
+  };
+  const openEdit = (b: Bank) => {
+    setForm({ name: b.name, accountNumber: b.accountNumber ?? "", description: b.description ?? "" });
+    setEditing(b);
+  };
+
+  const bankForm = (
+    <div className="grid grid-cols-1 gap-4">
+      <div className="flex flex-col gap-1">
+        <label className="text-sm font-medium text-gray-700">
+          Nom <span className="text-red-500">*</span>
+        </label>
         <input
-          type={type}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+          className={inputClass}
         />
-        <button
-          type="button"
-          onClick={onSave}
-          className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-        >
-          OK
-        </button>
+      </div>
+      <div className="flex flex-col gap-1">
+        <label className="text-sm font-medium text-gray-700">Numéro de compte</label>
+        <input
+          value={form.accountNumber}
+          onChange={(e) => setForm({ ...form, accountNumber: e.target.value })}
+          className={inputClass}
+        />
+      </div>
+      <div className="flex flex-col gap-1">
+        <label className="text-sm font-medium text-gray-700">Description</label>
+        <textarea
+          rows={2}
+          value={form.description}
+          onChange={(e) => setForm({ ...form, description: e.target.value })}
+          className={`${inputClass} resize-none`}
+        />
+      </div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div className="mb-4 flex justify-end">
+        <PermissionGate permission={PERMISSIONS.CREATE_BANKS}>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+          >
+            <Plus className="h-4 w-4" />
+            Ajouter une banque
+          </button>
+        </PermissionGate>
+      </div>
+
+      <div className="overflow-x-auto rounded-lg border border-gray-200">
+        <table className="min-w-full divide-y divide-gray-200 text-sm">
+          <thead className="bg-gray-50 text-left text-xs font-medium uppercase text-gray-500">
+            <tr>
+              <th className="px-4 py-2">Nom</th>
+              <th className="px-4 py-2">Numéro de compte</th>
+              <th className="px-4 py-2">Description</th>
+              <th className="px-4 py-2 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {isLoading ? (
+              <tr>
+                <td colSpan={4} className="px-4 py-6 text-center text-gray-400">
+                  Chargement…
+                </td>
+              </tr>
+            ) : banks.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-4 py-6 text-center text-gray-400">
+                  Aucune banque enregistrée.
+                </td>
+              </tr>
+            ) : (
+              banks.map((b) => (
+                <tr key={b.id}>
+                  <td className="px-4 py-2 font-medium text-gray-900">{b.name}</td>
+                  <td className="px-4 py-2">{b.accountNumber || "—"}</td>
+                  <td className="px-4 py-2">{b.description || "—"}</td>
+                  <td className="px-4 py-2">
+                    <div className="flex items-center justify-end gap-1">
+                      <PermissionGate permission={PERMISSIONS.EDIT_BANKS}>
+                        <button
+                          type="button"
+                          onClick={() => openEdit(b)}
+                          className="rounded bg-blue-600 p-1.5 text-white transition-colors hover:bg-blue-700"
+                          aria-label="Modifier"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      </PermissionGate>
+                      <PermissionGate permission={PERMISSIONS.DELETE_BANKS}>
+                        <button
+                          type="button"
+                          onClick={() => setDeleting(b)}
+                          className="rounded bg-red-600 p-1.5 text-white transition-colors hover:bg-red-700"
+                          aria-label="Supprimer"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </PermissionGate>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <CrudModal
+        isOpen={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="Ajouter une banque"
+        onSubmit={() => createMut.mutate(form)}
+        submitLabel="Ajouter"
+        isSubmitting={createMut.isPending}
+      >
+        {bankForm}
+      </CrudModal>
+
+      <CrudModal
+        isOpen={editing !== null}
+        onClose={() => setEditing(null)}
+        title="Modifier la banque"
+        onSubmit={() => editing && updateMut.mutate({ id: editing.id, d: form })}
+        submitLabel="Enregistrer"
+        isSubmitting={updateMut.isPending}
+      >
+        {bankForm}
+      </CrudModal>
+
+      <ConfirmModal
+        isOpen={deleting !== null}
+        onClose={() => setDeleting(null)}
+        onConfirm={() => deleting && deleteMut.mutate(deleting.id)}
+        title="Supprimer cette banque"
+        message={deleting ? `Voulez-vous vraiment supprimer « ${deleting.name} » ?` : ""}
+        confirmLabel="Supprimer"
+        confirmVariant="danger"
+        isLoading={deleteMut.isPending}
+      />
+    </div>
+  );
+}
+
+// ===========================================================================
+// Titres de compte rendu (CRUD)
+// ===========================================================================
+
+function TitleReportsSection({ canManage }: { canManage: boolean }) {
+  const queryClient = useQueryClient();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<TitleReport | null>(null);
+  const [deleting, setDeleting] = useState<TitleReport | null>(null);
+  const [form, setForm] = useState<TitleReportRequest>({ name: "", isDefault: false });
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["title-reports", "settings"],
+    queryFn: () => titleReportsApi.findAll({ size: 100 }).then((r) => r.data),
+  });
+  const titles = data?.content ?? [];
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["title-reports", "settings"] });
+
+  const createMut = useMutation({
+    mutationFn: (d: TitleReportRequest) => titleReportsApi.create(d),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Titre ajouté");
+      setCreateOpen(false);
+    },
+    onError: () => toast.error("Erreur lors de l'ajout"),
+  });
+  const updateMut = useMutation({
+    mutationFn: ({ id, d }: { id: string; d: TitleReportRequest }) =>
+      titleReportsApi.update(id, d),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Titre modifié");
+      setEditing(null);
+    },
+    onError: () => toast.error("Erreur lors de la modification"),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => titleReportsApi.delete(id),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Titre supprimé");
+      setDeleting(null);
+    },
+    onError: () => toast.error("Erreur lors de la suppression"),
+  });
+
+  const openCreate = () => {
+    setForm({ name: "", isDefault: false });
+    setCreateOpen(true);
+  };
+  const openEdit = (t: TitleReport) => {
+    setForm({ name: t.name, isDefault: t.isDefault });
+    setEditing(t);
+  };
+
+  const titleForm = (
+    <div className="grid grid-cols-1 gap-4">
+      <div className="flex flex-col gap-1">
+        <label className="text-sm font-medium text-gray-700">
+          Titre <span className="text-red-500">*</span>
+        </label>
+        <input
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+          className={inputClass}
+        />
+      </div>
+      <label className="flex items-center gap-2 text-sm text-gray-700">
+        <input
+          type="checkbox"
+          checked={!!form.isDefault}
+          onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
+          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+        />
+        Titre par défaut
+      </label>
+    </div>
+  );
+
+  return (
+    <div>
+      {canManage && (
+        <div className="mb-4 flex justify-end">
+          <button
+            type="button"
+            onClick={openCreate}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+          >
+            <Plus className="h-4 w-4" />
+            Ajouter un titre
+          </button>
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-lg border border-gray-200">
+        <table className="min-w-full divide-y divide-gray-200 text-sm">
+          <thead className="bg-gray-50 text-left text-xs font-medium uppercase text-gray-500">
+            <tr>
+              <th className="px-4 py-2">Titre</th>
+              <th className="px-4 py-2">Par défaut</th>
+              <th className="px-4 py-2 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {isLoading ? (
+              <tr>
+                <td colSpan={3} className="px-4 py-6 text-center text-gray-400">
+                  Chargement…
+                </td>
+              </tr>
+            ) : titles.length === 0 ? (
+              <tr>
+                <td colSpan={3} className="px-4 py-6 text-center text-gray-400">
+                  Aucun titre enregistré.
+                </td>
+              </tr>
+            ) : (
+              titles.map((t) => (
+                <tr key={t.id}>
+                  <td className="px-4 py-2 font-medium text-gray-900">{t.name}</td>
+                  <td className="px-4 py-2">
+                    {t.isDefault ? (
+                      <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                        Oui
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="px-4 py-2">
+                    {canManage && (
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => openEdit(t)}
+                          className="rounded bg-blue-600 p-1.5 text-white transition-colors hover:bg-blue-700"
+                          aria-label="Modifier"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleting(t)}
+                          className="rounded bg-red-600 p-1.5 text-white transition-colors hover:bg-red-700"
+                          aria-label="Supprimer"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <CrudModal
+        isOpen={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="Ajouter un titre"
+        onSubmit={() => createMut.mutate(form)}
+        submitLabel="Ajouter"
+        isSubmitting={createMut.isPending}
+      >
+        {titleForm}
+      </CrudModal>
+
+      <CrudModal
+        isOpen={editing !== null}
+        onClose={() => setEditing(null)}
+        title="Modifier le titre"
+        onSubmit={() => editing && updateMut.mutate({ id: editing.id, d: form })}
+        submitLabel="Enregistrer"
+        isSubmitting={updateMut.isPending}
+      >
+        {titleForm}
+      </CrudModal>
+
+      <ConfirmModal
+        isOpen={deleting !== null}
+        onClose={() => setDeleting(null)}
+        onConfirm={() => deleting && deleteMut.mutate(deleting.id)}
+        title="Supprimer ce titre"
+        message={deleting ? `Voulez-vous vraiment supprimer « ${deleting.name} » ?` : ""}
+        confirmLabel="Supprimer"
+        confirmVariant="danger"
+        isLoading={deleteMut.isPending}
+      />
+    </div>
+  );
+}
+
+// ===========================================================================
+// Paramètres de factures (MECeF)
+// ===========================================================================
+
+function InvoiceSettingsSection({ canManage }: { canManage: boolean }) {
+  const queryClient = useQueryClient();
+  const [ifu, setIfu] = useState("");
+  const [token, setToken] = useState("");
+  const [status, setStatus] = useState(false);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["setting-invoices"],
+    queryFn: () => settingInvoicesApi.findAll({ size: 1 }).then((r) => r.data),
+  });
+  const setting: SettingInvoice | undefined = data?.content?.[0];
+
+  useEffect(() => {
+    if (setting) {
+      setIfu(setting.ifu ?? "");
+      setToken(setting.token ?? "");
+      setStatus(!!setting.status);
+    }
+  }, [setting]);
+
+  const updateMut = useMutation({
+    mutationFn: () =>
+      settingInvoicesApi.update(setting!.id, { ifu, token, status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["setting-invoices"] });
+      toast.success("Configuration MECeF mise à jour");
+    },
+    onError: () => toast.error("Erreur lors de la mise à jour"),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-8">
+        <Spinner />
+      </div>
+    );
+  }
+
+  if (!setting) {
+    return (
+      <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
+        Aucune configuration MECeF n'existe encore pour cette agence. Elle doit
+        être initialisée côté serveur avant de pouvoir être modifiée ici.
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="flex flex-col gap-1">
+        <label className="text-sm font-medium text-gray-700">
+          IFU (Identifiant Fiscal Unique)
+        </label>
+        <input
+          value={ifu}
+          onChange={(e) => setIfu(e.target.value)}
+          disabled={!canManage}
+          className={inputClass}
+        />
+      </div>
+      <div className="flex flex-col gap-1">
+        <label className="text-sm font-medium text-gray-700">Token MECeF</label>
+        <input
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          disabled={!canManage}
+          className={inputClass}
+        />
+      </div>
+      <label className="flex items-center gap-2 text-sm text-gray-700 sm:col-span-2">
+        <input
+          type="checkbox"
+          checked={status}
+          onChange={(e) => setStatus(e.target.checked)}
+          disabled={!canManage}
+          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+        />
+        Activer la synchronisation MECeF
+      </label>
+      <div className="sm:col-span-2">
+        <SaveBar
+          show={canManage}
+          pending={updateMut.isPending}
+          onSave={() => updateMut.mutate()}
+        />
       </div>
     </div>
   );

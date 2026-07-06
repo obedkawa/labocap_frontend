@@ -15,6 +15,8 @@ import type { UseFormReturn } from "react-hook-form";
 import type { SingleValue } from "react-select";
 
 import { PageHeader } from "@/components/ui/PageHeader";
+import { RHFSelect } from "@/components/ui/RHFSelect";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 import { DataTable } from "@/components/common/DataTable";
 import { CrudModal } from "@/components/common/CrudModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
@@ -71,7 +73,7 @@ type ContractFormValues = z.infer<typeof contractSchema>;
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
 
 function buildPayload(values: ContractFormValues): ContractRequest {
   return {
@@ -317,7 +319,7 @@ export default function ContractsPage() {
           <PermissionGate permission={PERMISSIONS.EDIT_CONTRACTS}>
             <button
               onClick={() => openEdit(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
               aria-label="Modifier"
             >
               <Pencil className="h-3.5 w-3.5" />
@@ -351,7 +353,7 @@ export default function ContractsPage() {
           <PermissionGate permission={PERMISSIONS.DELETE_CONTRACTS}>
             <button
               onClick={() => openDelete(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-50 text-red-700 hover:bg-red-100 transition-colors"
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
               aria-label="Supprimer"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -397,10 +399,9 @@ export default function ContractsPage() {
       {/* Filtres */}
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <select
+          <NativeSelect
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className={inputClass}
           >
             <option value="">Tous les statuts</option>
             {CONTRACT_STATUSES.map((s) => (
@@ -408,7 +409,7 @@ export default function ContractsPage() {
                 {s.label}
               </option>
             ))}
-          </select>
+          </NativeSelect>
           <input
             type="text"
             placeholder="Rechercher par nom de contrat..."
@@ -529,7 +530,7 @@ function ContractForm({
   const invoiceUnique = watch("invoiceUnique");
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4">
       <FormField label="Nom du contrat" error={errors.name?.message} className="sm:col-span-2">
         <input
           type="text"
@@ -603,16 +604,15 @@ function ContractForm({
         />
       </FormField>
 
-      <FormField label="Type" error={errors.type?.message}>
-        <select {...register("type")} className={inputClass}>
-          <option value="">Sélectionner un type...</option>
-          {CONTRACT_TYPES.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </select>
-      </FormField>
+      <RHFSelect
+        control={control}
+        name="type"
+        label="Type"
+        options={CONTRACT_TYPES}
+        placeholder="Sélectionner un type..."
+        error={errors.type?.message}
+        isClearable
+      />
 
       <FormField label="Nombre de tests" error={errors.nbrTests?.message}>
         <input
@@ -640,15 +640,14 @@ function ContractForm({
         <input type="date" {...register("endDate")} className={inputClass} />
       </FormField>
 
-      <FormField label="Statut" error={errors.status?.message}>
-        <select {...register("status")} className={inputClass}>
-          {CONTRACT_STATUSES.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-      </FormField>
+      <RHFSelect
+        control={control}
+        name="status"
+        label="Statut"
+        options={CONTRACT_STATUSES}
+        placeholder="Sélectionner un statut..."
+        error={errors.status?.message}
+      />
 
       <FormField label="Facturation unique" error={errors.invoiceUnique?.message}>
         <button

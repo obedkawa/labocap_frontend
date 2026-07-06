@@ -7,6 +7,7 @@ import type { AxiosError } from "axios";
 import { MessageSquare, Phone } from "lucide-react";
 
 import { PageHeader } from "@/components/ui/PageHeader";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 import { CrudModal } from "@/components/common/CrudModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { SignaturePad, type SignaturePadHandle } from "@/components/common/SignaturePad";
@@ -411,7 +412,7 @@ function SignatureModalInner({
               value={retrieverName}
               onChange={(e) => setRetrieverName(e.target.value)}
               disabled={usePatientName}
-              className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
+              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
               placeholder="Saisir le nom du récupérateur"
             />
             <label className="inline-flex items-center gap-2 text-sm text-gray-700">
@@ -596,12 +597,11 @@ function RapportsTab({
           <label className="mb-1 block text-xs font-medium text-gray-600">
             Année
           </label>
-          <select
+          <NativeSelect
             value={selectedYear ?? ""}
             onChange={(e) =>
               onYearChange(e.target.value ? Number(e.target.value) : undefined)
             }
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
             <option value="">Toutes</option>
             {years.map((y) => (
@@ -609,18 +609,17 @@ function RapportsTab({
                 {y}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-gray-600">
             Mois
           </label>
-          <select
+          <NativeSelect
             value={selectedMonth ?? ""}
             onChange={(e) =>
               onMonthChange(e.target.value ? Number(e.target.value) : undefined)
             }
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
             <option value="">Tous</option>
             {MONTHS.map((m) => (
@@ -628,7 +627,7 @@ function RapportsTab({
                 {m.label}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </div>
       </div>
 
@@ -787,7 +786,7 @@ function DemandesTab({
               value={search}
               onChange={(e) => handleFilterChange(() => setSearch(e.target.value))}
               placeholder="Code, patient, médecin..."
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
           <div>
@@ -797,18 +796,17 @@ function DemandesTab({
             >
               Status
             </label>
-            <select
+            <NativeSelect
               id="filter-status"
               value={status}
               onChange={(e) => handleFilterChange(() => setStatus(e.target.value))}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               {STATUS_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
           <div>
             <label
@@ -817,20 +815,19 @@ function DemandesTab({
             >
               Priorité
             </label>
-            <select
+            <NativeSelect
               id="filter-priority"
               value={priority}
               onChange={(e) =>
                 handleFilterChange(() => setPriority(e.target.value))
               }
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               {PRIORITY_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
           <div>
             <label
@@ -839,13 +836,12 @@ function DemandesTab({
             >
               Type d&apos;examen
             </label>
-            <select
+            <NativeSelect
               id="filter-type"
               value={typeOrderId}
               onChange={(e) =>
                 handleFilterChange(() => setTypeOrderId(e.target.value))
               }
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">Tous</option>
               {typeOrders.map((t) => (
@@ -853,7 +849,7 @@ function DemandesTab({
                   {t.title}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
           <div>
             <label
@@ -869,7 +865,7 @@ function DemandesTab({
               onChange={(e) =>
                 handleFilterChange(() => setDateBegin(e.target.value))
               }
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
           <div>
@@ -886,7 +882,7 @@ function DemandesTab({
               onChange={(e) =>
                 handleFilterChange(() => setDateEnd(e.target.value))
               }
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
         </div>
@@ -1003,20 +999,19 @@ function DemandesTab({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 text-sm text-gray-600">
           <span>Lignes par page :</span>
-          <select
+          <NativeSelect
             value={pageSize}
             onChange={(e) => {
               setPageSize(Number(e.target.value));
               setPage(0);
             }}
-            className="rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none"
           >
             {PAGE_SIZE_OPTIONS.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
             ))}
-          </select>
+          </NativeSelect>
           <span className="ml-2">
             {totalElements} résultat{totalElements > 1 ? "s" : ""}
           </span>

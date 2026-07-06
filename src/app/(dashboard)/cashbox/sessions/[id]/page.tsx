@@ -525,7 +525,7 @@ function CloseDailyForm({ form }: { form: UseFormReturn<CloseValues> }) {
   } = form;
 
   const inputClass =
-    "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+    "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
   // Calcul des écarts en temps réel
   const cashCalc = Number(watch("cashCalculated") || 0);
