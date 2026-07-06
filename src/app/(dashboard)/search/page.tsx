@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { PageHeader } from "@/components/ui/PageHeader";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 import { DataTable } from "@/components/common/DataTable";
 import { formatDate } from "@/lib/utils";
 import {
@@ -520,7 +521,7 @@ export default function SearchPage() {
                 onFilterChange<string>(setReferenceHospital)(e.target.value)
               }
               placeholder=""
-              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
@@ -535,7 +536,7 @@ export default function SearchPage() {
               onChange={(e) =>
                 onFilterChange<string>(setDateBegin)(e.target.value)
               }
-              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
@@ -550,7 +551,7 @@ export default function SearchPage() {
               onChange={(e) =>
                 onFilterChange<string>(setDateEnd)(e.target.value)
               }
-              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
@@ -566,7 +567,7 @@ export default function SearchPage() {
                 onFilterChange<string>(setContent)(e.target.value)
               }
               placeholder=""
-              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
@@ -575,18 +576,17 @@ export default function SearchPage() {
             <label className="mb-1 block text-xs font-medium text-gray-600">
               Urgent
             </label>
-            <select
+            <NativeSelect
               value={urgentFilter}
               onChange={(e) =>
                 onFilterChange<"" | "urgent">(setUrgentFilter)(
                   e.target.value as "" | "urgent",
                 )
               }
-              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">Tous</option>
               <option value="urgent">Urgent</option>
-            </select>
+            </NativeSelect>
           </div>
         </div>
       </div>
@@ -598,21 +598,20 @@ export default function SearchPage() {
             <label htmlFor="page-size-top" className="text-xs">
               Afficher
             </label>
-            <select
+            <NativeSelect
               id="page-size-top"
               value={pageSize}
               onChange={(e) => {
                 setPageSize(Number(e.target.value));
                 setPage(0);
               }}
-              className="rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none"
             >
               {PAGE_SIZE_OPTIONS.map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
             <span className="text-xs">
               {data?.totalElements != null
                 ? `· ${data.totalElements} résultat${

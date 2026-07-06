@@ -12,6 +12,8 @@ import type { AxiosError } from "axios";
 import type { UseFormReturn } from "react-hook-form";
 
 import { PageHeader } from "@/components/ui/PageHeader";
+import { RHFSelect } from "@/components/ui/RHFSelect";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 import { DataTable } from "@/components/common/DataTable";
 import { CrudModal } from "@/components/common/CrudModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
@@ -57,7 +59,7 @@ type MovementFormValues = z.infer<typeof movementSchema>;
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
 
 function formatPrice(price: number): string {
   return new Intl.NumberFormat("fr-FR").format(price) + " FCFA";
@@ -356,7 +358,7 @@ export default function ArticlesPage() {
           <PermissionGate permission={PERMISSIONS.EDIT_ARTICLES}>
             <button
               onClick={() => openEdit(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
               aria-label="Modifier"
             >
               <Pencil className="h-3.5 w-3.5" />
@@ -394,7 +396,7 @@ export default function ArticlesPage() {
           <PermissionGate permission={PERMISSIONS.DELETE_ARTICLES}>
             <button
               onClick={() => openDelete(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-50 text-red-700 hover:bg-red-100 transition-colors"
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
               aria-label="Supprimer"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -450,12 +452,11 @@ export default function ArticlesPage() {
           placeholder="Rechercher par nom ou code…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 w-64"
+          className="rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 w-64"
         />
-        <select
+        <NativeSelect
           value={filterSupplierId}
           onChange={(e) => setFilterSupplierId(e.target.value)}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         >
           <option value="">Tous les fournisseurs</option>
           {suppliers.map((s) => (
@@ -463,7 +464,7 @@ export default function ArticlesPage() {
               {s.name}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       </div>
 
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5">
@@ -617,11 +618,12 @@ interface ArticleFormProps {
 function ArticleForm({ form, suppliers, isEdit = false }: ArticleFormProps) {
   const {
     register,
+    control,
     formState: { errors },
   } = form;
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4">
       <FormField label="Nom" required error={errors.name?.message}>
         <input
           type="text"
@@ -640,16 +642,15 @@ function ArticleForm({ form, suppliers, isEdit = false }: ArticleFormProps) {
         />
       </FormField>
 
-      <FormField label="Fournisseur" error={errors.supplierId?.message}>
-        <select {...register("supplierId")} className={inputClass}>
-          <option value="">— Sélectionner un fournisseur —</option>
-          {suppliers.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-      </FormField>
+      <RHFSelect
+        control={control}
+        name="supplierId"
+        label="Fournisseur"
+        options={suppliers.map((s) => ({ value: s.id, label: s.name }))}
+        placeholder="Rechercher un fournisseur..."
+        error={errors.supplierId?.message}
+        isClearable
+      />
 
       <FormField
         label={isEdit ? "Quantité en stock" : "Quantité initiale"}

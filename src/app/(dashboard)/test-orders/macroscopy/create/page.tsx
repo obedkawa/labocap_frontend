@@ -10,6 +10,7 @@ import ReactSelect from "react-select";
 import { hrApi } from "@/lib/api/hr";
 import { macroscopyApi } from "@/lib/api/macroscopy";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { SelectField } from "@/components/ui/SelectField";
 
 // ---------------------------------------------------------------------------
 // Page — Ajouter une macroscopie (réplique exact du formulaire Laravel)
@@ -71,7 +72,7 @@ export default function AddMacroscopyPage() {
   });
 
   const inputClass =
-    "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+    "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
   return (
     <div className="space-y-6">
@@ -91,21 +92,15 @@ export default function AddMacroscopyPage() {
         </div>
 
         <div className="p-5">
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5">
 
             {/* Laborantins — requis */}
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
                 Laborantins <span className="text-red-500">*</span>
               </label>
-              <select
-                value={employeeId}
-                onChange={(e) => setEmployeeId(e.target.value)}
-                className={inputClass}
-                required
-              >
-                <option value="">Tous les laborantins</option>
-                {employees.map((emp) => {
+              <SelectField
+                options={employees.map((emp) => {
                   // L'API backend renvoie firstName/lastName (camelCase),
                   // mais l'interface TS peut différer — on lit les deux pour robustesse.
                   const e = emp as unknown as {
@@ -116,13 +111,12 @@ export default function AddMacroscopyPage() {
                   };
                   const fn = e.firstName ?? e.firstname ?? "";
                   const ln = e.lastName ?? e.lastname ?? "";
-                  return (
-                    <option key={emp.id} value={emp.id}>
-                      {fn} {ln}
-                    </option>
-                  );
+                  return { value: emp.id, label: `${fn} ${ln}`.trim() };
                 })}
-              </select>
+                value={employeeId || null}
+                onChange={(v) => setEmployeeId(v ?? "")}
+                placeholder="Sélectionner un laborantin"
+              />
             </div>
 
             {/* Date */}

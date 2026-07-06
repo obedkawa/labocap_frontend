@@ -91,7 +91,9 @@ function NavItem({ href, icon, label, collapsed, badge = 0 }: NavItemProps) {
   return (
     <Link
       href={href}
-      className={`flex items-center gap-3 px-4 py-2.5 rounded-md mx-2 transition-colors text-sm ${
+      className={`flex items-center px-4 py-2.5 rounded-md mx-2 transition-colors text-sm ${
+        collapsed ? "justify-center" : "gap-3"
+      } ${
         isActive
           ? "bg-gray-700 text-white"
           : "text-gray-300 hover:bg-gray-800 hover:text-white"
@@ -289,6 +291,7 @@ export function Sidebar() {
           <CollapseItem icon={<FlaskConical className="w-5 h-5" />} label="Catalogue d'examens" collapsed={collapsed}>
             {can(PERMISSIONS.VIEW_TESTS) && <SubItem href="/examens" label="Tous les examens" />}
             {can(PERMISSIONS.VIEW_CATEGORY_TESTS) && <SubItem href="/examens/categories" label="Catégories" />}
+            <SubItem href="/examens/vitrine" label="Vitrine des composants" />
           </CollapseItem>
         )}
 

@@ -4,18 +4,25 @@ import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import type { AxiosError } from "axios";
 import type { ColumnDef } from "@tanstack/react-table";
 
-import { DataTable } from "@/components/common/DataTable";
+import { DataTableCard } from "@/components/common/DataTableCard";
 import { CrudModal } from "@/components/common/CrudModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
-import { PermissionGate } from "@/components/common/PermissionGate";
+import { RowActions } from "@/components/common/RowActions";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Button } from "@/components/ui/Button";
+import { SearchInput } from "@/components/ui/SearchInput";
+import { NativeSelect } from "@/components/ui/NativeSelect";
+import {
+  LabTestForm,
+  labTestSchema,
+  type LabTestFormData,
+} from "@/components/examens/LabTestForm";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { formatCFA } from "@/lib/utils";
@@ -26,108 +33,6 @@ import {
   type CategoryTest,
 } from "@/lib/api/examens";
 import type { PageResponse, ApiError } from "@/types/api";
-
-// ---------------------------------------------------------------------------
-// Zod schema
-// ---------------------------------------------------------------------------
-
-const labTestSchema = z.object({
-  categoryTestId: z.string().min(1, "La catégorie est requise"),
-  name: z.string().min(1, "Le nom est requis"),
-  price: z.string().min(1, "Le prix est requis"),
-  status: z.string().min(1, "Le statut est requis"),
-});
-
-type LabTestFormData = z.infer<typeof labTestSchema>;
-
-// ---------------------------------------------------------------------------
-// Form fields
-// ---------------------------------------------------------------------------
-
-interface LabTestFormFieldsProps {
-  register: ReturnType<typeof useForm<LabTestFormData>>["register"];
-  errors: ReturnType<typeof useForm<LabTestFormData>>["formState"]["errors"];
-  categories: CategoryTest[];
-}
-
-function LabTestFormFields({
-  register,
-  errors,
-  categories,
-}: LabTestFormFieldsProps) {
-  return (
-    <div className="flex flex-col gap-4">
-      {/* Catégorie */}
-      <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-gray-700">
-          Catégorie parente <span className="text-red-500">*</span>
-        </label>
-        <select
-          {...register("categoryTestId")}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        >
-          <option value="">Sélectionner une catégorie</option>
-          {categories.map((cat) => (
-            <option key={cat.id} value={cat.id}>
-              {cat.name}
-            </option>
-          ))}
-        </select>
-        {errors.categoryTestId && (
-          <p className="text-xs text-red-500">{errors.categoryTestId.message}</p>
-        )}
-      </div>
-
-      {/* Nom */}
-      <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-gray-700">
-          Nom <span className="text-red-500">*</span>
-        </label>
-        <input
-          type="text"
-          {...register("name")}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
-        {errors.name && (
-          <p className="text-xs text-red-500">{errors.name.message}</p>
-        )}
-      </div>
-
-      {/* Prix */}
-      <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-gray-700">
-          Prix <span className="text-red-500">*</span>
-        </label>
-        <input
-          type="number"
-          min={0}
-          {...register("price")}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
-        {errors.price && (
-          <p className="text-xs text-red-500">{errors.price.message}</p>
-        )}
-      </div>
-
-      {/* Statut */}
-      <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-gray-700">
-          Statut <span className="text-red-500">*</span>
-        </label>
-        <select
-          {...register("status")}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        >
-          <option value="ACTIF">ACTIF</option>
-          <option value="INACTIF">INACTIF</option>
-        </select>
-        {errors.status && (
-          <p className="text-xs text-red-500">{errors.status.message}</p>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Main page
@@ -162,6 +67,7 @@ export default function ExamensPage() {
   // --- Forms
   const {
     register: registerCreate,
+    control: controlCreate,
     handleSubmit: handleSubmitCreate,
     formState: { errors: createErrors },
     reset: resetCreate,
@@ -172,6 +78,7 @@ export default function ExamensPage() {
 
   const {
     register: registerEdit,
+    control: controlEdit,
     handleSubmit: handleSubmitEdit,
     formState: { errors: editErrors },
     reset: resetEdit,
@@ -326,36 +233,14 @@ export default function ExamensPage() {
     {
       header: "Actions",
       id: "actions",
-      cell: ({ row }) => {
-        const test = row.original;
-        return (
-          <div className="flex items-center gap-2">
-            <PermissionGate permission={PERMISSIONS.EDIT_TESTS}>
-              <button
-                type="button"
-                onClick={() => handleOpenEdit(test)}
-                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-                title="Modifier"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-                Modifier
-              </button>
-            </PermissionGate>
-
-            <PermissionGate permission={PERMISSIONS.DELETE_TESTS}>
-              <button
-                type="button"
-                onClick={() => setDeleteConfirm(test)}
-                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
-                title="Supprimer"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Supprimer
-              </button>
-            </PermissionGate>
-          </div>
-        );
-      },
+      cell: ({ row }) => (
+        <RowActions
+          onEdit={() => handleOpenEdit(row.original)}
+          onDelete={() => setDeleteConfirm(row.original)}
+          editPermission={PERMISSIONS.EDIT_TESTS}
+          deletePermission={PERMISSIONS.DELETE_TESTS}
+        />
+      ),
     },
   ];
 
@@ -363,58 +248,53 @@ export default function ExamensPage() {
     <div className="space-y-6">
       <PageHeader
         title="Catalogue d'examens"
+        sticky
         action={
           can(PERMISSIONS.CREATE_TESTS) ? (
-            <button
-              type="button"
+            <Button
               onClick={() => setCreateOpen(true)}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+              icon={<Plus className="h-4 w-4" />}
             >
-              <Plus className="h-4 w-4" />
               Ajouter un examen
-            </button>
+            </Button>
           ) : undefined
         }
       />
 
-      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        {/* Filtres */}
-        <div className="flex gap-3 mb-4">
-          <input
-            type="text"
-            placeholder="Rechercher..."
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-xs w-full"
-          />
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setPage(0);
-            }}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="">Tous</option>
-            <option value="ACTIF">ACTIF</option>
-            <option value="INACTIF">INACTIF</option>
-          </select>
-        </div>
-
-        <DataTable
-          columns={columns}
-          data={tests}
-          isLoading={isLoading}
-          pageCount={pageCount}
-          pageIndex={page}
-          pageSize={pageSize}
-          onPageChange={setPage}
-          onPageSizeChange={(size) => {
-            setPageSize(size);
-            setPage(0);
-          }}
-        />
-      </div>
+      <DataTableCard
+        columns={columns}
+        data={tests}
+        isLoading={isLoading}
+        pageCount={pageCount}
+        pageIndex={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(0);
+        }}
+        filters={
+          <>
+            <SearchInput
+              className="max-w-xs w-full"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+            />
+            <NativeSelect
+              className="w-44"
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setPage(0);
+              }}
+            >
+              <option value="">Tous</option>
+              <option value="ACTIF">ACTIF</option>
+              <option value="INACTIF">INACTIF</option>
+            </NativeSelect>
+          </>
+        }
+      />
 
       {/* Modal Création */}
       <CrudModal
@@ -424,9 +304,12 @@ export default function ExamensPage() {
         onSubmit={handleSubmitCreate(onCreateSubmit)}
         submitLabel="Ajouter un examen"
         isSubmitting={createMutation.isPending}
+        closeOnOverlayClick={false}
+        closeOnEscape={false}
       >
-        <LabTestFormFields
+        <LabTestForm
           register={registerCreate}
+          control={controlCreate}
           errors={createErrors}
           categories={categories}
         />
@@ -440,9 +323,12 @@ export default function ExamensPage() {
         onSubmit={handleSubmitEdit(onEditSubmit)}
         submitLabel="Modifier"
         isSubmitting={updateMutation.isPending}
+        closeOnOverlayClick={false}
+        closeOnEscape={false}
       >
-        <LabTestFormFields
+        <LabTestForm
           register={registerEdit}
+          control={controlEdit}
           errors={editErrors}
           categories={categories}
         />

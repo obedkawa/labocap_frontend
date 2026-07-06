@@ -13,6 +13,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/common/DataTable";
 import { CrudModal } from "@/components/common/CrudModal";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { RHFSelect } from "@/components/ui/RHFSelect";
 import { FormField } from "@/components/ui/FormField";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -31,7 +32,7 @@ import type { PageResponse, ApiError } from "@/types/api";
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 function formatAmount(v?: number) {
   if (v == null) return "—";
@@ -322,23 +323,25 @@ export default function CashboxTicketsPage() {
             />
           </FormField>
 
-          <FormField label="Catégorie de dépense" error={form.formState.errors.expenseCategoryId?.message}>
-            <select {...form.register("expenseCategoryId")} className={inputClass}>
-              <option value="">Sélectionner…</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </FormField>
+          <RHFSelect
+            control={form.control}
+            name="expenseCategoryId"
+            label="Catégorie de dépense"
+            options={categories.map((c) => ({ value: c.id, label: c.name }))}
+            placeholder="Rechercher une catégorie..."
+            error={form.formState.errors.expenseCategoryId?.message}
+            isClearable
+          />
 
-          <FormField label="Fournisseur" error={form.formState.errors.supplierId?.message}>
-            <select {...form.register("supplierId")} className={inputClass}>
-              <option value="">Sélectionner…</option>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </FormField>
+          <RHFSelect
+            control={form.control}
+            name="supplierId"
+            label="Fournisseur"
+            options={suppliers.map((s) => ({ value: s.id, label: s.name }))}
+            placeholder="Rechercher un fournisseur..."
+            error={form.formState.errors.supplierId?.message}
+            isClearable
+          />
 
           {/* Lignes d'articles */}
           <div className="rounded-lg border border-gray-200 p-3">

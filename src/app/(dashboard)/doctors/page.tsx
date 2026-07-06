@@ -38,7 +38,7 @@ type DoctorFormValues = z.infer<typeof doctorSchema>;
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -198,7 +198,7 @@ export default function DoctorsPage() {
 
   const columns: ColumnDef<Doctor>[] = [
     {
-      header: "Nom",
+      header: "Nom & Prénoms",
       accessorKey: "name",
       enableSorting: true,
       cell: ({ row }) => row.original.name,
@@ -210,36 +210,7 @@ export default function DoctorsPage() {
       cell: ({ row }) => row.original.telephone ?? "—",
     },
     {
-      header: "Email",
-      accessorKey: "email",
-      enableSorting: true,
-      cell: ({ row }) =>
-        row.original.email ? (
-          <a
-            href={`mailto:${row.original.email}`}
-            className="text-blue-600 hover:underline"
-          >
-            {row.original.email}
-          </a>
-        ) : (
-          "—"
-        ),
-    },
-    {
-      header: "Rôle",
-      accessorKey: "role",
-      enableSorting: true,
-      cell: ({ row }) =>
-        row.original.role ? (
-          <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
-            {row.original.role}
-          </span>
-        ) : (
-          "—"
-        ),
-    },
-    {
-      header: "Commission (%)",
+      header: "Commission",
       accessorKey: "commission",
       enableSorting: true,
       cell: ({ row }) =>
@@ -254,7 +225,7 @@ export default function DoctorsPage() {
           <PermissionGate permission={PERMISSIONS.EDIT_DOCTORS}>
             <button
               onClick={() => openEdit(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
               aria-label="Modifier"
             >
               <Pencil className="h-3.5 w-3.5" />
@@ -264,7 +235,7 @@ export default function DoctorsPage() {
           <PermissionGate permission={PERMISSIONS.DELETE_DOCTORS}>
             <button
               onClick={() => openDelete(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-50 text-red-700 hover:bg-red-100 transition-colors"
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
               aria-label="Supprimer"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -389,8 +360,8 @@ function DoctorForm({ form }: DoctorFormProps) {
   } = form;
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      <FormField label="Nom complet" required error={errors.name?.message} className="sm:col-span-2">
+    <div className="grid grid-cols-1 gap-4">
+      <FormField label="Nom & Prénom" required error={errors.name?.message}>
         <input
           type="text"
           {...register("name")}
@@ -399,7 +370,7 @@ function DoctorForm({ form }: DoctorFormProps) {
         />
       </FormField>
 
-      <FormField label="Téléphone" error={errors.telephone?.message}>
+      <FormField label="Téléphone" error={errors.telephone?.message} hint="Format : 97000000">
         <input
           type="tel"
           {...register("telephone")}
@@ -417,7 +388,7 @@ function DoctorForm({ form }: DoctorFormProps) {
         />
       </FormField>
 
-      <FormField label="Commission (%)" error={errors.commission?.message}>
+      <FormField label="Commission (en pourcentage)" error={errors.commission?.message}>
         <input
           type="number"
           {...register("commission")}

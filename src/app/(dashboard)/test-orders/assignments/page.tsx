@@ -11,6 +11,7 @@ import type { AxiosError } from "axios";
 
 import { DataTable } from "@/components/common/DataTable";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { formatDate } from "@/lib/utils";
@@ -27,7 +28,7 @@ import type { ApiError, PageResponse } from "@/types/api";
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 function isDoctorRole(name?: string): boolean {
   if (!name) return false;
@@ -249,12 +250,11 @@ export default function AssignmentsPage() {
               >
                 Docteur <span className="text-red-500">*</span>
               </label>
-              <select
+              <NativeSelect
                 id="new-user-id"
                 required
                 value={newUserId}
                 onChange={(e) => setNewUserId(e.target.value)}
-                className={inputClass}
               >
                 <option value="">Sélectionner un docteur</option>
                 {doctors.map((d) => (
@@ -262,7 +262,7 @@ export default function AssignmentsPage() {
                     {d.firstname} {d.lastname}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
 
             <div>
@@ -294,11 +294,10 @@ export default function AssignmentsPage() {
             >
               Demande d&apos;examen
             </label>
-            <select
+            <NativeSelect
               id="filter-test-order"
               value={testOrderFilter}
               onChange={(e) => setTestOrderFilter(e.target.value)}
-              className={inputClass}
             >
               <option value="">Tous</option>
               {testOrders.map((o) =>
@@ -308,7 +307,7 @@ export default function AssignmentsPage() {
                   </option>
                 ) : null
               )}
-            </select>
+            </NativeSelect>
           </div>
 
           {/* 2. Docteur */}
@@ -319,11 +318,10 @@ export default function AssignmentsPage() {
             >
               Docteur
             </label>
-            <select
+            <NativeSelect
               id="filter-doctor"
               value={doctorFilter}
               onChange={(e) => setDoctorFilter(e.target.value)}
-              className={inputClass}
             >
               <option value="">Tous les docteurs</option>
               {doctors.map((d) => (
@@ -331,7 +329,7 @@ export default function AssignmentsPage() {
                   {d.firstname} {d.lastname}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           {/* 3. Rechercher */}

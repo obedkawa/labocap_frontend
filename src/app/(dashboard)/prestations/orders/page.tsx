@@ -17,6 +17,7 @@ import { CrudModal } from "@/components/common/CrudModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { PermissionGate } from "@/components/common/PermissionGate";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { RHFSelect } from "@/components/ui/RHFSelect";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import {
@@ -62,7 +63,7 @@ type OrderFormData = z.infer<typeof orderSchema>;
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 function formatPrice(value: number): string {
   return `${new Intl.NumberFormat("fr-FR").format(value)} FCFA`;
@@ -205,18 +206,15 @@ function OrderForm({
 
       {/* Statut (édition uniquement) */}
       {showStatus && (
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-700">
-            Statut <span className="text-red-500">*</span>
-          </label>
-          <select {...register("status")} className={inputClass}>
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
+        <RHFSelect
+          control={control}
+          name="status"
+          label="Statut"
+          required
+          options={STATUS_OPTIONS.map((s) => ({ value: s, label: s }))}
+          placeholder="Sélectionner un statut..."
+          error={errors.status?.message}
+        />
       )}
     </div>
   );

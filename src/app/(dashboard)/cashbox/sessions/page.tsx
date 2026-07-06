@@ -13,6 +13,7 @@ import { DataTable } from "@/components/common/DataTable";
 import { CrudModal } from "@/components/common/CrudModal";
 import { PermissionGate } from "@/components/common/PermissionGate";
 import { FormField } from "@/components/ui/FormField";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import {
@@ -23,7 +24,7 @@ import {
 import type { ApiError } from "@/types/api";
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -272,10 +273,9 @@ export default function CashboxSessionsPage() {
         >
           <div className="flex flex-col gap-4">
             <FormField label="Caisse" required>
-              <select
+              <NativeSelect
                 value={cashboxId}
                 onChange={(e) => setCashboxId(e.target.value)}
-                className={inputClass}
               >
                 <option value="">Sélectionner une caisse…</option>
                 {(cashboxes ?? []).map((c) => (
@@ -283,7 +283,7 @@ export default function CashboxSessionsPage() {
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </FormField>
 
             <FormField label="Solde d'ouverture">

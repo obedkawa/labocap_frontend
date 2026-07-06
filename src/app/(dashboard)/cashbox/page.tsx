@@ -12,6 +12,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import type { AxiosError } from "axios";
 
 import { PageHeader } from "@/components/ui/PageHeader";
+import { RHFSelect } from "@/components/ui/RHFSelect";
 import { DataTable } from "@/components/common/DataTable";
 import { CrudModal } from "@/components/common/CrudModal";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -38,7 +39,7 @@ const depositSchema = z.object({
 type DepositFormData = z.infer<typeof depositSchema>;
 
 const depositInputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -390,28 +391,18 @@ export default function CashboxVentePage() {
           )}
 
           {/* Banque */}
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-gray-700">
-              Banque <span className="text-red-500">*</span>
-            </label>
-            <select
-              {...depositForm.register("bankId")}
-              className={depositInputClass}
-            >
-              <option value="">— Sélectionner la banque —</option>
-              {banks.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                  {b.accountNumber ? ` (${b.accountNumber})` : ""}
-                </option>
-              ))}
-            </select>
-            {depositForm.formState.errors.bankId && (
-              <p className="text-xs text-red-500">
-                {depositForm.formState.errors.bankId.message}
-              </p>
-            )}
-          </div>
+          <RHFSelect
+            control={depositForm.control}
+            name="bankId"
+            label="Banque"
+            required
+            options={banks.map((b) => ({
+              value: b.id,
+              label: `${b.name}${b.accountNumber ? ` (${b.accountNumber})` : ""}`,
+            }))}
+            placeholder="Rechercher une banque..."
+            error={depositForm.formState.errors.bankId?.message}
+          />
 
           {/* Montant */}
           <div className="flex flex-col gap-1">
