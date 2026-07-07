@@ -222,6 +222,17 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
     if (data.assignedToUserId) payload.assignedToUserId = data.assignedToUserId;
     if (data.option !== undefined) payload.option = data.option;
 
+    // Le PUT remplace l'intégralité de la demande, examens compris.
+    // On réinjecte donc les examens existants pour ne pas les effacer
+    // (ils sont gérés sur la page "détails", pas dans ce formulaire).
+    if (order?.details?.length) {
+      payload.details = order.details.map((d) => ({
+        labTestId: d.labTestId,
+        price: d.price,
+        discount: d.discount,
+      }));
+    }
+
     updateMutation.mutate(payload);
   };
 
@@ -246,7 +257,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
 
       <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6">
             {/* 1. Type d'examen */}
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-700">
@@ -257,6 +268,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
                 control={control}
                 render={({ field }) => (
                   <Select
+                    instanceId="order-type"
                     inputId="typeOrderId"
                     options={typeOrderOptions}
                     placeholder="Sélectionner un type..."
@@ -287,6 +299,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
                 control={control}
                 render={({ field }) => (
                   <Select
+                    instanceId="order-contract"
                     inputId="contratId"
                     options={contractOptions}
                     placeholder="Sélectionner un contrat..."
@@ -317,6 +330,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
                 control={control}
                 render={({ field }) => (
                   <Select
+                    instanceId="order-patient"
                     inputId="patientId"
                     options={patientOptions}
                     placeholder="Sélectionner un patient..."
@@ -348,6 +362,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
                 control={control}
                 render={({ field }) => (
                   <Select
+                    instanceId="order-doctor"
                     inputId="doctorId"
                     options={doctorOptions}
                     placeholder="Sélectionner un médecin..."
@@ -373,6 +388,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
                 control={control}
                 render={({ field }) => (
                   <Select
+                    instanceId="order-hospital"
                     inputId="hospitalId"
                     options={hospitalOptions}
                     placeholder="Sélectionner un hôpital..."
@@ -398,7 +414,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
                 type="text"
                 {...register("referenceHopital")}
                 placeholder="Numéro de référence..."
-                className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
 
@@ -410,7 +426,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
               <input
                 type="date"
                 {...register("prelevementDate")}
-                className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
               {errors.prelevementDate && (
                 <p className="text-xs text-red-500">
@@ -467,6 +483,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
                 control={control}
                 render={({ field }) => (
                   <Select
+                    instanceId="order-assigned-user"
                     inputId="assignedToUserId"
                     options={userOptions}
                     placeholder="Sélectionner un utilisateur..."

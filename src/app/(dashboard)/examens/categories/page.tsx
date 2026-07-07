@@ -4,79 +4,26 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import type { AxiosError } from "axios";
 import type { ColumnDef } from "@tanstack/react-table";
 
-import { DataTable } from "@/components/common/DataTable";
+import { DataTableCard } from "@/components/common/DataTableCard";
 import { CrudModal } from "@/components/common/CrudModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
-import { PermissionGate } from "@/components/common/PermissionGate";
+import { RowActions } from "@/components/common/RowActions";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Button } from "@/components/ui/Button";
+import {
+  CategoryForm,
+  categorySchema,
+  type CategoryFormData,
+} from "@/components/examens/CategoryForm";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { categoryTestsApi, type CategoryTest } from "@/lib/api/examens";
 import type { PageResponse, ApiError } from "@/types/api";
-
-// ---------------------------------------------------------------------------
-// Zod schema
-// ---------------------------------------------------------------------------
-
-const categorySchema = z.object({
-  code: z.string().length(2, "Le code doit faire exactement 2 caractères"),
-  name: z.string().min(1, "Le nom est requis"),
-});
-
-type CategoryFormData = z.infer<typeof categorySchema>;
-
-// ---------------------------------------------------------------------------
-// Form fields
-// ---------------------------------------------------------------------------
-
-interface CategoryFormFieldsProps {
-  register: ReturnType<typeof useForm<CategoryFormData>>["register"];
-  errors: ReturnType<typeof useForm<CategoryFormData>>["formState"]["errors"];
-}
-
-function CategoryFormFields({ register, errors }: CategoryFormFieldsProps) {
-  return (
-    <div className="flex flex-col gap-4">
-      {/* Code */}
-      <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-gray-700">
-          Code <span className="text-red-500">*</span>
-        </label>
-        <input
-          type="text"
-          maxLength={2}
-          placeholder="ex : CF"
-          {...register("code")}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
-        {errors.code && (
-          <p className="text-xs text-red-500">{errors.code.message}</p>
-        )}
-      </div>
-
-      {/* Nom */}
-      <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-gray-700">
-          Nom <span className="text-red-500">*</span>
-        </label>
-        <input
-          type="text"
-          {...register("name")}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
-        {errors.name && (
-          <p className="text-xs text-red-500">{errors.name.message}</p>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Main page
@@ -212,36 +159,14 @@ export default function CategoriesExamensPage() {
     {
       header: "Actions",
       id: "actions",
-      cell: ({ row }) => {
-        const category = row.original;
-        return (
-          <div className="flex items-center gap-2">
-            <PermissionGate permission={PERMISSIONS.EDIT_TESTS}>
-              <button
-                type="button"
-                onClick={() => handleOpenEdit(category)}
-                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-                title="Modifier"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-                Modifier
-              </button>
-            </PermissionGate>
-
-            <PermissionGate permission={PERMISSIONS.DELETE_TESTS}>
-              <button
-                type="button"
-                onClick={() => setDeleteConfirm(category)}
-                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
-                title="Supprimer"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Supprimer
-              </button>
-            </PermissionGate>
-          </div>
-        );
-      },
+      cell: ({ row }) => (
+        <RowActions
+          onEdit={() => handleOpenEdit(row.original)}
+          onDelete={() => setDeleteConfirm(row.original)}
+          editPermission={PERMISSIONS.EDIT_TESTS}
+          deletePermission={PERMISSIONS.DELETE_TESTS}
+        />
+      ),
     },
   ];
 
@@ -249,35 +174,32 @@ export default function CategoriesExamensPage() {
     <div className="space-y-6">
       <PageHeader
         title="Catégories d'examens"
+        sticky
         action={
           can(PERMISSIONS.CREATE_TESTS) ? (
-            <button
-              type="button"
+            <Button
               onClick={() => setCreateOpen(true)}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+              icon={<Plus className="h-4 w-4" />}
             >
-              <Plus className="h-4 w-4" />
               Ajouter une catégorie
-            </button>
+            </Button>
           ) : undefined
         }
       />
 
-      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <DataTable
-          columns={columns}
-          data={categories}
-          isLoading={isLoading}
-          pageCount={pageCount}
-          pageIndex={page}
-          pageSize={pageSize}
-          onPageChange={setPage}
-          onPageSizeChange={(size) => {
-            setPageSize(size);
-            setPage(0);
-          }}
-        />
-      </div>
+      <DataTableCard
+        columns={columns}
+        data={categories}
+        isLoading={isLoading}
+        pageCount={pageCount}
+        pageIndex={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(0);
+        }}
+      />
 
       {/* Modal Création */}
       <CrudModal
@@ -287,8 +209,10 @@ export default function CategoriesExamensPage() {
         onSubmit={handleSubmitCreate(onCreateSubmit)}
         submitLabel="Ajouter une catégorie"
         isSubmitting={createMutation.isPending}
+        closeOnOverlayClick={false}
+        closeOnEscape={false}
       >
-        <CategoryFormFields register={registerCreate} errors={createErrors} />
+        <CategoryForm register={registerCreate} errors={createErrors} />
       </CrudModal>
 
       {/* Modal Édition */}
@@ -299,8 +223,10 @@ export default function CategoriesExamensPage() {
         onSubmit={handleSubmitEdit(onEditSubmit)}
         submitLabel="Modifier"
         isSubmitting={updateMutation.isPending}
+        closeOnOverlayClick={false}
+        closeOnEscape={false}
       >
-        <CategoryFormFields register={registerEdit} errors={editErrors} />
+        <CategoryForm register={registerEdit} errors={editErrors} />
       </CrudModal>
 
       {/* Confirm suppression */}

@@ -15,6 +15,8 @@ interface PageHeaderProps {
   action?: React.ReactNode;
   breadcrumbs?: Breadcrumb[];
   className?: string;
+  /** Rend l'en-tête collant en haut lors du défilement de la page (défaut : true). */
+  sticky?: boolean;
 }
 
 export function PageHeader({
@@ -23,9 +25,17 @@ export function PageHeader({
   action,
   breadcrumbs,
   className,
+  sticky = true,
 }: PageHeaderProps) {
   return (
-    <div className={cn("mb-6", className)}>
+    <div
+      className={cn(
+        "mb-6",
+        sticky &&
+          "sticky top-0 z-30 border-b border-gray-200 bg-white/95 py-4 backdrop-blur supports-[backdrop-filter]:bg-white/80",
+        className
+      )}
+    >
       {/* Breadcrumbs */}
       {breadcrumbs && breadcrumbs.length > 0 && (
         <nav aria-label="Fil d'Ariane" className="mb-2">

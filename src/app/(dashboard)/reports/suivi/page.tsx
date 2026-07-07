@@ -1,25 +1,18 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { AxiosError } from "axios";
-import {
-  CheckCircle2,
-  Clock,
-  FileCheck,
-  Microscope,
-  PackageCheck,
-  PackageX,
-  Phone,
-  PhoneOff,
-  UserCheck,
-} from "lucide-react";
+import { MessageSquare, Phone } from "lucide-react";
 
 import { PageHeader } from "@/components/ui/PageHeader";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 import { CrudModal } from "@/components/common/CrudModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { SignaturePad, type SignaturePadHandle } from "@/components/common/SignaturePad";
+import { usePermissions } from "@/hooks/usePermissions";
+import { PERMISSIONS } from "@/lib/constants/permissions";
 import {
   reportsApi,
   type ReportSuivi,
@@ -114,7 +107,7 @@ function PillTabs({ active, onChange }: PillTabsProps) {
 
 function MacroCell({ row }: { row: ReportSuiviRow }) {
   return row.hasMacro ? (
-    <span className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-300">
+    <span className="inline-flex items-center rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-white">
       Oui
     </span>
   ) : (
@@ -129,7 +122,7 @@ function ReportCell({ row }: { row: ReportSuiviRow }) {
     return (
       <div className="flex flex-col gap-1">
         <span className="inline-flex w-fit items-center rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-white">
-          Terminé
+          Terminer
         </span>
         {row.assignedDoctorName ? (
           <small className="text-[11px] font-semibold uppercase text-gray-500">
@@ -143,7 +136,7 @@ function ReportCell({ row }: { row: ReportSuiviRow }) {
     return (
       <div className="flex flex-col gap-1">
         <span className="inline-flex w-fit items-center rounded-md bg-yellow-500 px-3 py-1 text-xs font-medium text-white">
-          Affecté
+          Affecter
         </span>
         <small className="text-[11px] font-semibold uppercase text-gray-500">
           {row.assignedDoctorName}
@@ -152,8 +145,8 @@ function ReportCell({ row }: { row: ReportSuiviRow }) {
     );
   }
   return (
-    <span className="inline-flex items-center rounded-md bg-gray-400 px-3 py-1 text-xs font-medium text-white">
-      Non affecté
+    <span className="inline-flex items-center rounded-md bg-red-600 px-3 py-1 text-xs font-medium text-white">
+      Non affecter
     </span>
   );
 }
@@ -161,17 +154,45 @@ function ReportCell({ row }: { row: ReportSuiviRow }) {
 interface CallCellProps {
   row: ReportSuiviRow;
   onMarkInformed: (row: ReportSuiviRow) => void;
+  onCall: (row: ReportSuiviRow) => void;
+  onSms: (row: ReportSuiviRow) => void;
 }
 
-function CallCell({ row, onMarkInformed }: CallCellProps) {
+function CallCell({ row, onMarkInformed, onCall, onSms }: CallCellProps) {
+  const { can } = usePermissions();
   const phone = row.patientPhone ?? "";
   const reportTerminated =
     row.reportStatus === "VALIDATED" || row.reportStatus === "DELIVERED";
 
+  // Appel vocal / SMS OurVoice : nécessite la permission, un CR terminé et un téléphone.
+  const canNotify =
+    can(PERMISSIONS.DELIVER_REPORTS) && reportTerminated && !!phone && !!row.reportId;
+
+  const actions = canNotify ? (
+    <div className="flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => onCall(row)}
+        title="Lancer l'appel vocal"
+        className="inline-flex items-center justify-center rounded p-1 text-gray-500 transition-colors hover:bg-gray-100 hover:text-blue-600"
+      >
+        <Phone className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={() => onSms(row)}
+        title="Envoyer un SMS"
+        className="inline-flex items-center justify-center rounded p-1 text-gray-500 transition-colors hover:bg-gray-100 hover:text-green-600"
+      >
+        <MessageSquare className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  ) : null;
+
   if (row.isCalled) {
     return (
       <div className="flex flex-col gap-1">
-        <span className="inline-flex w-fit items-center rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-300">
+        <span className="inline-flex w-fit items-center rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-white">
           Oui
         </span>
         {phone ? (
@@ -179,6 +200,7 @@ function CallCell({ row, onMarkInformed }: CallCellProps) {
             {phone}
           </small>
         ) : null}
+        {actions}
       </div>
     );
   }
@@ -202,6 +224,7 @@ function CallCell({ row, onMarkInformed }: CallCellProps) {
           {phone}
         </small>
       ) : null}
+      {actions}
     </div>
   );
 }
@@ -221,7 +244,7 @@ function DeliveryCell({ row, onOpenSignature, onOpenDetail }: DeliveryCellProps)
       <button
         type="button"
         onClick={() => onOpenDetail(row)}
-        className="inline-flex items-center rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-700"
+        className="inline-flex items-center rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-green-700"
       >
         Détail
       </button>
@@ -389,7 +412,7 @@ function SignatureModalInner({
               value={retrieverName}
               onChange={(e) => setRetrieverName(e.target.value)}
               disabled={usePatientName}
-              className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
+              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
               placeholder="Saisir le nom du récupérateur"
             />
             <label className="inline-flex items-center gap-2 text-sm text-gray-700">
@@ -502,53 +525,6 @@ function DeliveryDetailModal({ row, onClose }: DeliveryDetailModalProps) {
 // Rapports tab (stats — préservé de l'ancienne page)
 // ---------------------------------------------------------------------------
 
-interface KpiCardProps {
-  label: string;
-  value: number;
-  icon: React.ReactNode;
-  colorClass: string;
-}
-
-function KpiCard({ label, value, icon, colorClass }: KpiCardProps) {
-  return (
-    <div className="flex items-center gap-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <div className={`flex-shrink-0 rounded-lg p-3 ${colorClass}`}>{icon}</div>
-      <div>
-        <p className="text-2xl font-bold text-gray-900">{value}</p>
-        <p className="text-sm text-gray-500">{label}</p>
-      </div>
-    </div>
-  );
-}
-
-interface StatRowProps {
-  label: string;
-  value: number;
-  total?: number;
-}
-
-function StatRow({ label, value, total }: StatRowProps) {
-  const pct = total && total > 0 ? Math.round((value / total) * 100) : null;
-  return (
-    <div className="flex items-center justify-between border-b border-gray-100 py-2 last:border-0">
-      <span className="text-sm text-gray-700">{label}</span>
-      <div className="flex items-center gap-3">
-        {pct !== null && (
-          <div className="h-2 w-24 rounded-full bg-gray-100">
-            <div
-              className="h-2 rounded-full bg-blue-500"
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-        )}
-        <span className="w-10 text-right text-sm font-semibold text-gray-900">
-          {value}
-        </span>
-      </div>
-    </div>
-  );
-}
-
 function RapportsTab({
   data,
   isLoading,
@@ -580,6 +556,11 @@ function RapportsTab({
     { value: 11, label: "Novembre" },
     { value: 12, label: "Décembre" },
   ];
+
+  const monthLabel = selectedMonth
+    ? MONTHS.find((m) => m.value === selectedMonth)?.label
+    : undefined;
+  const periodeLabel = `${monthLabel ?? "Tous"} - ${selectedYear ?? "Tous"}`;
 
   if (isLoading) {
     return (
@@ -616,12 +597,11 @@ function RapportsTab({
           <label className="mb-1 block text-xs font-medium text-gray-600">
             Année
           </label>
-          <select
+          <NativeSelect
             value={selectedYear ?? ""}
             onChange={(e) =>
               onYearChange(e.target.value ? Number(e.target.value) : undefined)
             }
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
             <option value="">Toutes</option>
             {years.map((y) => (
@@ -629,18 +609,17 @@ function RapportsTab({
                 {y}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-gray-600">
             Mois
           </label>
-          <select
+          <NativeSelect
             value={selectedMonth ?? ""}
             onChange={(e) =>
               onMonthChange(e.target.value ? Number(e.target.value) : undefined)
             }
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
             <option value="">Tous</option>
             {MONTHS.map((m) => (
@@ -648,127 +627,73 @@ function RapportsTab({
                 {m.label}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          label="Examens reçus (total)"
-          value={data.examens.totalGeneral}
-          icon={<FileCheck className="h-6 w-6 text-blue-600" />}
-          colorClass="bg-blue-50"
-        />
-        <KpiCard
-          label="Rapports en attente"
-          value={data.rapports.attente}
-          icon={<Clock className="h-6 w-6 text-amber-600" />}
-          colorClass="bg-amber-50"
-        />
-        <KpiCard
-          label="Rapports terminés"
-          value={data.rapports.termine}
-          icon={<CheckCircle2 className="h-6 w-6 text-green-600" />}
-          colorClass="bg-green-50"
-        />
-        <KpiCard
-          label="Rapports affectés"
-          value={data.rapports.affecte}
-          icon={<UserCheck className="h-6 w-6 text-purple-600" />}
-          colorClass="bg-purple-50"
-        />
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-gray-800">
-            <Microscope className="h-5 w-5 text-blue-500" />
-            Par type d&apos;examen
-          </h2>
-          <StatRow
-            label="Histologie"
-            value={data.examens.histologie}
-            total={data.examens.totalGeneral}
-          />
-          <StatRow
-            label="Immuno-histo externe"
-            value={data.examens.immunoExterne}
-            total={data.examens.totalGeneral}
-          />
-          <StatRow
-            label="Immuno-histo interne"
-            value={data.examens.immunoInterne}
-            total={data.examens.totalGeneral}
-          />
-          <StatRow
-            label="Cytologie"
-            value={data.examens.cytologie}
-            total={data.examens.totalGeneral}
-          />
-          <div className="mt-3 flex justify-between border-t border-gray-200 pt-3 text-sm font-semibold text-gray-900">
-            <span>Total</span>
-            <span>{data.examens.totalGeneral}</span>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-gray-800">
-            <PackageCheck className="h-5 w-5 text-green-500" />
-            Livraison patients
-          </h2>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between rounded-lg bg-green-50 px-3 py-2">
-              <span className="flex items-center gap-2 text-sm text-green-700">
-                <Phone className="h-4 w-4" />
-                Patients appelés
-              </span>
-              <span className="text-sm font-bold text-green-700">
-                {data.patientCalled.called}
-              </span>
-            </div>
-            <div className="flex items-center justify-between rounded-lg bg-red-50 px-3 py-2">
-              <span className="flex items-center gap-2 text-sm text-red-700">
-                <PhoneOff className="h-4 w-4" />
-                Non appelés
-              </span>
-              <span className="text-sm font-bold text-red-700">
-                {data.patientCalled.notCalled}
-              </span>
-            </div>
-            <div className="flex items-center justify-between rounded-lg bg-blue-50 px-3 py-2">
-              <span className="flex items-center gap-2 text-sm text-blue-700">
-                <PackageCheck className="h-4 w-4" />
-                Livrés
-              </span>
-              <span className="text-sm font-bold text-blue-700">
-                {data.patientCalled.deliver}
-              </span>
-            </div>
-            <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
-              <span className="flex items-center gap-2 text-sm text-gray-700">
-                <PackageX className="h-4 w-4" />
-                Non livrés
-              </span>
-              <span className="text-sm font-bold text-gray-700">
-                {data.patientCalled.notDeliver}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-gray-800">
-            <Microscope className="h-5 w-5 text-purple-500" />
-            Macroscopie
-          </h2>
-          <div className="flex items-center justify-between rounded-lg bg-purple-50 px-4 py-4">
-            <span className="text-sm font-medium text-purple-700">
-              Pathologies enregistrées
-            </span>
-            <span className="text-2xl font-bold text-purple-700">
-              {data.macros.pathology}
-            </span>
-          </div>
+      {/* Tableau de synthèse par période (réplique Laravel onglet "Rapports") */}
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                {[
+                  "Période",
+                  "Demande d'examen",
+                  "Macro",
+                  "Compte rendu",
+                  "Patient informé",
+                  "Patient livré",
+                ].map((h) => (
+                  <th
+                    key={h}
+                    className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600"
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              <tr className="align-top">
+                <td className="px-4 py-3 font-medium text-gray-700">
+                  {periodeLabel}
+                </td>
+                <td className="px-4 py-3 text-gray-700">
+                  <div className="font-semibold text-gray-900">
+                    Total : {data.examens.totalGeneral}
+                  </div>
+                  <div>Histologie : {data.examens.histologie}</div>
+                  <div>Immuno Externe : {data.examens.immunoExterne}</div>
+                  <div>Immuno Interne : {data.examens.immunoInterne}</div>
+                  <div>Cytologie : {data.examens.cytologie}</div>
+                </td>
+                <td className="px-4 py-3 text-gray-700">
+                  <div>Réalisé : {data.macros.pathology}</div>
+                  <div>
+                    Non Réalisé :{" "}
+                    {Math.max(0, data.examens.totalGeneral - data.macros.pathology)}
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-gray-700">
+                  <div>En attente : {data.rapports.attente}</div>
+                  <div>Affecté : {data.rapports.affecte}</div>
+                  <div>Terminée : {data.rapports.termine}</div>
+                </td>
+                <td className="px-4 py-3 text-gray-700">
+                  <div>
+                    En attente :{" "}
+                    {Math.max(0, data.examens.totalGeneral - data.patientCalled.called)}
+                  </div>
+                  <div>Informé : {data.patientCalled.called}</div>
+                </td>
+                <td className="px-4 py-3 text-gray-700">
+                  <div>En attente : {data.patientCalled.notDeliver}</div>
+                  <div>Livré : {data.patientCalled.deliver}</div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -801,6 +726,8 @@ interface DemandesTabProps {
   isError: boolean;
   typeOrders: TypeOrder[];
   onMarkInformed: (row: ReportSuiviRow) => void;
+  onCall: (row: ReportSuiviRow) => void;
+  onSms: (row: ReportSuiviRow) => void;
   onOpenSignature: (row: ReportSuiviRow) => void;
   onOpenDetail: (row: ReportSuiviRow) => void;
 }
@@ -827,6 +754,8 @@ function DemandesTab({
   isError,
   typeOrders,
   onMarkInformed,
+  onCall,
+  onSms,
   onOpenSignature,
   onOpenDetail,
 }: DemandesTabProps) {
@@ -857,7 +786,7 @@ function DemandesTab({
               value={search}
               onChange={(e) => handleFilterChange(() => setSearch(e.target.value))}
               placeholder="Code, patient, médecin..."
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
           <div>
@@ -867,18 +796,17 @@ function DemandesTab({
             >
               Status
             </label>
-            <select
+            <NativeSelect
               id="filter-status"
               value={status}
               onChange={(e) => handleFilterChange(() => setStatus(e.target.value))}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               {STATUS_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
           <div>
             <label
@@ -887,20 +815,19 @@ function DemandesTab({
             >
               Priorité
             </label>
-            <select
+            <NativeSelect
               id="filter-priority"
               value={priority}
               onChange={(e) =>
                 handleFilterChange(() => setPriority(e.target.value))
               }
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               {PRIORITY_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
           <div>
             <label
@@ -909,13 +836,12 @@ function DemandesTab({
             >
               Type d&apos;examen
             </label>
-            <select
+            <NativeSelect
               id="filter-type"
               value={typeOrderId}
               onChange={(e) =>
                 handleFilterChange(() => setTypeOrderId(e.target.value))
               }
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">Tous</option>
               {typeOrders.map((t) => (
@@ -923,7 +849,7 @@ function DemandesTab({
                   {t.title}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
           <div>
             <label
@@ -939,7 +865,7 @@ function DemandesTab({
               onChange={(e) =>
                 handleFilterChange(() => setDateBegin(e.target.value))
               }
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
           <div>
@@ -956,7 +882,7 @@ function DemandesTab({
               onChange={(e) =>
                 handleFilterChange(() => setDateEnd(e.target.value))
               }
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
         </div>
@@ -1047,7 +973,12 @@ function DemandesTab({
                       <ReportCell row={row} />
                     </td>
                     <td className="px-4 py-3 align-top">
-                      <CallCell row={row} onMarkInformed={onMarkInformed} />
+                      <CallCell
+                        row={row}
+                        onMarkInformed={onMarkInformed}
+                        onCall={onCall}
+                        onSms={onSms}
+                      />
                     </td>
                     <td className="px-4 py-3 align-top">
                       <DeliveryCell
@@ -1068,20 +999,19 @@ function DemandesTab({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 text-sm text-gray-600">
           <span>Lignes par page :</span>
-          <select
+          <NativeSelect
             value={pageSize}
             onChange={(e) => {
               setPageSize(Number(e.target.value));
               setPage(0);
             }}
-            className="rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none"
           >
             {PAGE_SIZE_OPTIONS.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
             ))}
-          </select>
+          </NativeSelect>
           <span className="ml-2">
             {totalElements} résultat{totalElements > 1 ? "s" : ""}
           </span>
@@ -1123,6 +1053,9 @@ export default function ReportsSuiviPage() {
 
   // ----- Onglet "Liste des demandes" -----
   const [search, setSearch] = useState("");
+  // Recherche debouncée : le champ reste réactif, mais la requête n'est
+  // déclenchée qu'après ~350 ms d'inactivité pour éviter une requête par frappe.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState("");
   const [priority, setPriority] = useState("");
   const [typeOrderId, setTypeOrderId] = useState("");
@@ -1140,6 +1073,12 @@ export default function ReportsSuiviPage() {
   const [detailRow, setDetailRow] = useState<ReportSuiviRow | null>(null);
   const [informRow, setInformRow] = useState<ReportSuiviRow | null>(null);
 
+  // Debounce de la recherche
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+
   // ----- Queries -----
   const suiviStatsQuery = useQuery<ReportSuivi>({
     queryKey: ["reports-suivi-stats", selectedYear, selectedMonth],
@@ -1156,15 +1095,15 @@ export default function ReportsSuiviPage() {
 
   const listParams = useMemo(() => {
     const params: Record<string, unknown> = { page, size: pageSize };
-    if (search.trim()) params.search = search.trim();
+    if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
     if (status) params.status = Number(status);
     if (typeOrderId) params.typeOrderId = typeOrderId;
     if (dateBegin) params.dateBegin = dateBegin;
     if (dateEnd) params.dateEnd = dateEnd;
     if (priority === "Urgent") params.isUrgent = true;
-    // Note : "Retard" (status=0 et plus de 21 jours) reste à implémenter côté backend.
+    if (priority === "Retard") params.isLate = true;
     return params;
-  }, [page, pageSize, search, status, typeOrderId, dateBegin, dateEnd, priority]);
+  }, [page, pageSize, debouncedSearch, status, typeOrderId, dateBegin, dateEnd, priority]);
 
   const listQuery = useQuery<PageResponse<ReportSuiviRow>>({
     queryKey: ["reports-suivi-list", listParams],
@@ -1197,6 +1136,27 @@ export default function ReportsSuiviPage() {
       toast.error(
         err.response?.data?.message ?? "Erreur lors de la mise à jour",
       );
+    },
+  });
+
+  const callMutation = useMutation({
+    mutationFn: (reportId: string) => reportsApi.callPatient(reportId),
+    onSuccess: () => {
+      toast.success("Appel vocal lancé");
+      queryClient.invalidateQueries({ queryKey: ["reports-suivi-list"] });
+    },
+    onError: (err: AxiosError<ApiError>) => {
+      toast.error(err.response?.data?.message ?? "Erreur lors de l'appel vocal");
+    },
+  });
+
+  const smsMutation = useMutation({
+    mutationFn: (reportId: string) => reportsApi.sendSms(reportId),
+    onSuccess: () => {
+      toast.success("SMS envoyé");
+    },
+    onError: (err: AxiosError<ApiError>) => {
+      toast.error(err.response?.data?.message ?? "Erreur lors de l'envoi du SMS");
     },
   });
 
@@ -1257,6 +1217,8 @@ export default function ReportsSuiviPage() {
           isError={listQuery.isError}
           typeOrders={typeOrdersQuery.data ?? []}
           onMarkInformed={(r) => setInformRow(r)}
+          onCall={(r) => r.reportId && callMutation.mutate(r.reportId)}
+          onSms={(r) => r.reportId && smsMutation.mutate(r.reportId)}
           onOpenSignature={(r) => setSignatureRow(r)}
           onOpenDetail={(r) => setDetailRow(r)}
         />

@@ -1,0 +1,118 @@
+import type { StylesConfig, GroupBase, ClassNamesConfig } from "react-select";
+import type { SelectOption } from "./FormSelect";
+
+/**
+ * Classe appliquée au menu déroulant pour obtenir une barre de défilement
+ * fine qui n'apparaît qu'au survol (voir `.select-menu-scroll` dans globals.css).
+ */
+export const SELECT_MENU_CLASSNAMES: ClassNamesConfig<
+  SelectOption,
+  boolean,
+  GroupBase<SelectOption>
+> = {
+  menuList: () => "select-menu-scroll",
+};
+
+/**
+ * Styles react-select partagés (design soigné, cohérent avec l'app).
+ * Passe `hasError` à true pour la variante bordure rouge.
+ */
+export function buildSelectStyles(
+  hasError: boolean
+): StylesConfig<SelectOption, boolean, GroupBase<SelectOption>> {
+  const borderColor = hasError ? "#fca5a5" : "#d1d5db";
+  const focusColor = hasError ? "#ef4444" : "#3b82f6";
+
+  return {
+    control: (base, state) => ({
+      ...base,
+      minHeight: "40px",
+      borderRadius: "0.5rem",
+      borderColor: state.isFocused ? focusColor : borderColor,
+      boxShadow: state.isFocused ? `0 0 0 1px ${focusColor}` : "none",
+      backgroundColor: state.isDisabled ? "#f9fafb" : "white",
+      paddingLeft: "2px",
+      transition: "border-color .15s ease, box-shadow .15s ease",
+      "&:hover": {
+        borderColor: state.isFocused ? focusColor : "#9ca3af",
+      },
+      fontSize: "0.875rem",
+    }),
+    valueContainer: (base) => ({ ...base, padding: "2px 8px", gap: "4px" }),
+    placeholder: (base) => ({
+      ...base,
+      color: "#9ca3af",
+      fontSize: "0.875rem",
+    }),
+    menu: (base) => ({
+      ...base,
+      borderRadius: "0.625rem",
+      overflow: "hidden",
+      border: "1px solid #e5e7eb",
+      boxShadow:
+        "0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -4px rgba(0,0,0,0.05)",
+      zIndex: 50,
+    }),
+    // Menu rendu via un portail (menuPortal) : doit passer au-dessus des cartes
+    // et des conteneurs à `overflow` (ex. tableaux) pour ne pas être rogné.
+    menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+    menuList: (base) => ({
+      ...base,
+      maxHeight: "240px",
+      padding: "6px",
+    }),
+    option: (base, state) => ({
+      ...base,
+      borderRadius: "0.375rem",
+      padding: "8px 10px",
+      marginBottom: "2px",
+      backgroundColor: state.isSelected
+        ? "#2563eb"
+        : state.isFocused
+        ? "#eff6ff"
+        : "white",
+      color: state.isSelected ? "white" : "#374151",
+      fontSize: "0.875rem",
+      cursor: "pointer",
+      "&:active": {
+        backgroundColor: state.isSelected ? "#2563eb" : "#dbeafe",
+      },
+    }),
+    multiValue: (base) => ({
+      ...base,
+      backgroundColor: "#dbeafe",
+      borderRadius: "0.375rem",
+      overflow: "hidden",
+    }),
+    multiValueLabel: (base) => ({
+      ...base,
+      color: "#1d4ed8",
+      fontSize: "0.75rem",
+      fontWeight: 500,
+    }),
+    multiValueRemove: (base) => ({
+      ...base,
+      color: "#1d4ed8",
+      "&:hover": { backgroundColor: "#bfdbfe", color: "#1e40af" },
+    }),
+    clearIndicator: (base) => ({
+      ...base,
+      color: "#9ca3af",
+      cursor: "pointer",
+      "&:hover": { color: "#4b5563" },
+    }),
+    dropdownIndicator: (base) => ({
+      ...base,
+      color: "#9ca3af",
+      "&:hover": { color: "#4b5563" },
+    }),
+    indicatorSeparator: (base) => ({ ...base, backgroundColor: "#e5e7eb" }),
+    input: (base) => ({ ...base, fontSize: "0.875rem", color: "#111827" }),
+    singleValue: (base) => ({ ...base, fontSize: "0.875rem", color: "#111827" }),
+    noOptionsMessage: (base) => ({
+      ...base,
+      fontSize: "0.875rem",
+      color: "#9ca3af",
+    }),
+  };
+}

@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import Link from "next/link";
-import { ArrowLeft, Lock } from "lucide-react";
+import { ArrowLeft, Lock, FileDown } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { AxiosError } from "axios";
 import type { UseFormReturn } from "react-hook-form";
@@ -75,7 +75,8 @@ function formatDateTime(iso: string) {
 }
 
 function statusBadge(status: number) {
-  if (status === 0) {
+  // Convention backend (CashboxDailyServiceImpl) : 1 = Ouverte, 0 = Clôturée.
+  if (status === 1) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
         <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
@@ -110,13 +111,21 @@ export default function CashboxSessionDetailPage({ params }: PageProps) {
     queryFn: () => cashboxApi.getDaily(id).then((r) => r.data),
   });
 
+  // Date de la session au format attendu par le backend (ISO LocalDate : YYYY-MM-DD).
+  const sessionDate = session?.date ? session.date.slice(0, 10) : undefined;
+
   const { data: operationsData, isLoading: operationsLoading } = useQuery({
-    queryKey: ["cashbox-operations", id],
+    queryKey: ["cashbox-operations", id, sessionDate],
     queryFn: () =>
       cashboxApi
-        .getOperations({ cashboxId: session?.cashboxId, page: 0, size: 100 })
+        .getOperations({
+          cashboxId: session?.cashboxId,
+          date: sessionDate,
+          page: 0,
+          size: 100,
+        })
         .then((r) => r.data),
-    enabled: !!session?.cashboxId,
+    enabled: !!session?.cashboxId && !!sessionDate,
   });
 
   const operations: CashboxOperationResponseDto[] =
@@ -252,8 +261,8 @@ export default function CashboxSessionDetailPage({ params }: PageProps) {
           ]}
           action={
             <div className="flex items-center gap-3">
-              {session?.status === 0 && (
-                <PermissionGate permission={PERMISSIONS.MANAGE_CASHBOX}>
+              {session?.status === 1 && (
+                <PermissionGate permission={PERMISSIONS.EDIT_CASHBOX_DAILIES}>
                   <button
                     onClick={() => {
                       closeForm.reset({
@@ -275,6 +284,26 @@ export default function CashboxSessionDetailPage({ params }: PageProps) {
                     Clôturer la session
                   </button>
                 </PermissionGate>
+              )}
+              {session && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const res = await cashboxApi.downloadDailyPdf(id);
+                      const blob = new Blob([res.data as BlobPart], { type: "application/pdf" });
+                      const url = URL.createObjectURL(blob);
+                      window.open(url, "_blank");
+                      setTimeout(() => URL.revokeObjectURL(url), 10000);
+                    } catch {
+                      toast.error("Erreur lors de la génération du PDF");
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <FileDown className="h-4 w-4" />
+                  Imprimer / PDF
+                </button>
               )}
               <Link
                 href="/cashbox/sessions"
@@ -337,7 +366,7 @@ export default function CashboxSessionDetailPage({ params }: PageProps) {
         </div>
 
         {/* Tableau de synthèse par mode de paiement */}
-        {session && (session.cashCalculated !== null || session.status !== 0) && (
+        {session && (session.cashCalculated !== null || session.status === 0) && (
           <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5">
             <h2 className="mb-4 text-base font-semibold text-gray-800">
               Synthèse par mode de paiement
@@ -496,7 +525,7 @@ function CloseDailyForm({ form }: { form: UseFormReturn<CloseValues> }) {
   } = form;
 
   const inputClass =
-    "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+    "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
   // Calcul des écarts en temps réel
   const cashCalc = Number(watch("cashCalculated") || 0);

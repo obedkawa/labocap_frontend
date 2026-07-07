@@ -43,7 +43,7 @@ type EmployeeFormValues = z.infer<typeof employeeSchema>;
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
 
 function formatSalary(amount?: number): string {
   if (amount == null) return "—";
@@ -85,7 +85,8 @@ export default function EmployeesPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["employees"],
-    queryFn: () => hrApi.findAll().then((r) => r.data),
+    // size élevé : la recherche filtre côté client sur l'ensemble des employés.
+    queryFn: () => hrApi.findAll({ size: 1000 }).then((r) => r.data),
   });
 
   const employees: Employee[] = data?.content ?? [];
@@ -246,7 +247,7 @@ export default function EmployeesPage() {
           <PermissionGate permission={PERMISSIONS.EDIT_EMPLOYEES}>
             <button
               onClick={() => openEdit(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
               aria-label="Modifier"
             >
               <Pencil className="h-3.5 w-3.5" />
@@ -256,7 +257,7 @@ export default function EmployeesPage() {
           <PermissionGate permission={PERMISSIONS.DELETE_EMPLOYEES}>
             <button
               onClick={() => openDelete(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-50 text-red-700 hover:bg-red-100 transition-colors"
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
               aria-label="Supprimer"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -296,7 +297,7 @@ export default function EmployeesPage() {
           placeholder="Rechercher un employé..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full max-w-xs rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         />
       </div>
 
@@ -365,7 +366,7 @@ function EmployeeForm({ form }: EmployeeFormProps) {
   } = form;
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4">
       <FormField label="Prénom" required error={errors.firstName?.message}>
         <input
           type="text"

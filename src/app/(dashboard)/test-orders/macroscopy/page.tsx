@@ -8,6 +8,8 @@ import { toast } from "sonner";
 import type { AxiosError } from "axios";
 
 import { PageHeader } from "@/components/ui/PageHeader";
+import { SelectField } from "@/components/ui/SelectField";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { formatDate } from "@/lib/utils";
 import {
@@ -25,10 +27,7 @@ import type { ApiError } from "@/types/api";
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
-
-const selectClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
 
 // ---------------------------------------------------------------------------
 // Composant : badges d'étapes
@@ -84,8 +83,8 @@ function StepSelect({
   ];
 
   return (
-    <select
-      className="rounded border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none"
+    <NativeSelect
+      selectClassName="text-xs"
       defaultValue=""
       onChange={(e) => {
         if (e.target.value) onUpdate(e.target.value);
@@ -97,7 +96,7 @@ function StepSelect({
           {s.label}
         </option>
       ))}
-    </select>
+    </NativeSelect>
   );
 }
 
@@ -117,24 +116,22 @@ function AssignSelect({
   const [value, setValue] = useState("");
 
   return (
-    <select
-      className={selectClass}
-      value={value}
-      onChange={(e) => {
-        const empId = e.target.value;
+    <SelectField
+      options={employees.map((emp) => ({
+        value: emp.id,
+        label: `${emp.firstName} ${emp.lastName}`,
+      }))}
+      value={value || null}
+      onChange={(v) => {
+        const empId = v ?? "";
         setValue(empId);
         if (empId) {
           onAssign(order.id, empId);
         }
       }}
-    >
-      <option value="">— Assigner un laborantin —</option>
-      {employees.map((emp) => (
-        <option key={emp.id} value={emp.id}>
-          {emp.firstName} {emp.lastName}
-        </option>
-      ))}
-    </select>
+      placeholder="— Assigner un laborantin —"
+      menuPortal
+    />
   );
 }
 
@@ -235,15 +232,14 @@ function PendingByTypeTable({
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-3 text-sm">
         <div className="flex items-center gap-2 text-gray-600">
           <span>Afficher</span>
-          <select
+          <NativeSelect
             value={pageSize}
             onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }}
-            className="rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none"
           >
             {[5, 10, 25, 50, 100].map((n) => (
               <option key={n} value={n}>{n}</option>
             ))}
-          </select>
+          </NativeSelect>
           <span>par page</span>
         </div>
 
@@ -496,18 +492,13 @@ export default function MacroscopyGlobalPage() {
               <label className="mb-1 block text-xs font-medium text-gray-600">
                 Demande d&apos;examen
               </label>
-              <select
-                className={selectClass}
-                value={filterOrderId}
-                onChange={(e) => setFilterOrderId(e.target.value)}
-              >
-                <option value="">Toutes les demandes</option>
-                {orders.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.code}
-                  </option>
-                ))}
-              </select>
+              <SelectField
+                options={orders.map((o) => ({ value: o.id, label: o.code }))}
+                value={filterOrderId || null}
+                onChange={(v) => setFilterOrderId(v ?? "")}
+                placeholder="Toutes les demandes"
+                isClearable
+              />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-gray-600">
@@ -524,18 +515,16 @@ export default function MacroscopyGlobalPage() {
               <label className="mb-1 block text-xs font-medium text-gray-600">
                 Réalisé par
               </label>
-              <select
-                className={selectClass}
-                value={filterEmployeeId}
-                onChange={(e) => setFilterEmployeeId(e.target.value)}
-              >
-                <option value="">Tous les laborantins</option>
-                {employees.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.firstName} {emp.lastName}
-                  </option>
-                ))}
-              </select>
+              <SelectField
+                options={employees.map((emp) => ({
+                  value: emp.id,
+                  label: `${emp.firstName} ${emp.lastName}`,
+                }))}
+                value={filterEmployeeId || null}
+                onChange={(v) => setFilterEmployeeId(v ?? "")}
+                placeholder="Tous les laborantins"
+                isClearable
+              />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-gray-600">
@@ -671,18 +660,13 @@ export default function MacroscopyGlobalPage() {
             <label className="mb-1 block text-xs font-medium text-gray-600">
               Type d&apos;examen
             </label>
-            <select
-              className={selectClass}
-              value={filterTypeId}
-              onChange={(e) => setFilterTypeId(e.target.value)}
-            >
-              <option value="">Tous</option>
-              {typeOrders.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.title}
-                </option>
-              ))}
-            </select>
+            <SelectField
+              options={typeOrders.map((t) => ({ value: t.id, label: t.title }))}
+              value={filterTypeId || null}
+              onChange={(v) => setFilterTypeId(v ?? "")}
+              placeholder="Tous"
+              isClearable
+            />
           </div>
 
           {pendingLoading ? (

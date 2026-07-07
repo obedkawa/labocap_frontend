@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Download } from "lucide-react";
 import ReactSelect from "react-select";
@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { PageHeader } from "@/components/ui/PageHeader";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 import { DataTable } from "@/components/common/DataTable";
 import { formatDate } from "@/lib/utils";
 import {
@@ -55,7 +56,25 @@ export default function SearchPage() {
   const [dateBegin, setDateBegin] = useState("");
   const [dateEnd, setDateEnd] = useState("");
   const [content, setContent] = useState("");
-  const [urgentFilter, setUrgentFilter] = useState<"" | "urgent" | "retard">("");
+  // Le backend /reports/search-global n'expose que le filtre `isUrgent`
+  // (aucun paramètre "retard"/isLate) : on s'en tient donc à urgent / tous.
+  const [urgentFilter, setUrgentFilter] = useState<"" | "urgent">("");
+
+  // Valeurs debouncées (champs texte libres) pour éviter de relancer la
+  // requête à chaque frappe — ~350ms après la dernière saisie.
+  const [debouncedRefHospital, setDebouncedRefHospital] = useState("");
+  const [debouncedContent, setDebouncedContent] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedRefHospital(referenceHospital), 350);
+    return () => clearTimeout(t);
+  }, [referenceHospital]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedContent(content), 350);
+    return () => clearTimeout(t);
+  }, [content]);
 
   // -----------------------------------------------------------------------
   // Chargement des options des selects
@@ -137,6 +156,23 @@ export default function SearchPage() {
   // -----------------------------------------------------------------------
   // Requête de recherche
   // -----------------------------------------------------------------------
+  // Construit les paramètres de recherche partagés entre la requête paginée
+  // et l'export (qui réutilise exactement les mêmes filtres).
+  const buildSearchParams = (pageArg: number, sizeArg: number) => ({
+    page: pageArg,
+    size: sizeArg,
+    typeOrderIds: typeOrderIds.length ? typeOrderIds : undefined,
+    contratIds: contratIds.length ? contratIds : undefined,
+    patientIds: patientIds.length ? patientIds : undefined,
+    doctorIds: doctorIds.length ? doctorIds : undefined,
+    hospitalIds: hospitalIds.length ? hospitalIds : undefined,
+    referenceHospital: debouncedRefHospital || undefined,
+    dateBegin: dateBegin || undefined,
+    dateEnd: dateEnd || undefined,
+    content: debouncedContent || undefined,
+    isUrgent: urgentFilter === "urgent" ? true : undefined,
+  });
+
   const { data, isLoading, isFetching } = useQuery({
     queryKey: [
       "reports-search-global",
@@ -148,29 +184,16 @@ export default function SearchPage() {
         patientIds,
         doctorIds,
         hospitalIds,
-        referenceHospital,
+        referenceHospital: debouncedRefHospital,
         dateBegin,
         dateEnd,
-        content,
+        content: debouncedContent,
         urgentFilter,
       },
     ],
     queryFn: () =>
       reportsApi
-        .searchGlobal({
-          page,
-          size: pageSize,
-          typeOrderIds: typeOrderIds.length ? typeOrderIds : undefined,
-          contratIds: contratIds.length ? contratIds : undefined,
-          patientIds: patientIds.length ? patientIds : undefined,
-          doctorIds: doctorIds.length ? doctorIds : undefined,
-          hospitalIds: hospitalIds.length ? hospitalIds : undefined,
-          referenceHospital: referenceHospital || undefined,
-          dateBegin: dateBegin || undefined,
-          dateEnd: dateEnd || undefined,
-          content: content || undefined,
-          isUrgent: urgentFilter === "urgent" ? true : undefined,
-        })
+        .searchGlobal(buildSearchParams(page, pageSize))
         .then((r) => r.data),
     placeholderData: (prev) => prev,
   });
@@ -257,8 +280,27 @@ export default function SearchPage() {
   // -----------------------------------------------------------------------
   // Export CSV
   // -----------------------------------------------------------------------
-  const exportToCsv = () => {
-    const rows = data?.content ?? [];
+  const exportToCsv = async () => {
+    const total = data?.totalElements ?? 0;
+    if (total === 0) {
+      toast.error("Aucune donnée à exporter");
+      return;
+    }
+
+    // On ne se limite pas à la page courante : on relance la recherche avec
+    // un `size` couvrant l'ensemble des résultats filtrés avant l'export.
+    let rows: ReportGlobalSearchRow[] = [];
+    setIsExporting(true);
+    try {
+      const res = await reportsApi.searchGlobal(buildSearchParams(0, total));
+      rows = res.data.content ?? [];
+    } catch {
+      toast.error("Erreur lors de l'export");
+      setIsExporting(false);
+      return;
+    }
+    setIsExporting(false);
+
     if (rows.length === 0) {
       toast.error("Aucune donnée à exporter");
       return;
@@ -344,6 +386,7 @@ export default function SearchPage() {
             </label>
             <ReactSelect<SelectOption, true>
               isMulti
+              instanceId="filter-type-order"
               options={typeOrderOptions}
               value={typeOrderOptions.filter((o) =>
                 typeOrderIds.includes(o.value),
@@ -366,6 +409,7 @@ export default function SearchPage() {
             </label>
             <ReactSelect<SelectOption, true>
               isMulti
+              instanceId="filter-contrat"
               options={contratOptions}
               value={contratOptions.filter((o) => contratIds.includes(o.value))}
               onChange={(opts) =>
@@ -386,6 +430,7 @@ export default function SearchPage() {
             </label>
             <ReactSelect<PatientOption, true>
               isMulti
+              instanceId="filter-patient"
               options={patientOptions}
               value={patientOptions.filter((o) => patientIds.includes(o.value))}
               onChange={(opts) =>
@@ -427,6 +472,7 @@ export default function SearchPage() {
             </label>
             <ReactSelect<SelectOption, true>
               isMulti
+              instanceId="filter-doctor"
               options={doctorOptions}
               value={doctorOptions.filter((o) => doctorIds.includes(o.value))}
               onChange={(opts) =>
@@ -447,6 +493,7 @@ export default function SearchPage() {
             </label>
             <ReactSelect<SelectOption, true>
               isMulti
+              instanceId="filter-hospital"
               options={hospitalOptions}
               value={hospitalOptions.filter((o) =>
                 hospitalIds.includes(o.value),
@@ -474,7 +521,7 @@ export default function SearchPage() {
                 onFilterChange<string>(setReferenceHospital)(e.target.value)
               }
               placeholder=""
-              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
@@ -489,7 +536,7 @@ export default function SearchPage() {
               onChange={(e) =>
                 onFilterChange<string>(setDateBegin)(e.target.value)
               }
-              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
@@ -504,7 +551,7 @@ export default function SearchPage() {
               onChange={(e) =>
                 onFilterChange<string>(setDateEnd)(e.target.value)
               }
-              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
@@ -520,7 +567,7 @@ export default function SearchPage() {
                 onFilterChange<string>(setContent)(e.target.value)
               }
               placeholder=""
-              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
@@ -529,19 +576,17 @@ export default function SearchPage() {
             <label className="mb-1 block text-xs font-medium text-gray-600">
               Urgent
             </label>
-            <select
+            <NativeSelect
               value={urgentFilter}
               onChange={(e) =>
-                onFilterChange<"" | "urgent" | "retard">(setUrgentFilter)(
-                  e.target.value as "" | "urgent" | "retard",
+                onFilterChange<"" | "urgent">(setUrgentFilter)(
+                  e.target.value as "" | "urgent",
                 )
               }
-              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">Tous</option>
               <option value="urgent">Urgent</option>
-              <option value="retard">Retard</option>
-            </select>
+            </NativeSelect>
           </div>
         </div>
       </div>
@@ -553,21 +598,20 @@ export default function SearchPage() {
             <label htmlFor="page-size-top" className="text-xs">
               Afficher
             </label>
-            <select
+            <NativeSelect
               id="page-size-top"
               value={pageSize}
               onChange={(e) => {
                 setPageSize(Number(e.target.value));
                 setPage(0);
               }}
-              className="rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none"
             >
               {PAGE_SIZE_OPTIONS.map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
             <span className="text-xs">
               {data?.totalElements != null
                 ? `· ${data.totalElements} résultat${
@@ -580,10 +624,11 @@ export default function SearchPage() {
           <button
             type="button"
             onClick={exportToCsv}
-            className="inline-flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
+            disabled={isExporting}
+            className="inline-flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50"
           >
             <Download className="h-4 w-4" />
-            Exporter Excel
+            {isExporting ? "Export en cours…" : "Exporter Excel"}
           </button>
         </div>
 

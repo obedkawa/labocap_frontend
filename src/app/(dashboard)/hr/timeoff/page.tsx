@@ -17,6 +17,7 @@ import { DataTable } from "@/components/common/DataTable";
 import { CrudModal } from "@/components/common/CrudModal";
 import { PermissionGate } from "@/components/common/PermissionGate";
 import { FormField } from "@/components/ui/FormField";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { hrApi, TimeOff, TimeOffRequest, TimeoffStatus, Employee } from "@/lib/api/hr";
@@ -39,10 +40,7 @@ type TimeOffFormValues = z.infer<typeof timeOffSchema>;
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
-
-const selectClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
 
 function diffDays(start: string, end: string): number {
   const s = new Date(start);
@@ -302,6 +300,7 @@ export default function TimeOffPage() {
       <div className="flex flex-wrap gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
         <div className="min-w-[220px]">
           <ReactSelect
+            instanceId="timeoff-filter-employee"
             options={employeeOptions}
             value={employeeOptions.find((o) => o.value === selectedEmployeeId) ?? null}
             onChange={(opt) => setSelectedEmployeeId(opt?.value ?? "")}
@@ -311,16 +310,16 @@ export default function TimeOffPage() {
           />
         </div>
 
-        <select
+        <NativeSelect
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
-          className={selectClass + " max-w-[180px]"}
+          className="w-full max-w-[180px]"
         >
           <option value="">Tous les statuts</option>
           <option value="PENDING">En attente</option>
           <option value="APPROVED">Approuvé</option>
           <option value="REJECTED">Rejeté</option>
-        </select>
+        </NativeSelect>
 
         <input
           type="month"
@@ -383,7 +382,7 @@ function TimeOffForm({ form, employeeOptions }: TimeOffFormProps) {
   } = form;
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4">
       <FormField
         label="Employé"
         required
@@ -395,6 +394,7 @@ function TimeOffForm({ form, employeeOptions }: TimeOffFormProps) {
           control={control}
           render={({ field }) => (
             <ReactSelect
+              instanceId="timeoff-form-employee"
               options={employeeOptions}
               value={employeeOptions.find((o) => o.value === field.value) ?? null}
               onChange={(opt) => field.onChange(opt?.value ?? "")}
@@ -410,7 +410,7 @@ function TimeOffForm({ form, employeeOptions }: TimeOffFormProps) {
         <input
           type="date"
           {...register("startDate")}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
         />
       </FormField>
 
@@ -418,7 +418,7 @@ function TimeOffForm({ form, employeeOptions }: TimeOffFormProps) {
         <input
           type="date"
           {...register("endDate")}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
         />
       </FormField>
 
@@ -427,7 +427,7 @@ function TimeOffForm({ form, employeeOptions }: TimeOffFormProps) {
           {...register("reason")}
           rows={3}
           placeholder="Motif du congé (optionnel)..."
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
         />
       </FormField>
     </div>

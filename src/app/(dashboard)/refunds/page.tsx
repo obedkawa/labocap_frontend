@@ -12,6 +12,8 @@ import type { AxiosError } from "axios";
 import type { UseFormReturn } from "react-hook-form";
 
 import { PageHeader } from "@/components/ui/PageHeader";
+import { RHFSelect } from "@/components/ui/RHFSelect";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 import { DataTable } from "@/components/common/DataTable";
 import { CrudModal } from "@/components/common/CrudModal";
 import { PermissionGate } from "@/components/common/PermissionGate";
@@ -25,13 +27,14 @@ import {
   RefundRequest,
   RefundReason,
 } from "@/lib/api/refunds";
+import { invoicesApi, type Invoice } from "@/lib/api/invoices";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50";
 
 function formatAmount(amount: number): string {
   return new Intl.NumberFormat("fr-FR").format(amount) + " FCFA";
@@ -52,6 +55,9 @@ function statusBadge(status: string) {
     return <Badge variant="success">Approuvé</Badge>;
   if (status === "Clôturé")
     return <Badge variant="info">Clôturé</Badge>;
+  // Valeur posée par reject() (cf. refundsApi.reject → status: "Rejeté")
+  if (status === "Rejeté")
+    return <Badge variant="danger">Rejeté</Badge>;
   return <Badge variant="danger">{status}</Badge>;
 }
 
@@ -94,7 +100,7 @@ function RefundsContent() {
 
   // ---- Query ---------------------------------------------------------------
 
-  const params: Record<string, unknown> = {};
+  const params: Record<string, unknown> = { size: 1000 };
   if (statusFilter) params.status = statusFilter;
 
   const { data, isLoading } = useQuery({
@@ -112,6 +118,15 @@ function RefundsContent() {
   });
 
   const reasons: RefundReason[] = Array.isArray(reasonsData) ? reasonsData : [];
+
+  // ---- Invoices query (sélecteur de facture) ------------------------------
+
+  const { data: invoicesData } = useQuery({
+    queryKey: ["invoices", "refund-select"],
+    queryFn: () => invoicesApi.findAll({ size: 1000 }).then((r) => r.data),
+  });
+
+  const invoices: Invoice[] = invoicesData?.content ?? [];
 
   function getReasonLabel(refundReasonId?: string): string {
     if (!refundReasonId) return "—";
@@ -307,16 +322,16 @@ function RefundsContent() {
       {/* Filtre statut */}
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <select
+          <NativeSelect
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className={inputClass}
           >
             <option value="">Tous les statuts</option>
             <option value="En attente">En attente</option>
             <option value="Aprouvé">Approuvé</option>
             <option value="Clôturé">Clôturé</option>
-          </select>
+            <option value="Rejeté">Rejeté</option>
+          </NativeSelect>
         </div>
       </div>
 
@@ -334,7 +349,7 @@ function RefundsContent() {
         submitLabel="Soumettre"
         isSubmitting={createMutation.isPending}
       >
-        <RefundForm form={createForm} reasons={reasons} />
+        <RefundForm form={createForm} reasons={reasons} invoices={invoices} />
       </CrudModal>
     </div>
   );
@@ -347,43 +362,42 @@ function RefundsContent() {
 interface RefundFormProps {
   form: UseFormReturn<RefundFormValues>;
   reasons: RefundReason[];
+  invoices: Invoice[];
 }
 
-function RefundForm({ form, reasons }: RefundFormProps) {
+function RefundForm({ form, reasons, invoices }: RefundFormProps) {
   const {
     register,
+    control,
     formState: { errors },
   } = form;
 
   return (
     <div className="space-y-4">
-      <FormField
-        label="Identifiant de facture"
+      <RHFSelect
+        control={control}
+        name="invoiceId"
+        label="Facture"
         required
+        options={invoices.map((inv) => ({
+          value: inv.id,
+          label: `${inv.code} — ${formatAmount(inv.total)}${
+            inv.patientName ? ` (${inv.patientName})` : ""
+          }`,
+        }))}
+        placeholder="Sélectionner une facture"
         error={errors.invoiceId?.message}
-      >
-        <input
-          type="text"
-          {...register("invoiceId")}
-          placeholder="ID ou référence de la facture"
-          className={inputClass}
-        />
-      </FormField>
+      />
 
-      <FormField
+      <RHFSelect
+        control={control}
+        name="refundReasonId"
         label="Motif de remboursement"
         required
+        options={reasons.map((r) => ({ value: r.id, label: r.label }))}
+        placeholder="Sélectionner un motif"
         error={errors.refundReasonId?.message}
-      >
-        <select {...register("refundReasonId")} className={inputClass}>
-          <option value="">Sélectionner un motif</option>
-          {reasons.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.label}
-            </option>
-          ))}
-        </select>
-      </FormField>
+      />
 
       <FormField
         label="Montant (FCFA)"

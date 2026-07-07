@@ -1,16 +1,30 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { Eye } from "lucide-react";
+import { Eye, Plus } from "lucide-react";
+import { toast } from "sonner";
 import type { ColumnDef } from "@tanstack/react-table";
+import type { AxiosError } from "axios";
 
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DataTable } from "@/components/common/DataTable";
+import { CrudModal } from "@/components/common/CrudModal";
 import { PermissionGate } from "@/components/common/PermissionGate";
+import { FormField } from "@/components/ui/FormField";
+import { NativeSelect } from "@/components/ui/NativeSelect";
+import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
-import { cashboxApi, CashboxDailyResponseDto } from "@/lib/api/cashbox";
+import {
+  cashboxApi,
+  CashboxDailyResponseDto,
+  CashboxResponseDto,
+} from "@/lib/api/cashbox";
+import type { ApiError } from "@/types/api";
+
+const inputClass =
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -34,7 +48,8 @@ function formatDate(iso: string) {
 }
 
 function statusBadge(status: number) {
-  if (status === 0) {
+  // Convention backend (CashboxDailyServiceImpl) : 1 = Ouverte, 0 = Clôturée.
+  if (status === 1) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
         <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
@@ -55,9 +70,17 @@ function statusBadge(status: number) {
 // ---------------------------------------------------------------------------
 
 export default function CashboxSessionsPage() {
+  const { can } = usePermissions();
+  const queryClient = useQueryClient();
+
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const [dateFilter, setDateFilter] = useState("");
+
+  // ---- Ouverture de session
+  const [openModalOpen, setOpenModalOpen] = useState(false);
+  const [openingBalance, setOpeningBalance] = useState("");
+  const [cashboxId, setCashboxId] = useState("");
 
   const { data, isLoading } = useQuery({
     queryKey: ["cashbox-dailies", pageIndex, pageSize, dateFilter],
@@ -73,6 +96,39 @@ export default function CashboxSessionsPage() {
 
   const sessions: CashboxDailyResponseDto[] = data?.content ?? [];
   const totalPages = data?.totalPages ?? 0;
+
+  // Caisses disponibles (pour choisir laquelle ouvrir)
+  const { data: cashboxes } = useQuery<CashboxResponseDto[]>({
+    queryKey: ["cashboxes"],
+    queryFn: () => cashboxApi.getCashboxes().then((r) => r.data.content),
+    enabled: openModalOpen,
+  });
+
+  const openMutation = useMutation({
+    mutationFn: () =>
+      cashboxApi.openDaily({
+        soldeOuverture: Number(openingBalance) || 0,
+        cashboxId,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cashbox-dailies"] });
+      queryClient.invalidateQueries({ queryKey: ["cashboxes"] });
+      toast.success("Session ouverte");
+      setOpenModalOpen(false);
+      setOpeningBalance("");
+      setCashboxId("");
+    },
+    onError: (e: AxiosError<ApiError>) =>
+      toast.error(e.response?.data?.message ?? "Erreur lors de l'ouverture"),
+  });
+
+  const handleOpenSubmit = () => {
+    if (!cashboxId) {
+      toast.error("Veuillez sélectionner une caisse");
+      return;
+    }
+    openMutation.mutate();
+  };
 
   // ---- Colonnes ----
   const columns: ColumnDef<CashboxDailyResponseDto>[] = [
@@ -145,6 +201,18 @@ export default function CashboxSessionsPage() {
             { label: "Caisse de vente", href: "/cashbox" },
             { label: "Sessions" },
           ]}
+          action={
+            can(PERMISSIONS.CREATE_CASHBOX_DAILIES) ? (
+              <button
+                type="button"
+                onClick={() => setOpenModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                Ouvrir une session
+              </button>
+            ) : undefined
+          }
         />
 
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5">
@@ -193,6 +261,43 @@ export default function CashboxSessionsPage() {
             }}
           />
         </div>
+
+        {/* Modal ouverture de session */}
+        <CrudModal
+          isOpen={openModalOpen}
+          onClose={() => setOpenModalOpen(false)}
+          title="Ouvrir une session de caisse"
+          onSubmit={handleOpenSubmit}
+          submitLabel="Ouvrir"
+          isSubmitting={openMutation.isPending}
+        >
+          <div className="flex flex-col gap-4">
+            <FormField label="Caisse" required>
+              <NativeSelect
+                value={cashboxId}
+                onChange={(e) => setCashboxId(e.target.value)}
+              >
+                <option value="">Sélectionner une caisse…</option>
+                {(cashboxes ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </FormField>
+
+            <FormField label="Solde d'ouverture">
+              <input
+                type="number"
+                min={0}
+                value={openingBalance}
+                onChange={(e) => setOpeningBalance(e.target.value)}
+                placeholder="0"
+                className={inputClass}
+              />
+            </FormField>
+          </div>
+        </CrudModal>
       </div>
     </PermissionGate>
   );

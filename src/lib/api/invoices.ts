@@ -125,6 +125,10 @@ export const invoicesApi = {
   cancelMecef: (id: string, uid: string) =>
     apiClient.post<Invoice>(`/invoices/${id}/cancel-mecef`, { uid }),
 
+  /** Télécharge le PDF imprimable de la facture (réplique Laravel invoices/print). */
+  downloadPdf: (id: string) =>
+    apiClient.get(`/invoices/${id}/pdf`, { responseType: "blob" }),
+
   getFinanceStats: () => apiClient.get<FinanceStats>("/invoices/business"),
 
   getMonthlyStats: (year?: number) =>

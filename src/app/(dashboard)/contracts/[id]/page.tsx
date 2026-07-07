@@ -19,6 +19,7 @@ import Link from "next/link";
 import type { AxiosError } from "axios";
 
 import { PageHeader } from "@/components/ui/PageHeader";
+import { RHFSelect } from "@/components/ui/RHFSelect";
 import { CrudModal } from "@/components/common/CrudModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { PermissionGate } from "@/components/common/PermissionGate";
@@ -45,7 +46,7 @@ function formatAmount(v?: number | null) {
 }
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -90,10 +91,11 @@ export default function ContractDetailPage({
     queryFn: () => contractsApi.findById(contractId).then((r) => r.data),
   });
 
+  // Chargé indépendamment (pas seulement à l'ouverture du modal) afin de
+  // pouvoir résoudre le nom des catégories dans le tableau des lignes.
   const { data: categoriesData } = useQuery({
     queryKey: ["category-tests-all"],
     queryFn: () => categoryTestsApi.findAll({ size: 200 }).then((r) => r.data),
-    enabled: addCatOpen,
   });
 
   const { data: examensData } = useQuery({
@@ -104,6 +106,14 @@ export default function ContractDetailPage({
 
   const categories = categoriesData?.content ?? [];
   const examens = examensData?.content ?? [];
+
+  // Résout le nom d'une catégorie à partir de son id (lignes de contrat ajoutées
+  // par catégorie, qui n'ont pas de labTestName).
+  function getCategoryName(categoryTestId?: string): string | null {
+    if (!categoryTestId) return null;
+    const found = categories.find((c) => c.id === categoryTestId);
+    return found?.name ?? null;
+  }
 
   // ---- Mutations -----------------------------------------------------------
 
@@ -326,7 +336,11 @@ export default function ContractDetailPage({
                 {details.map((d) => (
                   <tr key={d.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 text-gray-900">
-                      {d.labTestName ?? (d.categoryTestId ? `Catégorie #${d.categoryTestId.slice(0, 8)}` : "—")}
+                      {d.labTestName ??
+                        getCategoryName(d.categoryTestId) ??
+                        (d.categoryTestId
+                          ? `Catégorie #${d.categoryTestId.slice(0, 8)}`
+                          : "—")}
                     </td>
                     <td className="px-4 py-3 text-right text-gray-700">{formatAmount(d.price)}</td>
                     <td className="px-4 py-3 text-right text-gray-700">
@@ -368,14 +382,15 @@ export default function ContractDetailPage({
         isSubmitting={addCategoryMutation.isPending}
       >
         <div className="flex flex-col gap-4">
-          <FormField label="Catégorie d'examen" required error={catForm.formState.errors.categoryTestId?.message}>
-            <select {...catForm.register("categoryTestId")} className={inputClass}>
-              <option value="">Sélectionner une catégorie…</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </FormField>
+          <RHFSelect
+            control={catForm.control}
+            name="categoryTestId"
+            label="Catégorie d'examen"
+            required
+            options={categories.map((c) => ({ value: c.id, label: c.name }))}
+            placeholder="Sélectionner une catégorie…"
+            error={catForm.formState.errors.categoryTestId?.message}
+          />
           <FormField label="Remise (%)" required error={catForm.formState.errors.discount?.message}>
             <input
               type="number"
@@ -400,14 +415,15 @@ export default function ContractDetailPage({
         isSubmitting={addTestMutation.isPending}
       >
         <div className="flex flex-col gap-4">
-          <FormField label="Examen" required error={testForm.formState.errors.testId?.message}>
-            <select {...testForm.register("testId")} className={inputClass}>
-              <option value="">Sélectionner un examen…</option>
-              {examens.map((e) => (
-                <option key={e.id} value={e.id}>{e.name}</option>
-              ))}
-            </select>
-          </FormField>
+          <RHFSelect
+            control={testForm.control}
+            name="testId"
+            label="Examen"
+            required
+            options={examens.map((e) => ({ value: e.id, label: e.name }))}
+            placeholder="Sélectionner un examen…"
+            error={testForm.formState.errors.testId?.message}
+          />
           <FormField label="Montant remise (FCFA)" required error={testForm.formState.errors.amountRemise?.message}>
             <input
               type="number"

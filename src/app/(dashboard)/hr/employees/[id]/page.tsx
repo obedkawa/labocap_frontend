@@ -12,6 +12,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import type { AxiosError } from "axios";
 
 import { PageHeader } from "@/components/ui/PageHeader";
+import { RHFSelect } from "@/components/ui/RHFSelect";
 import { DataTable } from "@/components/common/DataTable";
 import { CrudModal } from "@/components/common/CrudModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
@@ -32,7 +33,7 @@ import type { ApiError } from "@/types/api";
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 function formatSalary(v?: number) {
   if (v == null) return "—";
@@ -112,6 +113,7 @@ export default function EmployeeProfilePage({
   // ===========================================================================
 
   const [contratPage, setContratPage] = useState(0);
+  const [contratSize, setContratSize] = useState(10);
   const [createContratOpen, setCreateContratOpen] = useState(false);
   const [editContratOpen, setEditContratOpen] = useState(false);
   const [selectedContrat, setSelectedContrat] = useState<EmployeeContrat | null>(null);
@@ -121,8 +123,8 @@ export default function EmployeeProfilePage({
   const contratEditForm = useForm<ContratForm>({ resolver: zodResolver(contratSchema) });
 
   const { data: contratsData, isLoading: contratsLoading } = useQuery({
-    queryKey: ["employee-contrats", employeeId, contratPage],
-    queryFn: () => hrApi.getContrats(employeeId, { page: contratPage, size: 10 }).then((r) => r.data),
+    queryKey: ["employee-contrats", employeeId, contratPage, contratSize],
+    queryFn: () => hrApi.getContrats(employeeId, { page: contratPage, size: contratSize }).then((r) => r.data),
     enabled: activeTab === "contrats",
   });
 
@@ -227,6 +229,7 @@ export default function EmployeeProfilePage({
   // ===========================================================================
 
   const [docPage, setDocPage] = useState(0);
+  const [docSize, setDocSize] = useState(10);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [editDocOpen, setEditDocOpen] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<EmployeeDocument | null>(null);
@@ -237,8 +240,8 @@ export default function EmployeeProfilePage({
   const docEditForm = useForm<DocForm>({ resolver: zodResolver(docSchema) });
 
   const { data: docsData, isLoading: docsLoading } = useQuery({
-    queryKey: ["employee-docs", employeeId, docPage],
-    queryFn: () => hrApi.getDocuments(employeeId, { page: docPage, size: 10 }).then((r) => r.data),
+    queryKey: ["employee-docs", employeeId, docPage, docSize],
+    queryFn: () => hrApi.getDocuments(employeeId, { page: docPage, size: docSize }).then((r) => r.data),
     enabled: activeTab === "documents",
   });
 
@@ -422,9 +425,9 @@ export default function EmployeeProfilePage({
                 isLoading={contratsLoading}
                 pageCount={contratsPageCount}
                 pageIndex={contratPage}
-                pageSize={10}
+                pageSize={contratSize}
                 onPageChange={setContratPage}
-                onPageSizeChange={() => {}}
+                onPageSizeChange={(size) => { setContratSize(size); setContratPage(0); }}
               />
             </div>
           )}
@@ -450,9 +453,9 @@ export default function EmployeeProfilePage({
                 isLoading={docsLoading}
                 pageCount={docsPageCount}
                 pageIndex={docPage}
-                pageSize={10}
+                pageSize={docSize}
                 onPageChange={setDocPage}
-                onPageSizeChange={() => {}}
+                onPageSizeChange={(size) => { setDocSize(size); setDocPage(0); }}
               />
             </div>
           )}
@@ -541,17 +544,18 @@ export default function EmployeeProfilePage({
 // ---------------------------------------------------------------------------
 
 function ContratFormFields({ form }: { form: ReturnType<typeof useForm<ContratForm>> }) {
-  const { register, formState: { errors } } = form;
+  const { register, control, formState: { errors } } = form;
   return (
     <div className="flex flex-col gap-4">
-      <FormField label="Type de contrat" error={errors.type?.message}>
-        <select {...register("type")} className={inputClass}>
-          <option value="">Sélectionner…</option>
-          {CONTRACT_TYPES.map((t) => (
-            <option key={t.value} value={t.value}>{t.label}</option>
-          ))}
-        </select>
-      </FormField>
+      <RHFSelect
+        control={control}
+        name="type"
+        label="Type de contrat"
+        options={CONTRACT_TYPES}
+        placeholder="Sélectionner…"
+        error={errors.type?.message}
+        isClearable
+      />
       <FormField label="Salaire (FCFA)" required error={errors.salary?.message}>
         <input type="number" {...register("salary")} min={0} placeholder="Ex : 200000" className={inputClass} />
       </FormField>

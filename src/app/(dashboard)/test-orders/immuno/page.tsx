@@ -12,11 +12,12 @@ import { toast } from "sonner";
 import { DataTable } from "@/components/common/DataTable";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { formatCFA, formatDate } from "@/lib/utils";
 import { testOrdersApi, type TestOrder } from "@/lib/api/testOrders";
-import { doctorsApi, type Doctor } from "@/lib/api/doctors";
+import { usersApi } from "@/lib/api/users";
 import apiClient from "@/lib/api/client";
 import type { PageResponse, ApiError } from "@/types/api";
 
@@ -25,6 +26,13 @@ import type { PageResponse, ApiError } from "@/types/api";
 // ---------------------------------------------------------------------------
 
 interface ContractOption {
+  id: string;
+  name: string;
+}
+
+// Le dropdown "Affecter à" (et le filtre Docteur) référencent un utilisateur
+// ayant le rôle docteur — même source que `attribuateDoctorId`.
+interface DoctorOption {
   id: string;
   name: string;
 }
@@ -38,7 +46,7 @@ function AttribuateSelect({
   doctors,
 }: {
   order: TestOrder;
-  doctors: Doctor[];
+  doctors: DoctorOption[];
 }) {
   const queryClient = useQueryClient();
   const [value, setValue] = useState<string>(order.attribuateDoctorId ?? "");
@@ -60,11 +68,12 @@ function AttribuateSelect({
   };
 
   return (
-    <select
+    <NativeSelect
       value={value}
       onChange={handleChange}
       disabled={mutation.isPending}
-      className="rounded border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 min-w-[140px]"
+      className="min-w-[140px]"
+      selectClassName="text-xs"
     >
       <option value="">Sélectionner un docteur</option>
       {doctors.map((d) => (
@@ -72,7 +81,7 @@ function AttribuateSelect({
           {d.name}
         </option>
       ))}
-    </select>
+    </NativeSelect>
   );
 }
 
@@ -232,10 +241,18 @@ export default function TestOrdersImmunoPage() {
     },
   });
 
-  const { data: doctorsData } = useQuery<Doctor[]>({
-    queryKey: ["doctors-all"],
+  // Utilisateurs ayant le rôle docteur — source cohérente avec attribuateDoctorId
+  const { data: doctorsData } = useQuery<DoctorOption[]>({
+    queryKey: ["users-doctors"],
     queryFn: () =>
-      doctorsApi.findAll({ size: 200 }).then((r) => r.data.content),
+      usersApi
+        .findAll({ size: 500, role: "doctor" })
+        .then((r) =>
+          r.data.content.map((u) => ({
+            id: u.id,
+            name: `${u.firstname} ${u.lastname}`.trim(),
+          }))
+        ),
   });
 
   // Stats globales (Livrer / Valider / Cas urgent) — variantes immuno
@@ -302,7 +319,9 @@ export default function TestOrdersImmunoPage() {
       accessorKey: "code",
       cell: ({ row }) =>
         row.original.code ?? (
-          <span className="text-gray-400 italic text-xs">En attente</span>
+          <span className="whitespace-nowrap text-gray-400 italic text-xs">
+            En attente
+          </span>
         ),
     },
     // 4. Affecter à — dropdown docteur
@@ -327,8 +346,10 @@ export default function TestOrdersImmunoPage() {
       cell: ({ row }) => (
         <div className="text-xs text-gray-700 max-w-[160px]">
           {row.original.details?.length
-            ? row.original.details.map((d, i) => (
-                <div key={i}>{d.testName}</div>
+            ? row.original.details.map((d) => (
+                <div key={d.id ?? `${row.original.id}-${d.labTestId}`}>
+                  {d.testName}
+                </div>
               ))
             : "—"}
         </div>
@@ -356,7 +377,7 @@ export default function TestOrdersImmunoPage() {
           status === "VALIDATED" || status === "DELIVERED";
         return (
           <span
-            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium text-white ${
+            className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium text-white ${
               isValidated ? "bg-blue-600" : "bg-gray-500"
             }`}
           >
@@ -407,43 +428,40 @@ export default function TestOrdersImmunoPage() {
         <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Contrat</label>
-            <select
+            <NativeSelect
               value={contratFilter}
               onChange={(e) => { setContratFilter(e.target.value); setPage(0); }}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">Tous les contrats</option>
               {contracts.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Status</label>
-            <select
+            <NativeSelect
               value={statusFilter}
               onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">Tous</option>
               <option value="VALIDATED">Valider</option>
               <option value="PENDING">En attente</option>
               <option value="DELIVERED">Livrer</option>
               <option value="CANCELLED">Non Livrer</option>
-            </select>
+            </NativeSelect>
           </div>
 
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Urgent</label>
-            <select
+            <NativeSelect
               value={urgentFilter}
               onChange={(e) => { setUrgentFilter(e.target.value); setPage(0); }}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">Tous</option>
               <option value="1">Urgent</option>
-            </select>
+            </NativeSelect>
           </div>
         </div>
 
@@ -451,16 +469,15 @@ export default function TestOrdersImmunoPage() {
         <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Docteur</label>
-            <select
+            <NativeSelect
               value={docteurFilter}
               onChange={(e) => { setDocteurFilter(e.target.value); setPage(0); }}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
               <option value="">Tous</option>
               {doctors.map((d) => (
                 <option key={d.id} value={d.id}>{d.name}</option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           <div>
@@ -470,7 +487,7 @@ export default function TestOrdersImmunoPage() {
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(0); }}
               placeholder="Code, patient..."
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
@@ -480,7 +497,7 @@ export default function TestOrdersImmunoPage() {
               type="date"
               value={dateBegin}
               onChange={(e) => { setDateBegin(e.target.value); setPage(0); }}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
@@ -490,7 +507,7 @@ export default function TestOrdersImmunoPage() {
               type="date"
               value={dateEnd}
               onChange={(e) => { setDateEnd(e.target.value); setPage(0); }}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
         </div>

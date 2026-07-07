@@ -76,9 +76,14 @@ export default function ProfilePage() {
     if (!user) return;
     try {
       // Construire le body JSON (le backend accepte uniquement @RequestBody)
-      const body: Record<string, string | undefined> = {
+      // IMPORTANT : inclure roleIds. Le UserServiceImpl.update remplace les rôles
+      // dès que `roleIds != null` (le DTO l'initialise à []), donc un PUT sans
+      // roleIds VIDE les rôles — et donc les permissions — de l'utilisateur courant.
+      const body: Record<string, unknown> = {
         firstname: values.firstname,
         lastname: values.lastname,
+        email: user.email,
+        roleIds: (user.roles ?? []).map((r) => r.id),
       };
 
       // Convertir la signature (File) en base64 si elle a été changée
@@ -153,7 +158,7 @@ export default function ProfilePage() {
       <PageHeader
         title="Mon profil"
         subtitle="Gérez vos informations personnelles et votre mot de passe"
-        breadcrumbs={[{ label: "Accueil", href: "/dashboard" }, { label: "Profil" }]}
+        breadcrumbs={[{ label: "Accueil", href: "/home" }, { label: "Profil" }]}
       />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -166,7 +171,7 @@ export default function ProfilePage() {
             </h2>
 
             <form onSubmit={handleSubmitProfile(onSubmitProfile)} noValidate>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4">
                 {/* Prénom */}
                 <FormField
                   label="Prénom"

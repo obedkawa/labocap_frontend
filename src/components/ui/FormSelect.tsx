@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import Select, {
   MultiValue,
   SingleValue,
@@ -161,6 +162,11 @@ export function FormSelect(props: FormSelectProps) {
 
   const styles = error ? errorSelectStyles : selectStyles;
 
+  // id stable garanti identique SSR/client → évite le mismatch d'hydratation
+  // sur les éléments internes de react-select (live-region, placeholder…)
+  const generatedId = useId();
+  const instanceId = id ?? name ?? generatedId;
+
   return (
     <div className={cn("space-y-1.5", className)}>
       {label && (
@@ -178,6 +184,7 @@ export function FormSelect(props: FormSelectProps) {
       )}
       {props.isMulti ? (
         <Select<SelectOption, true>
+          instanceId={instanceId}
           inputId={id ?? name}
           name={name}
           options={options}
@@ -193,6 +200,7 @@ export function FormSelect(props: FormSelectProps) {
         />
       ) : (
         <Select<SelectOption, false>
+          instanceId={instanceId}
           inputId={id ?? name}
           name={name}
           options={options}

@@ -1,8 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm, type UseFormRegister, type FieldErrors } from "react-hook-form";
+import {
+  useForm,
+  type UseFormRegister,
+  type FieldErrors,
+  type Control,
+} from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import Link from "next/link";
@@ -16,7 +21,9 @@ import { CrudModal } from "@/components/common/CrudModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { PermissionGate } from "@/components/common/PermissionGate";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { RHFCreatableSelect } from "@/components/ui/RHFCreatableSelect";
 import { usePermissions } from "@/hooks/usePermissions";
+import { formatCFA, generatePatientCode } from "@/lib/utils";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { patientsApi, Patient, PatientRequest } from "@/lib/api/patients";
 import type { PageResponse, ApiError } from "@/types/api";
@@ -37,7 +44,6 @@ const patientSchema = z.object({
   telephone1: z.string().min(1, "Le contact 1 est requis"),
   telephone2: z.string().optional(),
   adresse: z.string().min(1, "L'adresse est requise"),
-  email: z.string().optional(),
 });
 
 type PatientFormData = z.infer<typeof patientSchema>;
@@ -48,20 +54,42 @@ type PatientFormData = z.infer<typeof patientSchema>;
 
 interface PatientFormFieldsProps {
   register: UseFormRegister<PatientFormData>;
+  control: Control<PatientFormData>;
   errors: FieldErrors<PatientFormData>;
+  /** Code patient généré automatiquement, affiché en lecture seule. */
+  code: string;
 }
 
-function PatientFormFields({ register, errors }: PatientFormFieldsProps) {
+const GENRE_OPTIONS = [
+  { value: "M", label: "Masculin" },
+  { value: "F", label: "Féminin" },
+];
+
+const LANGUE_OPTIONS = [
+  { value: "français", label: "Français" },
+  { value: "fon", label: "Fon" },
+  { value: "anglais", label: "Anglais" },
+];
+
+const YEAR_OR_MONTH_OPTIONS = [
+  { value: "false", label: "Mois" },
+  { value: "true", label: "Ans" },
+];
+
+const fieldInput =
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+
+function PatientFormFields({ register, control, errors, code }: PatientFormFieldsProps) {
   return (
-    <div className="grid grid-cols-2 gap-4">
-      {/* 1. Code (readonly) */}
-      <div className="flex flex-col gap-1">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {/* 1. Code (readonly) — pleine largeur en haut, comme Laravel */}
+      <div className="sm:col-span-2 flex flex-col gap-1">
         <label className="text-sm font-medium text-gray-700">Code</label>
         <input
           type="text"
-          value="Auto"
+          value={code}
           readOnly
-          className="rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-400 cursor-not-allowed"
+          className="w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-500 cursor-not-allowed"
         />
       </div>
 
@@ -70,11 +98,7 @@ function PatientFormFields({ register, errors }: PatientFormFieldsProps) {
         <label className="text-sm font-medium text-gray-700">
           Nom <span className="text-red-500">*</span>
         </label>
-        <input
-          type="text"
-          {...register("lastname")}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
+        <input type="text" {...register("lastname")} className={fieldInput} />
         {errors.lastname && (
           <p className="text-xs text-red-500">{errors.lastname.message}</p>
         )}
@@ -85,63 +109,40 @@ function PatientFormFields({ register, errors }: PatientFormFieldsProps) {
         <label className="text-sm font-medium text-gray-700">
           Prénom <span className="text-red-500">*</span>
         </label>
-        <input
-          type="text"
-          {...register("firstname")}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
+        <input type="text" {...register("firstname")} className={fieldInput} />
         {errors.firstname && (
           <p className="text-xs text-red-500">{errors.firstname.message}</p>
         )}
       </div>
 
       {/* 4. Genre */}
-      <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-gray-700">
-          Genre <span className="text-red-500">*</span>
-        </label>
-        <select
-          {...register("genre")}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        >
-          <option value="">-- Sélectionner --</option>
-          <option value="M">Masculin</option>
-          <option value="F">Féminin</option>
-        </select>
-        {errors.genre && (
-          <p className="text-xs text-red-500">{errors.genre.message}</p>
-        )}
-      </div>
+      <RHFCreatableSelect
+        control={control}
+        name="genre"
+        label="Genre"
+        required
+        options={GENRE_OPTIONS}
+        placeholder="Sélectionner le genre"
+        error={errors.genre?.message}
+      />
 
       {/* 5. Langue */}
-      <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-gray-700">
-          Langue <span className="text-red-500">*</span>
-        </label>
-        <select
-          {...register("langue")}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        >
-          <option value="">-- Sélectionner --</option>
-          <option value="français">Français</option>
-          <option value="fon">Fon</option>
-          <option value="anglais">Anglais</option>
-        </select>
-        {errors.langue && (
-          <p className="text-xs text-red-500">{errors.langue.message}</p>
-        )}
-      </div>
+      <RHFCreatableSelect
+        control={control}
+        name="langue"
+        label="Langue"
+        required
+        options={LANGUE_OPTIONS}
+        placeholder="Sélectionner une langue"
+        error={errors.langue?.message}
+      />
 
       {/* 6. Date de naissance */}
       <div className="flex flex-col gap-1">
         <label className="text-sm font-medium text-gray-700">
           Date de naissance
         </label>
-        <input
-          type="date"
-          {...register("birthday")}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
+        <input type="date" {...register("birthday")} className={fieldInput} />
       </div>
 
       {/* 7. Âge */}
@@ -149,43 +150,27 @@ function PatientFormFields({ register, errors }: PatientFormFieldsProps) {
         <label className="text-sm font-medium text-gray-700">
           Âge <span className="text-red-500">*</span>
         </label>
-        <input
-          type="number"
-          min={0}
-          {...register("age")}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
+        <input type="number" min={0} {...register("age")} className={fieldInput} />
         {errors.age && (
           <p className="text-xs text-red-500">{errors.age.message}</p>
         )}
       </div>
 
       {/* 8. Mois ou Années */}
-      <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-gray-700">
-          Mois ou Années <span className="text-red-500">*</span>
-        </label>
-        <select
-          {...register("yearOrMonth")}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        >
-          <option value="">-- Sélectionner --</option>
-          <option value="false">Mois</option>
-          <option value="true">Ans</option>
-        </select>
-        {errors.yearOrMonth && (
-          <p className="text-xs text-red-500">{errors.yearOrMonth.message}</p>
-        )}
-      </div>
+      <RHFCreatableSelect
+        control={control}
+        name="yearOrMonth"
+        label="Mois ou Années"
+        required
+        options={YEAR_OR_MONTH_OPTIONS}
+        placeholder="Mois ou Ans"
+        error={errors.yearOrMonth?.message}
+      />
 
       {/* 9. Profession */}
       <div className="flex flex-col gap-1">
         <label className="text-sm font-medium text-gray-700">Profession</label>
-        <input
-          type="text"
-          {...register("profession")}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
+        <input type="text" {...register("profession")} className={fieldInput} />
       </div>
 
       {/* 10. Téléphone 1 */}
@@ -197,7 +182,7 @@ function PatientFormFields({ register, errors }: PatientFormFieldsProps) {
           type="tel"
           placeholder="97000000"
           {...register("telephone1")}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className={fieldInput}
         />
         {errors.telephone1 && (
           <p className="text-xs text-red-500">{errors.telephone1.message}</p>
@@ -207,32 +192,18 @@ function PatientFormFields({ register, errors }: PatientFormFieldsProps) {
       {/* 11. Téléphone 2 */}
       <div className="flex flex-col gap-1">
         <label className="text-sm font-medium text-gray-700">Téléphone 2</label>
-        <input
-          type="tel"
-          {...register("telephone2")}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
+        <input type="tel" {...register("telephone2")} className={fieldInput} />
       </div>
 
-      {/* 12. Email */}
-      <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-gray-700">Email</label>
-        <input
-          type="email"
-          {...register("email")}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
-      </div>
-
-      {/* 13. Adresse (col-span-2) */}
-      <div className="col-span-2 flex flex-col gap-1">
+      {/* 12. Adresse — pleine largeur (comme Laravel) */}
+      <div className="sm:col-span-2 flex flex-col gap-1">
         <label className="text-sm font-medium text-gray-700">
           Adresse <span className="text-red-500">*</span>
         </label>
         <textarea
-          rows={3}
+          rows={2}
           {...register("adresse")}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+          className={`${fieldInput} resize-none`}
         />
         {errors.adresse && (
           <p className="text-xs text-red-500">{errors.adresse.message}</p>
@@ -254,22 +225,34 @@ export default function PatientsPage() {
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState("");
+  // Recherche débouncée (~350 ms) : évite une requête à chaque frappe.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => clearTimeout(t);
+  }, [search]);
 
   // --- Modal state
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<Patient | null>(null);
+  // Code patient généré (format Laravel : 10 caractères hexadécimaux minuscules).
+  // Régénéré à chaque ouverture de la modale de création.
+  const [generatedCode, setGeneratedCode] = useState("");
 
   // --- Create form
   const {
     register: registerCreate,
+    control: controlCreate,
     handleSubmit: handleSubmitCreate,
     formState: { errors: createErrors },
     reset: resetCreate,
   } = useForm<PatientFormData>({
     resolver: zodResolver(patientSchema),
     defaultValues: {
+      genre: "",
+      langue: "",
       yearOrMonth: "true",
     },
   });
@@ -277,6 +260,7 @@ export default function PatientsPage() {
   // --- Edit form
   const {
     register: registerEdit,
+    control: controlEdit,
     handleSubmit: handleSubmitEdit,
     formState: { errors: editErrors },
     reset: resetEdit,
@@ -286,10 +270,10 @@ export default function PatientsPage() {
 
   // --- Query
   const { data, isLoading } = useQuery<PageResponse<Patient>>({
-    queryKey: ["patients", { page, size: pageSize, search }],
+    queryKey: ["patients", { page, size: pageSize, search: debouncedSearch }],
     queryFn: () =>
       patientsApi
-        .findAll({ page, size: pageSize, search: search || undefined })
+        .findAll({ page, size: pageSize, search: debouncedSearch || undefined })
         .then((r) => r.data),
   });
 
@@ -361,9 +345,14 @@ export default function PatientsPage() {
       telephone1: patient.telephone1,
       telephone2: patient.telephone2 ?? "",
       adresse: patient.adresse,
-      email: patient.email ?? "",
     });
     setEditOpen(true);
+  };
+
+  const handleOpenCreate = () => {
+    setGeneratedCode(generatePatientCode());
+    resetCreate({ genre: "", langue: "", yearOrMonth: "true" });
+    setCreateOpen(true);
   };
 
   const handleCloseCreate = () => {
@@ -379,7 +368,7 @@ export default function PatientsPage() {
 
   const onCreateSubmit = (formData: PatientFormData) => {
     const payload: PatientRequest = {
-      code: `PAT-${Date.now()}`,
+      code: generatedCode || generatePatientCode(),
       lastname: formData.lastname,
       firstname: formData.firstname,
       genre: formData.genre,
@@ -391,7 +380,6 @@ export default function PatientsPage() {
       telephone1: formData.telephone1,
       telephone2: formData.telephone2 || undefined,
       adresse: formData.adresse,
-      email: formData.email || undefined,
     };
     createMutation.mutate(payload);
   };
@@ -411,7 +399,6 @@ export default function PatientsPage() {
       telephone1: formData.telephone1,
       telephone2: formData.telephone2 || undefined,
       adresse: formData.adresse,
-      email: formData.email || undefined,
     };
     updateMutation.mutate({ id: selectedPatient.id, data: payload });
   };
@@ -438,36 +425,6 @@ export default function PatientsPage() {
       ),
     },
     {
-      header: "Genre",
-      accessorKey: "genre",
-      enableSorting: true,
-      cell: ({ row }) =>
-        row.original.genre ? (
-          <span
-            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-              row.original.genre.toLowerCase().startsWith("f")
-                ? "bg-pink-100 text-pink-700"
-                : "bg-blue-100 text-blue-700"
-            }`}
-          >
-            {row.original.genre}
-          </span>
-        ) : (
-          "—"
-        ),
-    },
-    {
-      header: "Âge",
-      accessorKey: "age",
-      enableSorting: true,
-      cell: ({ row }) => {
-        const p = row.original;
-        if (p.age == null) return "—";
-        const unit = p.yearOrMonth ? "ans" : "mois";
-        return `${p.age} ${unit}`;
-      },
-    },
-    {
       header: "Contacts",
       id: "contacts",
       accessorFn: (row) =>
@@ -479,20 +436,22 @@ export default function PatientsPage() {
           .join(" / ") || "—",
     },
     {
-      header: "Email",
-      accessorKey: "email",
+      header: "Total",
+      accessorKey: "totalInvoiced",
       enableSorting: true,
-      cell: ({ row }) =>
-        row.original.email ? (
-          <a
-            href={`mailto:${row.original.email}`}
-            className="text-blue-600 hover:underline"
-          >
-            {row.original.email}
-          </a>
-        ) : (
-          "—"
-        ),
+      cell: ({ row }) => formatCFA(row.original.totalInvoiced ?? 0),
+    },
+    {
+      header: "Paye",
+      accessorKey: "totalPaid",
+      enableSorting: true,
+      cell: ({ row }) => formatCFA(row.original.totalPaid ?? 0),
+    },
+    {
+      header: "Due",
+      accessorKey: "totalUnpaid",
+      enableSorting: true,
+      cell: ({ row }) => formatCFA(row.original.totalUnpaid ?? 0),
     },
     {
       header: "Actions",
@@ -548,7 +507,7 @@ export default function PatientsPage() {
           can(PERMISSIONS.CREATE_PATIENTS) ? (
             <button
               type="button"
-              onClick={() => setCreateOpen(true)}
+              onClick={handleOpenCreate}
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
             >
               <Plus className="h-4 w-4" />
@@ -601,12 +560,17 @@ export default function PatientsPage() {
         isOpen={createOpen}
         onClose={handleCloseCreate}
         title="Ajouter un nouveau patient"
-        size="lg"
+        size="xl"
         onSubmit={handleSubmitCreate(onCreateSubmit)}
         submitLabel="Ajouter un nouveau patient"
         isSubmitting={createMutation.isPending}
       >
-        <PatientFormFields register={registerCreate} errors={createErrors} />
+        <PatientFormFields
+          register={registerCreate}
+          control={controlCreate}
+          errors={createErrors}
+          code={generatedCode}
+        />
       </CrudModal>
 
       {/* ================================================================
@@ -616,12 +580,17 @@ export default function PatientsPage() {
         isOpen={editOpen}
         onClose={handleCloseEdit}
         title="Modifier le patient"
-        size="lg"
+        size="xl"
         onSubmit={handleSubmitEdit(onEditSubmit)}
         submitLabel="Modifier"
         isSubmitting={updateMutation.isPending}
       >
-        <PatientFormFields register={registerEdit} errors={editErrors} />
+        <PatientFormFields
+          register={registerEdit}
+          control={controlEdit}
+          errors={editErrors}
+          code={selectedPatient?.code ?? ""}
+        />
       </CrudModal>
 
       {/* ================================================================

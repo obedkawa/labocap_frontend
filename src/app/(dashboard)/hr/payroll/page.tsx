@@ -13,6 +13,8 @@ import type { UseFormReturn } from "react-hook-form";
 import ReactSelect from "react-select";
 
 import { PageHeader } from "@/components/ui/PageHeader";
+import { RHFSelect } from "@/components/ui/RHFSelect";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 import { DataTable } from "@/components/common/DataTable";
 import { CrudModal } from "@/components/common/CrudModal";
 import { PermissionGate } from "@/components/common/PermissionGate";
@@ -42,10 +44,7 @@ type PayrollFormValues = z.infer<typeof payrollSchema>;
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
-
-const selectClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
 
 function formatAmount(amount?: number): string {
   if (amount == null) return "—";
@@ -159,6 +158,29 @@ export default function PayrollPage() {
 
   // ---- Handlers ------------------------------------------------------------
 
+  // Téléchargement / affichage du PDF de la fiche de paie
+  const [pdfLoadingId, setPdfLoadingId] = useState<string | null>(null);
+
+  async function handleDownloadPdf(payroll: Payroll) {
+    setPdfLoadingId(payroll.id);
+    try {
+      const res = await hrApi.downloadPayrollPdf(
+        selectedEmployeeId,
+        payroll.id,
+      );
+      const blob = new Blob([res.data as BlobPart], {
+        type: "application/pdf",
+      });
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      toast.error("Erreur lors de la génération du PDF");
+    } finally {
+      setPdfLoadingId(null);
+    }
+  }
+
   function onCreateSubmit(values: PayrollFormValues) {
     generateMutation.mutate({
       employeeId: values.employeeId,
@@ -214,16 +236,18 @@ export default function PayrollPage() {
     {
       header: "Actions",
       id: "actions",
-      cell: () => (
+      cell: ({ row }) => (
         <PermissionGate permission={PERMISSIONS.MANAGE_PAYROLL}>
           <button
-            disabled
-            title="Bientôt disponible"
-            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-gray-100 text-gray-400 cursor-not-allowed"
+            type="button"
+            onClick={() => handleDownloadPdf(row.original)}
+            disabled={pdfLoadingId === row.original.id}
+            title="Voir / télécharger la fiche de paie (PDF)"
+            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label="Voir PDF"
           >
             <FileText className="h-3.5 w-3.5" />
-            PDF
+            {pdfLoadingId === row.original.id ? "..." : "PDF"}
           </button>
         </PermissionGate>
       ),
@@ -255,6 +279,7 @@ export default function PayrollPage() {
       <div className="flex flex-wrap gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
         <div className="min-w-[220px]">
           <ReactSelect
+            instanceId="payroll-filter-employee"
             options={employeeOptions}
             value={employeeOptions.find((o) => o.value === selectedEmployeeId) ?? null}
             onChange={(opt) => setSelectedEmployeeId(opt?.value ?? "")}
@@ -264,10 +289,10 @@ export default function PayrollPage() {
           />
         </div>
 
-        <select
+        <NativeSelect
+          className="w-full max-w-[180px]"
           value={filterMonth}
           onChange={(e) => setFilterMonth(e.target.value)}
-          className={selectClass + " max-w-[180px]"}
         >
           <option value="">Tous les mois</option>
           {MONTHS.map((m) => (
@@ -275,12 +300,12 @@ export default function PayrollPage() {
               {m.label}
             </option>
           ))}
-        </select>
+        </NativeSelect>
 
-        <select
+        <NativeSelect
+          className="w-full max-w-[140px]"
           value={filterYear}
           onChange={(e) => setFilterYear(e.target.value)}
-          className={selectClass + " max-w-[140px]"}
         >
           <option value="">Toutes les années</option>
           {yearOptions.map((y) => (
@@ -288,7 +313,7 @@ export default function PayrollPage() {
               {y}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       </div>
 
       {!selectedEmployeeId && (
@@ -348,7 +373,7 @@ function PayrollForm({ form, employeeOptions, yearOptions }: PayrollFormProps) {
   } = form;
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4">
       <FormField
         label="Employé"
         required
@@ -360,6 +385,7 @@ function PayrollForm({ form, employeeOptions, yearOptions }: PayrollFormProps) {
           control={control}
           render={({ field }) => (
             <ReactSelect
+              instanceId="payroll-form-employee"
               options={employeeOptions}
               value={employeeOptions.find((o) => o.value === field.value) ?? null}
               onChange={(opt) => field.onChange(opt?.value ?? "")}
@@ -371,32 +397,25 @@ function PayrollForm({ form, employeeOptions, yearOptions }: PayrollFormProps) {
         />
       </FormField>
 
-      <FormField label="Mois" required error={errors.month?.message}>
-        <select
-          {...register("month")}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
-        >
-          <option value="">Sélectionner un mois...</option>
-          {MONTHS.map((m) => (
-            <option key={m.value} value={m.value}>
-              {m.label}
-            </option>
-          ))}
-        </select>
-      </FormField>
+      <RHFSelect
+        control={control}
+        name="month"
+        label="Mois"
+        required
+        options={MONTHS}
+        placeholder="Sélectionner un mois..."
+        error={errors.month?.message}
+      />
 
-      <FormField label="Année" required error={errors.year?.message}>
-        <select
-          {...register("year")}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
-        >
-          {yearOptions.map((y) => (
-            <option key={y} value={String(y)}>
-              {y}
-            </option>
-          ))}
-        </select>
-      </FormField>
+      <RHFSelect
+        control={control}
+        name="year"
+        label="Année"
+        required
+        options={yearOptions.map((y) => ({ value: String(y), label: String(y) }))}
+        placeholder="Sélectionner une année..."
+        error={errors.year?.message}
+      />
 
       <FormField label="Salaire brut (FCFA)" required error={errors.grossSalary?.message}>
         <input

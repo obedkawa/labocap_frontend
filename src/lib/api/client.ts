@@ -38,12 +38,32 @@ apiClient.interceptors.response.use(
       _retry?: boolean;
     };
 
+    // Endpoints d'authentification qui ne doivent JAMAIS déclencher un refresh
+    // (un 401 y est une vraie erreur d'identifiants, et /auth/refresh éviterait
+    // une boucle infinie). /auth/me en est volontairement exclu : un access
+    // token expiré doit pouvoir être rafraîchi puis la requête rejouée.
+    const noRefreshPaths = [
+      "/auth/login",
+      "/auth/refresh",
+      "/auth/2fa",
+      "/auth/logout",
+      "/auth/forgot-password",
+      "/auth/reset-password",
+      "/auth/resend-2fa",
+    ];
+    const skipRefresh = noRefreshPaths.some((p) =>
+      originalRequest.url?.includes(p)
+    );
+
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&
-      !originalRequest.url?.includes("/auth/")
+      !skipRefresh
     ) {
       if (isRefreshing) {
+        // Marque la requête en attente pour éviter qu'elle relance un cycle
+        // de refresh si elle re-renvoie un 401 après rejeu.
+        originalRequest._retry = true;
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
         })

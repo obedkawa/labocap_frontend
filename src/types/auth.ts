@@ -21,6 +21,7 @@ export interface RolePermission {
 export interface Role {
   id: string;
   name: string;
+  slug?: string;
   permissions: RolePermission[];
 }
 

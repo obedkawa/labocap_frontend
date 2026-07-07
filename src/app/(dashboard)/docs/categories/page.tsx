@@ -53,7 +53,7 @@ function CategoryFormFields({ register, errors }: CategoryFormFieldsProps) {
         <input
           type="text"
           {...register("name")}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         />
         {errors.name && (
           <p className="text-xs text-red-500">{errors.name.message}</p>
@@ -240,15 +240,11 @@ export default function CategoriesDocumentationPage() {
       />
 
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        {/* Pas de pageCount/handlers : données complètes → pagination cliente du DataTable */}
         <DataTable
           columns={columns}
           data={categories}
           isLoading={isLoading}
-          pageCount={1}
-          pageIndex={0}
-          pageSize={categories.length || 10}
-          onPageChange={() => {}}
-          onPageSizeChange={() => {}}
         />
       </div>
 

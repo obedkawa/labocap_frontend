@@ -15,6 +15,7 @@ import { CrudModal } from "@/components/common/CrudModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { PermissionGate } from "@/components/common/PermissionGate";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { RHFSelect } from "@/components/ui/RHFSelect";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import {
@@ -52,7 +53,7 @@ type PrestationFormData = z.infer<typeof prestationSchema>;
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 // ---------------------------------------------------------------------------
 // Composant formulaire partagé
@@ -66,11 +67,12 @@ interface PrestationFormProps {
 function PrestationForm({ form, categoryOptions }: PrestationFormProps) {
   const {
     register,
+    control,
     formState: { errors },
   } = form;
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4">
       {/* Nom */}
       <div className="flex flex-col gap-1 sm:col-span-2">
         <label className="text-sm font-medium text-gray-700">
@@ -88,17 +90,15 @@ function PrestationForm({ form, categoryOptions }: PrestationFormProps) {
       </div>
 
       {/* Catégorie */}
-      <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-gray-700">Catégorie</label>
-        <select {...register("categoryId")} className={inputClass}>
-          <option value="">— Aucune catégorie —</option>
-          {categoryOptions.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      <RHFSelect
+        control={control}
+        name="categoryId"
+        label="Catégorie"
+        options={categoryOptions.map((c) => ({ value: c.id, label: c.name }))}
+        placeholder="Rechercher une catégorie..."
+        error={errors.categoryId?.message}
+        isClearable
+      />
 
       {/* Prix */}
       <div className="flex flex-col gap-1">

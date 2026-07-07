@@ -63,12 +63,15 @@ export interface SettingsData {
   reportFooter?: string;
 }
 
-// Mapping des clés frontend vers les slugs backend
-const SETTINGS_KEY_MAP: Record<keyof Omit<SettingsData, "labLogo">, string> = {
+// Mapping des clés frontend vers les slugs backend.
+// Le logo est stocké comme une data URL base64 dans la colonne `value` (TEXT)
+// sous la clé `lab_logo` — le backend n'expose pas d'upload multipart.
+const SETTINGS_KEY_MAP: Record<keyof SettingsData, string> = {
   labName: "lab_name",
   labAddress: "lab_address",
   labPhone: "lab_phone",
   labEmail: "lab_email",
+  labLogo: "lab_logo",
   invoicePrefix: "invoice_prefix",
   taxRate: "tax_rate",
   mecefIfu: "mecef_ifu",

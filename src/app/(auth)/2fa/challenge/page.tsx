@@ -49,9 +49,17 @@ export default function TwoFactorChallengePage() {
   });
 
   const onSubmit = async (data: TwoFactorFormData) => {
+    const tempToken = sessionStorage.getItem("2fa_temp_token") ?? "";
+    // Accès direct / sessionStorage vidé : pas de token → inutile d'envoyer une
+    // requête vide, on renvoie l'utilisateur vers la connexion.
+    if (!tempToken) {
+      toast.error("Session expirée, veuillez vous reconnecter.");
+      router.push("/login");
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const tempToken = sessionStorage.getItem("2fa_temp_token") ?? "";
       const response = await authApi.twoFactor({ code: data.code, tempToken });
       const result = response.data;
 
@@ -61,8 +69,11 @@ export default function TwoFactorChallengePage() {
         setUser(result.user);
         router.push("/home");
       }
-    } catch {
-      toast.error("Le code saisi est incorrecte");
+    } catch (err) {
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message ?? "Le code saisi est incorrect";
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }

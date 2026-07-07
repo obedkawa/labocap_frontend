@@ -18,6 +18,10 @@ export interface Patient {
   email?: string;
   branchId: string;
   createdAt: string;
+  // Totaux financiers renseignés uniquement dans la liste (comme le tableau Laravel)
+  totalInvoiced?: number;
+  totalPaid?: number;
+  totalUnpaid?: number;
 }
 
 export interface TestOrderSummary {

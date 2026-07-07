@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Home,
-  Calendar,
   Stethoscope,
   FileCheck,
   Building2,
@@ -92,7 +91,9 @@ function NavItem({ href, icon, label, collapsed, badge = 0 }: NavItemProps) {
   return (
     <Link
       href={href}
-      className={`flex items-center gap-3 px-4 py-2.5 rounded-md mx-2 transition-colors text-sm ${
+      className={`flex items-center px-4 py-2.5 rounded-md mx-2 transition-colors text-sm ${
+        collapsed ? "justify-center" : "gap-3"
+      } ${
         isActive
           ? "bg-gray-700 text-white"
           : "text-gray-300 hover:bg-gray-800 hover:text-white"
@@ -118,15 +119,41 @@ function CollapseItem({
   children,
 }: CollapseItemProps) {
   const [open, setOpen] = useState(false);
+  const [flyoutTop, setFlyoutTop] = useState(0);
+  const triggerRef = useRef<HTMLDivElement>(null);
 
   if (collapsed) {
-    // In collapsed mode, show only the icon (no expandable children)
+    // En mode replié, on affiche un flyout au survol (positionné en `fixed` pour
+    // échapper au `overflow-hidden` de la sidebar) listant les sous-éléments,
+    // afin que les sections à enfants restent accessibles.
     return (
       <div
-        className="flex items-center justify-center px-4 py-2.5 mx-2 text-gray-300 cursor-pointer hover:bg-gray-800 hover:text-white rounded-md"
-        title={label}
+        ref={triggerRef}
+        className="relative"
+        onMouseEnter={() => {
+          const rect = triggerRef.current?.getBoundingClientRect();
+          if (rect) setFlyoutTop(rect.top);
+          setOpen(true);
+        }}
+        onMouseLeave={() => setOpen(false)}
       >
-        <span className="flex-shrink-0 w-5 h-5">{icon}</span>
+        <div
+          className="flex items-center justify-center px-4 py-2.5 mx-2 text-gray-300 cursor-pointer hover:bg-gray-800 hover:text-white rounded-md"
+          title={label}
+        >
+          <span className="flex-shrink-0 w-5 h-5">{icon}</span>
+        </div>
+        {open && (
+          // `pl-1` sert de pont de survol entre l'icône et le panneau.
+          <div className="fixed left-16 z-50 pl-1" style={{ top: flyoutTop }}>
+            <div className="min-w-[210px] rounded-md border border-gray-700 bg-gray-900 py-2 shadow-xl">
+              <div className="px-4 pb-2 mb-1 border-b border-gray-700 text-xs uppercase tracking-wider text-gray-400 font-semibold">
+                {label}
+              </div>
+              {children}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -206,9 +233,14 @@ export function Sidebar() {
 
   useEffect(() => { setMounted(true); }, []);
 
-  const isDoctor = mounted && user?.roles?.some((r) =>
-    r.name.toLowerCase().includes("doctor")
-  );
+  // Le rôle médecin est « Docteur » (slug « docteur ») en base — on accepte les
+  // deux orthographes (FR/EN) sur le nom comme sur le slug.
+  const isDoctor =
+    mounted &&
+    user?.roles?.some((r) => {
+      const tokens = `${r.name ?? ""} ${r.slug ?? ""}`.toLowerCase();
+      return tokens.includes("docteur") || tokens.includes("doctor");
+    });
 
   const { data: immunoPendingCount } = useQuery({
     queryKey: ["immuno-pending-count"],
@@ -244,7 +276,7 @@ export function Sidebar() {
       </div>
 
       {/* Scrollable nav */}
-      <nav className="flex-1 overflow-y-auto py-3 overflow-x-hidden">
+      <nav className="sidebar-scroll flex-1 overflow-y-auto py-3 overflow-x-hidden">
 
         {/* ══════════════ TABLEAU DE BORD ══════════════ */}
         <SectionLabel label="TABLEAU DE BORD" collapsed={collapsed} />
@@ -259,7 +291,7 @@ export function Sidebar() {
           <CollapseItem icon={<FlaskConical className="w-5 h-5" />} label="Catalogue d'examens" collapsed={collapsed}>
             {can(PERMISSIONS.VIEW_TESTS) && <SubItem href="/examens" label="Tous les examens" />}
             {can(PERMISSIONS.VIEW_CATEGORY_TESTS) && <SubItem href="/examens/categories" label="Catégories" />}
-            <SubItem href="/examens/types" label="Types d'examen" />
+            <SubItem href="/examens/vitrine" label="Vitrine des composants" />
           </CollapseItem>
         )}
 
@@ -296,6 +328,7 @@ export function Sidebar() {
         {can(PERMISSIONS.VIEW_REPORTS) && (
           <CollapseItem icon={<FileCheck className="w-5 h-5" />} label="Comptes rendu" collapsed={collapsed}>
             <SubItem href="/reports" label="Tous les comptes rendu" />
+            <SubItem href="/reports/history" label="Historique" />
             {can(PERMISSIONS.VIEW_SETTINGS) && <SubItem href="/reports/templates" label="Templates" />}
             {can(PERMISSIONS.VIEW_SETTINGS) && <SubItem href="/reports/settings" label="Paramètres" />}
           </CollapseItem>
@@ -316,9 +349,6 @@ export function Sidebar() {
           <NavItem href="/patients" icon={<User className="w-5 h-5" />} label="Patients" collapsed={collapsed} />
         )}
 
-        {/* Rendez-vous */}
-        <NavItem href="/appointments" icon={<Calendar className="w-5 h-5" />} label="Rendez-vous" collapsed={collapsed} />
-
         {/* Consultations */}
         {can(PERMISSIONS.VIEW_CONSULTATIONS) && (
           <CollapseItem icon={<Stethoscope className="w-5 h-5" />} label="Consultations" collapsed={collapsed}>
@@ -330,9 +360,15 @@ export function Sidebar() {
         )}
 
         {/* Prestations */}
-        {can(PERMISSIONS.VIEW_PRESTATIONS) && (
+        {(can(PERMISSIONS.VIEW_PRESTATIONS) ||
+          can(PERMISSIONS.VIEW_PRESTATION_ORDERS)) && (
           <CollapseItem icon={<ClipboardList className="w-5 h-5" />} label="Prestations" collapsed={collapsed}>
-            <SubItem href="/prestations" label="Toutes les prestations" />
+            {can(PERMISSIONS.VIEW_PRESTATIONS) && (
+              <SubItem href="/prestations" label="Toutes les prestations" />
+            )}
+            {can(PERMISSIONS.VIEW_PRESTATION_ORDERS) && (
+              <SubItem href="/prestations/orders" label="Commandes de prestations" />
+            )}
             {can(PERMISSIONS.MANAGE_SETTINGS) && (
               <SubItem href="/prestations/categories" label="Catégories" />
             )}
@@ -382,6 +418,7 @@ export function Sidebar() {
         {can(PERMISSIONS.VIEW_ARTICLES) && (
           <CollapseItem icon={<Package className="w-5 h-5" />} label="Stocks" collapsed={collapsed}>
             <SubItem href="/inventory/articles" label="Tous les articles" />
+            <SubItem href="/inventory/movements" label="Mouvements de stock" />
             <SubItem href="/inventory/units" label="Unité de mesure" />
           </CollapseItem>
         )}
@@ -455,7 +492,8 @@ export function Sidebar() {
         {can(PERMISSIONS.VIEW_DOCS) && (
           <CollapseItem icon={<BookOpen className="w-5 h-5" />} label="Documentations" collapsed={collapsed}>
             <SubItem href="/docs" label="Tous les documents" />
-            <SubItem href="/docs" label="Partagé avec moi" />
+            <SubItem href="/docs/shared" label="Partagé avec moi" />
+            <SubItem href="/docs/trash" label="Corbeille" />
             {can(PERMISSIONS.MANAGE_SETTINGS) && <SubItem href="/docs/categories" label="Toutes les catégories" />}
           </CollapseItem>
         )}

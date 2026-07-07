@@ -15,8 +15,9 @@ import {
 import { ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 
-interface DataTableProps<T> {
+export interface DataTableProps<T> {
   columns: ColumnDef<T>[];
   data: T[];
   // Pagination côté serveur
@@ -219,7 +220,7 @@ export function DataTable<T>({
         {/* Sélecteur de taille */}
         <div className="flex items-center gap-2 text-sm text-gray-600">
           <span>Lignes par page :</span>
-          <select
+          <NativeSelect
             value={currentPageSize}
             onChange={(e) => {
               const size = Number(e.target.value);
@@ -229,14 +230,13 @@ export function DataTable<T>({
                 table.setPageSize(size);
               }
             }}
-            className="rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none"
           >
-            {[10, 25, 50].map((size) => (
+            {[10, 20, 25, 50].map((size) => (
               <option key={size} value={size}>
                 {size}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </div>
 
         {/* Numéros de pages */}

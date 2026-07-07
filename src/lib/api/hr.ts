@@ -149,6 +149,10 @@ export const hrApi = {
     ),
   createPayroll: (employeeId: string, data: PayrollRequest) =>
     apiClient.post<Payroll>(`/employees/${employeeId}/payrolls`, data),
+  downloadPayrollPdf: (employeeId: string, id: string) =>
+    apiClient.get(`/employees/${employeeId}/payrolls/${id}/pdf`, {
+      responseType: "blob",
+    }),
 
   // Contrats — /api/v1/employees/{employeeId}/contrats
   getContrats: (employeeId: string, params?: Record<string, unknown>) =>

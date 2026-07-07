@@ -67,6 +67,7 @@ export interface MySpaceStats {
   totalAssigned: number;
   totalPending: number;
   totalValidated: number;
+  totalImmunoPending: number;
   totalUrgent: number;
   totalLate: number;
 }
@@ -184,6 +185,8 @@ export const testOrdersApi = {
     status: "PENDING" | "VALIDATED" | "DELIVERED" | "CANCELLED";
     typeOrderId?: string;
     priority?: string;
+    from?: string;
+    to?: string;
     page?: number;
     size?: number;
   }) =>

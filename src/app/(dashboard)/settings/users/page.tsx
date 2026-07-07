@@ -18,6 +18,7 @@ import { CrudModal } from "@/components/common/CrudModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { PermissionGate } from "@/components/common/PermissionGate";
 import { FormField } from "@/components/ui/FormField";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { usersApi, User, UserRequest, Permission } from "@/lib/api/users";
@@ -52,10 +53,7 @@ type EditUserFormValues = z.infer<typeof editUserSchema>;
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
-
-const selectClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
 
 function StatusBadge({ isActive }: { isActive: boolean }) {
   if (isActive) {
@@ -98,7 +96,9 @@ export default function UsersPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["users"],
-    queryFn: () => usersApi.findAll().then((r) => r.data),
+    // size élevé : les filtres (recherche / statut / rôle) opèrent côté client
+    // sur l'ensemble des utilisateurs, pas seulement la 1re page serveur.
+    queryFn: () => usersApi.findAll({ size: 1000 }).then((r) => r.data),
   });
 
   const { data: rolesData } = useQuery({
@@ -337,7 +337,7 @@ export default function UsersPage() {
           <PermissionGate permission={PERMISSIONS.EDIT_USERS}>
             <button
               onClick={() => openEdit(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
               aria-label="Modifier"
             >
               <Pencil className="h-3.5 w-3.5" />
@@ -347,7 +347,7 @@ export default function UsersPage() {
           <PermissionGate permission={PERMISSIONS.DELETE_USERS}>
             <button
               onClick={() => openDelete(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-50 text-red-700 hover:bg-red-100 transition-colors"
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
               aria-label="Supprimer"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -387,21 +387,21 @@ export default function UsersPage() {
           placeholder="Rechercher un utilisateur..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full max-w-xs rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         />
-        <select
+        <NativeSelect
+          className="w-full max-w-[180px]"
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
-          className={selectClass + " max-w-[180px]"}
         >
           <option value="">Tous les statuts</option>
           <option value="active">Actif</option>
           <option value="inactive">Inactif</option>
-        </select>
-        <select
+        </NativeSelect>
+        <NativeSelect
+          className="w-full max-w-[200px]"
           value={filterRole}
           onChange={(e) => setFilterRole(e.target.value)}
-          className={selectClass + " max-w-[200px]"}
         >
           <option value="">Tous les rôles</option>
           {allRoleNames.map((r) => (
@@ -409,7 +409,7 @@ export default function UsersPage() {
               {r}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       </div>
 
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5">
@@ -454,6 +454,7 @@ export default function UsersPage() {
           ) : (
             <>
               <ReactSelect
+                instanceId="user-direct-permissions"
                 isMulti
                 options={permissionOptions}
                 value={permissionOptions.filter((o) =>
@@ -545,7 +546,7 @@ function UserForm({ form, roleOptions, isCreate }: UserFormProps) {
   } = form as UseFormReturn<CreateUserFormValues>;
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4">
       <FormField label="Prénom" required error={errors.firstname?.message}>
         <input
           type="text"
@@ -606,6 +607,7 @@ function UserForm({ form, roleOptions, isCreate }: UserFormProps) {
           control={control}
           render={({ field }) => (
             <ReactSelect
+              instanceId="user-roles"
               isMulti
               options={roleOptions}
               value={roleOptions.filter((o) =>

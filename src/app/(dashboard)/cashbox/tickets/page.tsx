@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Eye } from "lucide-react";
+import { Plus, Eye, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { AxiosError } from "axios";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -13,6 +13,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/common/DataTable";
 import { CrudModal } from "@/components/common/CrudModal";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { RHFSelect } from "@/components/ui/RHFSelect";
 import { FormField } from "@/components/ui/FormField";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -31,7 +32,7 @@ import type { PageResponse, ApiError } from "@/types/api";
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 function formatAmount(v?: number) {
   if (v == null) return "—";
@@ -55,6 +56,12 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
+interface TicketLine {
+  itemName: string;
+  quantity: string;
+  unitPrice: string;
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -68,7 +75,32 @@ export default function CashboxTicketsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [detailTicket, setDetailTicket] = useState<CashboxVoucherResponseDto | null>(null);
 
+  // Lignes d'articles du ticket en cours de création
+  const [lines, setLines] = useState<TicketLine[]>([]);
+
   const form = useForm<FormData>({ resolver: zodResolver(schema) });
+
+  const linesTotal = lines.reduce(
+    (sum, l) => sum + (Number(l.quantity) || 0) * (Number(l.unitPrice) || 0),
+    0
+  );
+
+  const addLine = () =>
+    setLines((prev) => [...prev, { itemName: "", quantity: "1", unitPrice: "" }]);
+
+  const updateLine = (index: number, patch: Partial<TicketLine>) =>
+    setLines((prev) =>
+      prev.map((l, i) => (i === index ? { ...l, ...patch } : l))
+    );
+
+  const removeLine = (index: number) =>
+    setLines((prev) => prev.filter((_, i) => i !== index));
+
+  const resetCreate = () => {
+    form.reset();
+    setLines([]);
+    setCreateOpen(false);
+  };
 
   // ---- Queries -------------------------------------------------------------
 
@@ -99,19 +131,31 @@ export default function CashboxTicketsPage() {
   // ---- Mutation ------------------------------------------------------------
 
   const createMutation = useMutation({
-    mutationFn: (d: FormData) => {
+    mutationFn: async (d: FormData) => {
       const payload: CashboxVoucherCreateDto = {
         description: d.description,
         supplierId: d.supplierId || undefined,
         expenseCategoryId: d.expenseCategoryId || undefined,
       };
-      return cashboxApi.addVoucher(payload);
+      // 1. Création de l'en-tête du ticket
+      const voucher = await cashboxApi.addVoucher(payload).then((r) => r.data);
+      // 2. Ajout des lignes (le montant total est recalculé côté backend)
+      const validLines = lines.filter(
+        (l) => l.itemName.trim() && Number(l.unitPrice) > 0
+      );
+      for (const l of validLines) {
+        await cashboxApi.addVoucherDetail(voucher.id, {
+          itemName: l.itemName.trim(),
+          quantity: Number(l.quantity) || 1,
+          unitPrice: Number(l.unitPrice),
+        });
+      }
+      return voucher;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cashbox-tickets"] });
       toast.success("Ticket créé");
-      setCreateOpen(false);
-      form.reset();
+      resetCreate();
     },
     onError: (e: AxiosError<ApiError>) =>
       toast.error(e.response?.data?.message ?? "Erreur lors de la création"),
@@ -182,10 +226,10 @@ export default function CashboxTicketsPage() {
       <PageHeader
         title="Tickets de caisse"
         action={
-          can(PERMISSIONS.VIEW_CASHBOXES) ? (
+          can(PERMISSIONS.CREATE_CASHBOX_TICKETS) ? (
             <button
               type="button"
-              onClick={() => { form.reset(); setCreateOpen(true); }}
+              onClick={() => { form.reset(); setLines([]); setCreateOpen(true); }}
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
             >
               <Plus className="h-4 w-4" />
@@ -262,11 +306,12 @@ export default function CashboxTicketsPage() {
 
       <CrudModal
         isOpen={createOpen}
-        onClose={() => { setCreateOpen(false); form.reset(); }}
+        onClose={resetCreate}
         title="Nouveau ticket de caisse"
         onSubmit={form.handleSubmit((d) => createMutation.mutate(d))}
         submitLabel="Créer"
         isSubmitting={createMutation.isPending}
+        size="lg"
       >
         <div className="flex flex-col gap-4">
           <FormField label="Description" required error={form.formState.errors.description?.message}>
@@ -278,23 +323,99 @@ export default function CashboxTicketsPage() {
             />
           </FormField>
 
-          <FormField label="Catégorie de dépense" error={form.formState.errors.expenseCategoryId?.message}>
-            <select {...form.register("expenseCategoryId")} className={inputClass}>
-              <option value="">Sélectionner…</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </FormField>
+          <RHFSelect
+            control={form.control}
+            name="expenseCategoryId"
+            label="Catégorie de dépense"
+            options={categories.map((c) => ({ value: c.id, label: c.name }))}
+            placeholder="Rechercher une catégorie..."
+            error={form.formState.errors.expenseCategoryId?.message}
+            isClearable
+          />
 
-          <FormField label="Fournisseur" error={form.formState.errors.supplierId?.message}>
-            <select {...form.register("supplierId")} className={inputClass}>
-              <option value="">Sélectionner…</option>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </FormField>
+          <RHFSelect
+            control={form.control}
+            name="supplierId"
+            label="Fournisseur"
+            options={suppliers.map((s) => ({ value: s.id, label: s.name }))}
+            placeholder="Rechercher un fournisseur..."
+            error={form.formState.errors.supplierId?.message}
+            isClearable
+          />
+
+          {/* Lignes d'articles */}
+          <div className="rounded-lg border border-gray-200 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-700">Articles</span>
+              <button
+                type="button"
+                onClick={addLine}
+                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Ajouter une ligne
+              </button>
+            </div>
+
+            {lines.length === 0 ? (
+              <p className="py-3 text-center text-xs text-gray-400">
+                Aucune ligne. Le ticket peut être créé sans article.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {lines.map((l, i) => (
+                  <div key={i} className="flex items-end gap-2">
+                    <div className="flex-1">
+                      <label className="mb-1 block text-xs text-gray-500">Article</label>
+                      <input
+                        type="text"
+                        value={l.itemName}
+                        onChange={(e) => updateLine(i, { itemName: e.target.value })}
+                        placeholder="Désignation"
+                        className={inputClass}
+                      />
+                    </div>
+                    <div className="w-20">
+                      <label className="mb-1 block text-xs text-gray-500">Qté</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={l.quantity}
+                        onChange={(e) => updateLine(i, { quantity: e.target.value })}
+                        className={inputClass}
+                      />
+                    </div>
+                    <div className="w-28">
+                      <label className="mb-1 block text-xs text-gray-500">Prix unit.</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={l.unitPrice}
+                        onChange={(e) => updateLine(i, { unitPrice: e.target.value })}
+                        placeholder="0"
+                        className={inputClass}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeLine(i)}
+                      className="mb-1 inline-flex h-9 w-9 items-center justify-center rounded text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                      title="Supprimer la ligne"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+
+                <div className="mt-1 flex justify-end border-t border-gray-100 pt-2">
+                  <span className="text-sm font-semibold text-gray-800">
+                    Total : {formatAmount(linesTotal)}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </CrudModal>
     </div>

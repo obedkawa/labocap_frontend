@@ -1,25 +1,263 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { Eye } from "lucide-react";
+import {
+  Eye,
+  FileText,
+  Check,
+  Trash2,
+  Printer,
+  RefreshCw,
+  Minus,
+  Plus,
+  X,
+} from "lucide-react";
+import type { AxiosError } from "axios";
 import type { ColumnDef } from "@tanstack/react-table";
+import { toast } from "sonner";
 
 import { DataTable } from "@/components/common/DataTable";
+import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 import { StatCard } from "@/components/ui/StatCard";
-import { Badge } from "@/components/ui/Badge";
-import { StatusBadge } from "@/components/ui/StatusBadge";
+import { usePermissions } from "@/hooks/usePermissions";
+import { PERMISSIONS } from "@/lib/constants/permissions";
 import { formatDate } from "@/lib/utils";
 import {
   testOrdersApi,
   type TestOrder,
   type MySpaceStats,
 } from "@/lib/api/testOrders";
+import { reportsApi } from "@/lib/api/reports";
 import { typeOrdersApi, type TypeOrder } from "@/lib/api/examens";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
-import type { PageResponse } from "@/types/api";
+import type { PageResponse, ApiError } from "@/types/api";
+
+// ---------------------------------------------------------------------------
+// Classe CSS de ligne (réplique Laravel : urgent rouge / validé-non-livré
+// orange / livré vert)
+// ---------------------------------------------------------------------------
+
+function rowClass(order: TestOrder): string {
+  if (order.isUrgent && !order.reportIsDelivered) return "bg-red-50";
+  if (order.reportIsDelivered) return "bg-green-50";
+  if (order.reportStatus === "VALIDATED") return "bg-yellow-50";
+  return "";
+}
+
+// ---------------------------------------------------------------------------
+// Boutons d'action par ligne (réplique Laravel myspace)
+// ---------------------------------------------------------------------------
+
+function ActionButtons({
+  order,
+  onDelete,
+}: {
+  order: TestOrder;
+  onDelete: (order: TestOrder) => void;
+}) {
+  const { can } = usePermissions();
+  const queryClient = useQueryClient();
+  const [downloading, setDownloading] = useState(false);
+
+  const deliverMutation = useMutation({
+    mutationFn: () => testOrdersApi.deliver(order.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["myspace-pending"] });
+      queryClient.invalidateQueries({ queryKey: ["myspace-done"] });
+      queryClient.invalidateQueries({ queryKey: ["myspace-stats"] });
+      toast.success("Demande marquée comme retirée");
+    },
+    onError: (err: AxiosError<ApiError>) =>
+      toast.error(err.response?.data?.message ?? "Erreur lors du retrait"),
+  });
+
+  const handlePrint = async () => {
+    if (!order.reportId) return;
+    setDownloading(true);
+    try {
+      const res = await reportsApi.downloadPdf(order.reportId);
+      const url = URL.createObjectURL(res.data as Blob);
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      toast.error("Erreur lors de la génération du PDF");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const isValidated =
+    order.reportStatus === "VALIDATED" || order.reportStatus === "DELIVERED";
+
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {/* Voir les détails — BLEU */}
+      <Link
+        href={`/test-orders/${order.id}/details`}
+        className="inline-flex items-center rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+        title="Voir les détails"
+      >
+        <Eye className="h-3.5 w-3.5" />
+      </Link>
+
+      {/* Compte rendu — JAUNE (voir si existe, sinon créer via détails) */}
+      {can(PERMISSIONS.VIEW_REPORTS) && (
+        <Link
+          href={
+            order.reportId
+              ? `/reports/${order.reportId}`
+              : `/test-orders/${order.id}/details`
+          }
+          className="inline-flex items-center rounded px-2 py-1 text-xs font-medium bg-yellow-500 text-white hover:bg-yellow-600 transition-colors"
+          title="Compte rendu"
+        >
+          <FileText className="h-3.5 w-3.5" />
+        </Link>
+      )}
+
+      {/* Marquer comme retiré — VERT (si validé mais pas encore livré) */}
+      {order.reportStatus === "VALIDATED" &&
+        !order.reportIsDelivered &&
+        can(PERMISSIONS.DELIVER_REPORTS) && (
+          <button
+            type="button"
+            onClick={() => deliverMutation.mutate()}
+            disabled={deliverMutation.isPending}
+            className="inline-flex items-center rounded px-2 py-1 text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+            title="Marquer comme retiré"
+          >
+            <Check className="h-3.5 w-3.5" />
+          </button>
+        )}
+
+      {/* Imprimer le compte rendu — GRIS (si validé/livré) */}
+      {order.reportId && isValidated && (
+        <button
+          type="button"
+          onClick={handlePrint}
+          disabled={downloading}
+          className="inline-flex items-center rounded px-2 py-1 text-xs font-medium bg-gray-600 text-white hover:bg-gray-700 transition-colors disabled:opacity-50"
+          title="Imprimer le compte rendu"
+        >
+          <Printer className="h-3.5 w-3.5" />
+        </button>
+      )}
+
+      {/* Supprimer — ROUGE (uniquement non validés) */}
+      {order.status !== "VALIDATED" &&
+        order.status !== "DELIVERED" &&
+        can(PERMISSIONS.DELETE_TEST_ORDERS) && (
+          <button
+            type="button"
+            onClick={() => onDelete(order)}
+            className="inline-flex items-center rounded px-2 py-1 text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
+            title="Supprimer"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Badge "Compte rendu" (réplique Laravel : Valider / En attente / Non enregistré)
+// ---------------------------------------------------------------------------
+
+function ReportBadge({ order }: { order: TestOrder }) {
+  if (!order.reportId) {
+    return (
+      <span className="inline-flex items-center whitespace-nowrap rounded-full bg-gray-300 px-2 py-0.5 text-xs font-medium text-gray-700">
+        Non enregistré
+      </span>
+    );
+  }
+  const isValidated =
+    order.reportStatus === "VALIDATED" || order.reportStatus === "DELIVERED";
+  return (
+    <span
+      className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium text-white ${
+        isValidated ? "bg-blue-600" : "bg-gray-500"
+      }`}
+    >
+      {isValidated ? "Valider" : "En attente"}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Carte avec widgets (réplique Laravel/Hyper : réactualiser / réduire / fermer)
+// ---------------------------------------------------------------------------
+
+function WidgetCard({
+  title,
+  onReload,
+  reloading = false,
+  children,
+}: {
+  title: string;
+  onReload: () => void;
+  reloading?: boolean;
+  children: React.ReactNode;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+  const [visible, setVisible] = useState(true);
+
+  // « Fermer » masque la carte (comme le remove de Hyper) ; elle réapparaît au
+  // rechargement de la page.
+  if (!visible) return null;
+
+  const btnClass =
+    "rounded p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600";
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <h2 className="text-base font-semibold text-gray-800">{title}</h2>
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={onReload}
+            title="Réactualiser"
+            aria-label="Réactualiser"
+            className={btnClass}
+          >
+            <RefreshCw className={`h-4 w-4 ${reloading ? "animate-spin" : ""}`} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setCollapsed((c) => !c)}
+            title={collapsed ? "Agrandir" : "Réduire"}
+            aria-label={collapsed ? "Agrandir" : "Réduire"}
+            aria-expanded={!collapsed}
+            className={btnClass}
+          >
+            {collapsed ? (
+              <Plus className="h-4 w-4" />
+            ) : (
+              <Minus className="h-4 w-4" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setVisible(false)}
+            title="Fermer"
+            aria-label="Fermer"
+            className={btnClass}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {!collapsed && children}
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Page
@@ -34,11 +272,17 @@ export default function MySpacePage() {
   const [pendingPage, setPendingPage] = useState(0);
   const [pendingPageSize, setPendingPageSize] = useState(10);
 
-  // ---- Filtres — terminées
+  // ---- Filtres — terminées (terminé = VALIDATED + DELIVERED)
   const [doneTypeOrderId, setDoneTypeOrderId] = useState("");
-  const [donePriority, setDonePriority] = useState("");
+  // "" = toutes les terminées (rapport validé ou livré) ; "DELIVERED" = livrées uniquement
+  const [doneStatus, setDoneStatus] = useState("");
+  const [doneFrom, setDoneFrom] = useState("");
+  const [doneTo, setDoneTo] = useState("");
   const [donePage, setDonePage] = useState(0);
   const [donePageSize, setDonePageSize] = useState(10);
+
+  const [deleteTarget, setDeleteTarget] = useState<TestOrder | null>(null);
+  const queryClient = useQueryClient();
 
   // ---------------------------------------------------------------------------
   // Queries
@@ -55,11 +299,20 @@ export default function MySpacePage() {
   });
   const typeOrders: TypeOrder[] = typeOrdersData ?? [];
 
-  const { data: pendingData, isLoading: pendingLoading } =
-    useQuery<PageResponse<TestOrder>>({
+  const {
+    data: pendingData,
+    isLoading: pendingLoading,
+    isFetching: pendingFetching,
+    refetch: refetchPending,
+  } = useQuery<PageResponse<TestOrder>>({
       queryKey: [
         "myspace-pending",
-        { typeOrderId: pendingTypeOrderId, priority: pendingPriority, page: pendingPage, size: pendingPageSize },
+        {
+          typeOrderId: pendingTypeOrderId,
+          priority: pendingPriority,
+          page: pendingPage,
+          size: pendingPageSize,
+        },
       ],
       queryFn: () =>
         testOrdersApi
@@ -73,18 +326,32 @@ export default function MySpacePage() {
           .then((r) => r.data),
     });
 
-  const { data: doneData, isLoading: doneLoading } =
-    useQuery<PageResponse<TestOrder>>({
+  // "terminées" = rapport terminé. status "VALIDATED" côté API Mon espace renvoie
+  // les rapports validés ET livrés ; "DELIVERED" restreint aux livrés.
+  const {
+    data: doneData,
+    isLoading: doneLoading,
+    isFetching: doneFetching,
+    refetch: refetchDone,
+  } = useQuery<PageResponse<TestOrder>>({
       queryKey: [
         "myspace-done",
-        { typeOrderId: doneTypeOrderId, priority: donePriority, page: donePage, size: donePageSize },
+        {
+          typeOrderId: doneTypeOrderId,
+          status: doneStatus,
+          from: doneFrom,
+          to: doneTo,
+          page: donePage,
+          size: donePageSize,
+        },
       ],
       queryFn: () =>
         testOrdersApi
           .getMyOrders({
-            status: "VALIDATED",
+            status: doneStatus === "DELIVERED" ? "DELIVERED" : "VALIDATED",
             typeOrderId: doneTypeOrderId || undefined,
-            priority: donePriority || undefined,
+            from: doneFrom || undefined,
+            to: doneTo || undefined,
             page: donePage,
             size: donePageSize,
           })
@@ -94,8 +361,21 @@ export default function MySpacePage() {
   const pendingOrders: TestOrder[] = pendingData?.content ?? [];
   const doneOrders: TestOrder[] = doneData?.content ?? [];
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => testOrdersApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["myspace-pending"] });
+      queryClient.invalidateQueries({ queryKey: ["myspace-done"] });
+      queryClient.invalidateQueries({ queryKey: ["myspace-stats"] });
+      toast.success("Demande supprimée avec succès");
+      setDeleteTarget(null);
+    },
+    onError: (err: AxiosError<ApiError>) =>
+      toast.error(err.response?.data?.message ?? "Erreur lors de la suppression"),
+  });
+
   // ---------------------------------------------------------------------------
-  // Colonnes DataTable
+  // Colonnes DataTable (réplique Laravel myspace)
   // ---------------------------------------------------------------------------
 
   const buildColumns = (): ColumnDef<TestOrder>[] => [
@@ -103,24 +383,26 @@ export default function MySpacePage() {
       header: "Actions",
       id: "actions",
       cell: ({ row }) => (
-        <Link
-          href={`/test-orders/${row.original.id}/details`}
-          className="inline-flex items-center justify-center rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-blue-600 transition-colors"
-          title="Voir les détails"
-        >
-          <Eye className="h-4 w-4" />
-        </Link>
+        <ActionButtons order={row.original} onDelete={setDeleteTarget} />
       ),
     },
     {
       header: "Date",
       id: "date",
       cell: ({ row }) =>
-        row.original.prelevementDate ? formatDate(row.original.prelevementDate) : formatDate(row.original.createdAt),
+        row.original.prelevementDate
+          ? formatDate(row.original.prelevementDate)
+          : formatDate(row.original.createdAt),
     },
     {
       header: "Code",
       accessorKey: "code",
+      cell: ({ row }) =>
+        row.original.code ?? (
+          <span className="whitespace-nowrap text-gray-400 italic text-xs">
+            En attente
+          </span>
+        ),
     },
     {
       header: "Patient",
@@ -131,7 +413,17 @@ export default function MySpacePage() {
     {
       header: "Examens",
       id: "examens",
-      cell: ({ row }) => row.original.typeOrderTitle ?? "—",
+      cell: ({ row }) => (
+        <div className="text-xs text-gray-700 max-w-[160px]">
+          {row.original.details?.length
+            ? row.original.details.map((d) => (
+                <div key={d.id ?? `${row.original.id}-${d.labTestId}`}>
+                  {d.testName}
+                </div>
+              ))
+            : "—"}
+        </div>
+      ),
     },
     {
       header: "Contrat",
@@ -139,23 +431,20 @@ export default function MySpacePage() {
       cell: ({ row }) => row.original.contratName ?? "—",
     },
     {
-      header: "Statut",
+      header: "Compte rendu",
       id: "report",
-      cell: ({ row }) => {
-        if (!row.original.status) return <span className="text-gray-400 text-xs">—</span>;
-        return (
-          <StatusBadge status={row.original.status} domain="testOrder" />
-        );
-      },
+      cell: ({ row }) => <ReportBadge order={row.original} />,
     },
     {
       header: "Urgent",
       id: "urgent",
       cell: ({ row }) =>
         row.original.isUrgent ? (
-          <Badge variant="danger">Urgent</Badge>
+          <span className="inline-flex items-center rounded-full bg-red-600 px-2 py-0.5 text-xs font-medium text-white">
+            Oui
+          </span>
         ) : (
-          <Badge variant="secondary">Normal</Badge>
+          <span className="text-gray-400 text-xs">Non</span>
         ),
     },
   ];
@@ -179,29 +468,34 @@ export default function MySpacePage() {
       />
 
       {/* =================================================================
-          KPI widgets
+          KPI widgets (réplique Laravel : 6 cartes)
       ================================================================= */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         <StatCard
           title="DEMANDES AFFECTÉES"
-          value={statsLoading ? "…" : (stats?.totalAssigned ?? 0)}
+          value={statsLoading ? "…" : stats?.totalAssigned ?? 0}
         />
         <StatCard
           title="DEMANDES EN ATTENTE"
-          value={statsLoading ? "…" : (stats?.totalPending ?? 0)}
+          value={statsLoading ? "…" : stats?.totalPending ?? 0}
         />
         <StatCard
-          title="DEMANDES VALIDÉES"
-          value={statsLoading ? "…" : (stats?.totalValidated ?? 0)}
+          title="DEMANDES TERMINÉES"
+          value={statsLoading ? "…" : stats?.totalValidated ?? 0}
+        />
+        <StatCard
+          title="IMMUNOS EN ATTENTE"
+          value={statsLoading ? "…" : stats?.totalImmunoPending ?? 0}
+          valueClassName="text-red-600"
         />
         <StatCard
           title="DEMANDES URGENTES"
-          value={statsLoading ? "…" : (stats?.totalUrgent ?? 0)}
+          value={statsLoading ? "…" : stats?.totalUrgent ?? 0}
           valueClassName="text-red-600"
         />
         <StatCard
           title="DEMANDES EN RETARD"
-          value={statsLoading ? "…" : (stats?.totalLate ?? 0)}
+          value={statsLoading ? "…" : stats?.totalLate ?? 0}
           valueClassName="text-red-600"
         />
       </div>
@@ -209,20 +503,18 @@ export default function MySpacePage() {
       {/* =================================================================
           DataTable 1 — Demandes en attente
       ================================================================= */}
-      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-base font-semibold text-gray-800 mb-4">
-          Demandes en attente
-        </h2>
-
-        {/* Filtres */}
+      <WidgetCard
+        title="Liste des demandes en attente"
+        onReload={() => refetchPending()}
+        reloading={pendingFetching}
+      >
         <div className="flex flex-wrap gap-3 mb-4">
-          <select
+          <NativeSelect
             value={pendingTypeOrderId}
             onChange={(e) => {
               setPendingTypeOrderId(e.target.value);
               setPendingPage(0);
             }}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
             <option value="">Tous les types</option>
             {typeOrders.map((t) => (
@@ -230,20 +522,19 @@ export default function MySpacePage() {
                 {t.title}
               </option>
             ))}
-          </select>
+          </NativeSelect>
 
-          <select
+          <NativeSelect
             value={pendingPriority}
             onChange={(e) => {
               setPendingPriority(e.target.value);
               setPendingPage(0);
             }}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
-            <option value="">Tous</option>
+            <option value="">Toutes priorités</option>
             <option value="urgent">Urgent</option>
             <option value="late">Retard</option>
-          </select>
+          </NativeSelect>
         </div>
 
         <DataTable<TestOrder>
@@ -258,47 +549,86 @@ export default function MySpacePage() {
             setPendingPageSize(size);
             setPendingPage(0);
           }}
+          rowClassName={rowClass}
         />
-      </div>
+      </WidgetCard>
 
       {/* =================================================================
           DataTable 2 — Demandes terminées
       ================================================================= */}
-      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-base font-semibold text-gray-800 mb-4">
-          Demandes terminées
-        </h2>
+      <WidgetCard
+        title="Liste des demandes terminées"
+        onReload={() => refetchDone()}
+        reloading={doneFetching}
+      >
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Type d&apos;examen
+            </label>
+            <NativeSelect
+              value={doneTypeOrderId}
+              onChange={(e) => {
+                setDoneTypeOrderId(e.target.value);
+                setDonePage(0);
+              }}
+            >
+              <option value="">Tous les types</option>
+              {typeOrders.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.title}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
 
-        {/* Filtres */}
-        <div className="flex flex-wrap gap-3 mb-4">
-          <select
-            value={doneTypeOrderId}
-            onChange={(e) => {
-              setDoneTypeOrderId(e.target.value);
-              setDonePage(0);
-            }}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="">Tous les types</option>
-            {typeOrders.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.title}
-              </option>
-            ))}
-          </select>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Statut
+            </label>
+            <NativeSelect
+              value={doneStatus}
+              onChange={(e) => {
+                setDoneStatus(e.target.value);
+                setDonePage(0);
+              }}
+            >
+              <option value="">Toutes les terminées</option>
+              <option value="DELIVERED">Livrées uniquement</option>
+            </NativeSelect>
+          </div>
 
-          <select
-            value={donePriority}
-            onChange={(e) => {
-              setDonePriority(e.target.value);
-              setDonePage(0);
-            }}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="">Tous</option>
-            <option value="urgent">Urgent</option>
-            <option value="late">Retard</option>
-          </select>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Date de début
+            </label>
+            <input
+              type="date"
+              value={doneFrom}
+              onChange={(e) => {
+                setDoneFrom(e.target.value);
+                setDonePage(0);
+              }}
+              aria-label="Date de début"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Date de fin
+            </label>
+            <input
+              type="date"
+              value={doneTo}
+              onChange={(e) => {
+                setDoneTo(e.target.value);
+                setDonePage(0);
+              }}
+              aria-label="Date de fin"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
         </div>
 
         <DataTable<TestOrder>
@@ -313,8 +643,22 @@ export default function MySpacePage() {
             setDonePageSize(size);
             setDonePage(0);
           }}
+          rowClassName={rowClass}
         />
-      </div>
+      </WidgetCard>
+
+      <ConfirmModal
+        isOpen={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
+        }}
+        title="Supprimer cette demande d'examen"
+        message="La suppression d'un examen entraîne la suppression du Rapport. Voulez-vous continuer ?"
+        confirmLabel="Oui"
+        confirmVariant="danger"
+        isLoading={deleteMutation.isPending}
+      />
     </div>
   );
 }

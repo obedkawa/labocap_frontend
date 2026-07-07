@@ -21,8 +21,10 @@ import { PERMISSIONS } from "@/lib/constants/permissions";
 import { formatDate } from "@/lib/utils";
 import {
   consultationsApi,
+  getConsultationFileUrl,
   type Consultation,
   type ConsultationRequest,
+  type ConsultationFile,
 } from "@/lib/api/consultations";
 import { patientsApi } from "@/lib/api/patients";
 import { doctorsApi } from "@/lib/api/doctors";
@@ -59,7 +61,7 @@ type ConsultationFormData = z.infer<typeof consultationSchema>;
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 // ---------------------------------------------------------------------------
 // Composant formulaire partagé
@@ -70,6 +72,10 @@ interface ConsultationFormProps {
   patientOptions: { value: string; label: string }[];
   doctorOptions: { value: string; label: string }[];
   typeOptions: { value: string; label: string }[];
+  /** Affiche la zone fichiers (édition uniquement — l'upload se fait sur PUT). */
+  showFiles?: boolean;
+  existingFiles?: ConsultationFile[];
+  onFilesChange?: (files: File[]) => void;
 }
 
 function ConsultationForm({
@@ -77,12 +83,17 @@ function ConsultationForm({
   patientOptions,
   doctorOptions,
   typeOptions,
+  showFiles = false,
+  existingFiles = [],
+  onFilesChange,
 }: ConsultationFormProps) {
   const {
     register,
     control,
+    watch,
     formState: { errors },
   } = form;
+  const hasType = !!watch("typeConsultationId");
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -96,6 +107,7 @@ function ConsultationForm({
           control={control}
           render={({ field }) => (
             <Select
+              instanceId="consultation-patient"
               inputId="patientId"
               options={patientOptions}
               placeholder="Sélectionner le patient..."
@@ -120,6 +132,7 @@ function ConsultationForm({
           control={control}
           render={({ field }) => (
             <Select
+              instanceId="consultation-doctor"
               inputId="doctorId"
               options={doctorOptions}
               placeholder="Sélectionner le médecin..."
@@ -143,6 +156,7 @@ function ConsultationForm({
           control={control}
           render={({ field }) => (
             <Select
+              instanceId="consultation-type"
               inputId="typeConsultationId"
               options={typeOptions}
               placeholder="Sélectionner un type..."
@@ -204,6 +218,48 @@ function ConsultationForm({
           className={`${inputClass} resize-none`}
         />
       </div>
+
+      {/* Fichiers (édition uniquement) */}
+      {showFiles && (
+        <div className="flex flex-col gap-2 sm:col-span-2">
+          <label className="text-sm font-medium text-gray-700">Fichiers joints</label>
+
+          {existingFiles.length > 0 ? (
+            <ul className="divide-y divide-gray-100 rounded-md border border-gray-200">
+              {existingFiles.map((f) => (
+                <li key={f.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                  <span className="truncate text-gray-700">
+                    {f.typeFileLabel || f.path.split("/").pop()}
+                  </span>
+                  <a
+                    href={getConsultationFileUrl(f.path)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="ml-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                  >
+                    Voir
+                  </a>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-gray-400">Aucun fichier joint.</p>
+          )}
+
+          <input
+            type="file"
+            multiple
+            disabled={!hasType}
+            onChange={(e) => onFilesChange?.(Array.from(e.target.files ?? []))}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50"
+          />
+          {!hasType && (
+            <p className="text-xs text-amber-600">
+              Sélectionnez d&apos;abord un type de consultation pour pouvoir joindre des fichiers.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -229,6 +285,7 @@ export default function ConsultationsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Consultation | null>(null);
   const [selectedConsultation, setSelectedConsultation] =
     useState<Consultation | null>(null);
+  const [editFiles, setEditFiles] = useState<File[]>([]);
 
   // --- Formulaires
   const createForm = useForm<ConsultationFormData>({
@@ -246,6 +303,14 @@ export default function ConsultationsPage() {
 
   const editForm = useForm<ConsultationFormData>({
     resolver: zodResolver(consultationSchema),
+  });
+
+  // --- Query : fichiers de la consultation en cours d'édition
+  const { data: editFilesData } = useQuery<ConsultationFile[]>({
+    queryKey: ["consultation-files", selectedConsultation?.id],
+    queryFn: () =>
+      consultationsApi.getFiles(selectedConsultation!.id).then((r) => r.data),
+    enabled: editOpen && !!selectedConsultation,
   });
 
   // --- Query : liste consultations
@@ -329,15 +394,19 @@ export default function ConsultationsPage() {
     mutationFn: ({
       id,
       data,
+      files,
     }: {
       id: string;
       data: Partial<ConsultationRequest>;
-    }) => consultationsApi.update(id, data),
+      files?: File[];
+    }) => consultationsApi.update(id, data, files),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["consultations"] });
+      queryClient.invalidateQueries({ queryKey: ["consultation-files"] });
       toast.success("Consultation modifiée avec succès");
       setEditOpen(false);
       setSelectedConsultation(null);
+      setEditFiles([]);
       editForm.reset();
     },
     onError: (err: AxiosError<ApiError>) => {
@@ -374,6 +443,7 @@ export default function ConsultationsPage() {
       amount:
         consultation.amount != null ? String(consultation.amount) : "",
     });
+    setEditFiles([]);
     setEditOpen(true);
   }
 
@@ -401,6 +471,7 @@ export default function ConsultationsPage() {
     updateMutation.mutate({
       id: selectedConsultation.id,
       data: buildPayload(values),
+      files: editFiles.length > 0 ? editFiles : undefined,
     });
   }
 
@@ -525,7 +596,7 @@ export default function ConsultationsPage() {
                 setDateFrom(e.target.value);
                 setPage(0);
               }}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -539,7 +610,7 @@ export default function ConsultationsPage() {
                 setDateTo(e.target.value);
                 setPage(0);
               }}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
           {(dateFrom || dateTo) && (
@@ -604,6 +675,7 @@ export default function ConsultationsPage() {
         onClose={() => {
           setEditOpen(false);
           setSelectedConsultation(null);
+          setEditFiles([]);
           editForm.reset();
         }}
         title="Modifier la consultation"
@@ -617,6 +689,9 @@ export default function ConsultationsPage() {
           patientOptions={patientOptions}
           doctorOptions={doctorOptions}
           typeOptions={typeOptions}
+          showFiles
+          existingFiles={editFilesData ?? []}
+          onFilesChange={setEditFiles}
         />
       </CrudModal>
 

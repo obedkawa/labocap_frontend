@@ -424,18 +424,6 @@ export default function HomePage() {
     enabled: isAdmin,
   });
 
-  // -- Secrétariat stats (same endpoint, different role)
-  const { data: secStats, isLoading: secStatsLoading } = useQuery({
-    queryKey: ["dashboard", "secretariat-stats"],
-    queryFn: () => dashboardApi.getStats().then((r) => r.data),
-    staleTime: 5 * 60 * 1000,
-    refetchInterval: 5 * 60 * 1000,
-    enabled: isSecretary && !isAdmin,
-  });
-
-  const anyStats = stats ?? secStats;
-  const anyStatsLoading = statsLoading || secStatsLoading;
-
   // -- Reports today
   const { data: reportsToday = [], isLoading: reportsTodayLoading } = useQuery({
     queryKey: ["dashboard", "reports-today"],
@@ -545,6 +533,8 @@ export default function HomePage() {
     enabled: isPathologist,
   });
 
+  // ExamStatusChart ne renvoie que deux compteurs (termine / enAttente) :
+  // on alimente le donut avec ces deux valeurs réelles, sans segment factice.
   const doctorPieData = [
     {
       name: "Terminé",
@@ -552,17 +542,26 @@ export default function HomePage() {
       color: "#0acf97",
     },
     {
-      name: "En cours",
+      name: "En attente",
       value: doctorExamStatus?.enAttente ?? 0,
-      color: "#727cf5",
+      color: "#fa5c7c",
     },
-    { name: "En attente", value: 0, color: "#fa5c7c" },
   ];
 
   const doctorOrdersTermine = doctorOrders.filter(
     (o) => o.reportStatus === 1
   ).length;
   const doctorOrdersTotal = doctorOrders.length;
+
+  // Productivité = taux d'examens terminés sur le total affecté au pathologiste.
+  // Calculée à partir des compteurs réels déjà chargés (doctorExamStatus) ;
+  // affiche "—" si aucune donnée n'est disponible (plutôt qu'un "0 ↑" trompeur).
+  const doctorExamsTotal =
+    (doctorExamStatus?.termine ?? 0) + (doctorExamStatus?.enAttente ?? 0);
+  const doctorProductivite =
+    doctorExamsTotal > 0
+      ? Math.round(((doctorExamStatus?.termine ?? 0) / doctorExamsTotal) * 100)
+      : null;
 
   // ---------------------------------------------------------------------------
   // Render
@@ -851,7 +850,7 @@ export default function HomePage() {
                       href="/invoices"
                       className="ml-4 text-xs text-blue-500 hover:underline"
                     >
-                      View Statements →
+                      Voir les relevés →
                     </Link>
                   </div>
                   {/* Graphique ligne */}
@@ -895,22 +894,34 @@ export default function HomePage() {
                           },
                         ]}
                       />
-                      {/* Légende */}
+                      {/* Légende — couleurs alignées sur les segments réels du donut */}
                       <div className="space-y-2 mt-3">
                         <div className="flex items-center gap-2 text-xs text-gray-600">
-                          <span className="h-3 w-3 rounded-sm bg-green-500 inline-block" />
+                          <span
+                            className="h-3 w-3 rounded-sm inline-block"
+                            style={{ backgroundColor: "#727cf5" }}
+                          />
                           Factures de vente payées
                         </div>
                         <div className="flex items-center gap-2 text-xs text-gray-600">
-                          <span className="h-3 w-3 rounded-sm bg-orange-400 inline-block" />
+                          <span
+                            className="h-3 w-3 rounded-sm inline-block"
+                            style={{ backgroundColor: "#0acf97" }}
+                          />
                           Factures de vente non payées
                         </div>
                         <div className="flex items-center gap-2 text-xs text-gray-600">
-                          <span className="h-3 w-3 rounded-sm bg-blue-500 inline-block" />
+                          <span
+                            className="h-3 w-3 rounded-sm inline-block"
+                            style={{ backgroundColor: "#fa5c7c" }}
+                          />
                           Factures d&apos;avoir payées
                         </div>
                         <div className="flex items-center gap-2 text-xs text-gray-600">
-                          <span className="h-3 w-3 rounded-sm bg-red-500 inline-block" />
+                          <span
+                            className="h-3 w-3 rounded-sm inline-block"
+                            style={{ backgroundColor: "#ffbc00" }}
+                          />
                           Factures d&apos;avoir non payées
                         </div>
                       </div>
@@ -1129,7 +1140,9 @@ export default function HomePage() {
                 </div>
                 <div>
                   <p className="text-3xl font-semibold text-gray-900">
-                    0 ↑
+                    {doctorProductivite === null
+                      ? "—"
+                      : `${doctorProductivite}% ↑`}
                   </p>
                   <p className="text-sm text-gray-500">Productivité</p>
                 </div>

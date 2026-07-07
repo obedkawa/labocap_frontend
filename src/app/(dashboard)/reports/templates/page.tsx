@@ -20,13 +20,12 @@ import {
 import type { ApiError } from "@/types/api";
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 export default function ReportTemplatesPage() {
   const { can } = usePermissions();
   const qc = useQueryClient();
-  const canManage =
-    can(PERMISSIONS.EDIT_SETTINGS) || can(PERMISSIONS.MANAGE_SETTINGS);
+  const canManage = can(PERMISSIONS.MANAGE_SETTINGS);
 
   // === État
   const [createOpen, setCreateOpen] = useState(false);

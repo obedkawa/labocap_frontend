@@ -20,6 +20,7 @@ import { FormField } from "@/components/ui/FormField";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { hospitalsApi, Hospital, HospitalRequest } from "@/lib/api/hospitals";
+import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Zod schema
@@ -27,7 +28,7 @@ import { hospitalsApi, Hospital, HospitalRequest } from "@/lib/api/hospitals";
 
 const hospitalSchema = z.object({
   name: z.string().min(1, "Le nom est requis"),
-  telephone: z.string().min(1, "Le téléphone est requis"),
+  telephone: z.string().optional(),
   email: z.string().email("Email invalide").optional().or(z.literal("")),
   adresse: z.string().optional(),
   commission: z.string().optional(),
@@ -40,7 +41,7 @@ type HospitalFormValues = z.infer<typeof hospitalSchema>;
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -176,7 +177,7 @@ export default function HospitalsPage() {
   function buildPayload(values: HospitalFormValues): HospitalRequest {
     return {
       name: values.name,
-      telephone: values.telephone,
+      telephone: values.telephone || undefined,
       email: values.email || undefined,
       adresse: values.adresse || undefined,
       commission:
@@ -199,7 +200,7 @@ export default function HospitalsPage() {
 
   const columns: ColumnDef<Hospital>[] = [
     {
-      header: "Nom",
+      header: "Nom de l'hôpital",
       accessorKey: "name",
       enableSorting: true,
     },
@@ -210,29 +211,13 @@ export default function HospitalsPage() {
       cell: ({ row }) => row.original.telephone ?? "—",
     },
     {
-      header: "Email",
-      accessorKey: "email",
-      enableSorting: true,
-      cell: ({ row }) =>
-        row.original.email ? (
-          <a
-            href={`mailto:${row.original.email}`}
-            className="text-blue-600 hover:underline"
-          >
-            {row.original.email}
-          </a>
-        ) : (
-          "—"
-        ),
-    },
-    {
       header: "Adresse",
       accessorKey: "adresse",
       enableSorting: true,
       cell: ({ row }) => row.original.adresse ?? "—",
     },
     {
-      header: "Commission (%)",
+      header: "Commission",
       accessorKey: "commission",
       enableSorting: true,
       cell: ({ row }) =>
@@ -247,7 +232,7 @@ export default function HospitalsPage() {
           <PermissionGate permission={PERMISSIONS.EDIT_HOSPITALS}>
             <button
               onClick={() => openEdit(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
               aria-label="Modifier"
             >
               <Pencil className="h-3.5 w-3.5" />
@@ -257,7 +242,7 @@ export default function HospitalsPage() {
           <PermissionGate permission={PERMISSIONS.DELETE_HOSPITALS}>
             <button
               onClick={() => openDelete(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-50 text-red-700 hover:bg-red-100 transition-colors"
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
               aria-label="Supprimer"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -304,7 +289,7 @@ export default function HospitalsPage() {
             />
           </div>
           <div className="text-sm text-gray-500">
-            {totalElements} hôpital{totalElements > 1 ? "aux" : ""} au total
+            {totalElements} {totalElements > 1 ? "hôpitaux" : "hôpital"} au total
             {search && ` · ${hospitals.length} affiché${hospitals.length > 1 ? "s" : ""}`}
           </div>
         </div>
@@ -325,11 +310,13 @@ export default function HospitalsPage() {
       <CrudModal
         isOpen={createOpen}
         onClose={() => setCreateOpen(false)}
-        title="Ajouter un hôpital"
-        size="lg"
+        title="Ajouter un nouvel hôpital"
+        size="md"
         onSubmit={createForm.handleSubmit(onCreateSubmit)}
-        submitLabel="Ajouter un hôpital"
+        submitLabel="Ajouter un nouvel hôpital"
         isSubmitting={createMutation.isPending}
+        closeOnOverlayClick={false}
+        closeOnEscape={false}
       >
         <HospitalForm form={createForm} />
       </CrudModal>
@@ -339,10 +326,12 @@ export default function HospitalsPage() {
         isOpen={editOpen}
         onClose={() => setEditOpen(false)}
         title="Modifier un hôpital"
-        size="lg"
+        size="md"
         onSubmit={editForm.handleSubmit(onEditSubmit)}
         submitLabel="Modifier"
         isSubmitting={updateMutation.isPending}
+        closeOnOverlayClick={false}
+        closeOnEscape={false}
       >
         <HospitalForm form={editForm} />
       </CrudModal>
@@ -382,8 +371,12 @@ function HospitalForm({ form }: HospitalFormProps) {
   } = form;
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      <FormField label="Nom" required error={errors.name?.message}>
+    <div className="flex flex-col gap-4">
+      <p className="text-right text-xs text-gray-500">
+        <span className="text-red-500">*</span> champs obligatoires
+      </p>
+
+      <FormField label="Nom de l'hôpital" required error={errors.name?.message}>
         <input
           type="text"
           {...register("name")}
@@ -392,7 +385,11 @@ function HospitalForm({ form }: HospitalFormProps) {
         />
       </FormField>
 
-      <FormField label="Téléphone" required error={errors.telephone?.message}>
+      <FormField
+        label="Téléphone"
+        error={errors.telephone?.message}
+        hint="Format: 97000000"
+      >
         <input
           type="tel"
           {...register("telephone")}
@@ -411,15 +408,15 @@ function HospitalForm({ form }: HospitalFormProps) {
       </FormField>
 
       <FormField label="Adresse" error={errors.adresse?.message}>
-        <input
-          type="text"
+        <textarea
           {...register("adresse")}
           placeholder="Adresse de l'hôpital"
-          className={inputClass}
+          rows={3}
+          className={cn(inputClass, "min-h-[80px] resize-y")}
         />
       </FormField>
 
-      <FormField label="Commission (%)" error={errors.commission?.message}>
+      <FormField label="Commission (en pourcentage)" error={errors.commission?.message}>
         <input
           type="number"
           {...register("commission")}
