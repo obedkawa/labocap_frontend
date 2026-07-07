@@ -1,0 +1,19 @@
+services:
+  # ─── Frontend Next.js (standalone) ─────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # URL de l'API injectée AU BUILD (variables NEXT_PUBLIC_* figées à la
+        # compilation). Doit pointer vers l'API telle qu'accessible côté navigateur.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+    image: labo-anapath-frontend:1.0.0
+    container_name: labo-frontend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
