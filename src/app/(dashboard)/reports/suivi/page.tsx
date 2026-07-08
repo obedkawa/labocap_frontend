@@ -634,8 +634,8 @@ function RapportsTab({
       {/* Tableau de synthèse par période (réplique Laravel onglet "Rapports") */}
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50">
+          <table className="w-full text-sm [&_th]:border-r [&_th]:border-gray-300 [&_th:last-child]:border-r-0 [&_td]:border-r [&_td]:border-gray-200 [&_td:last-child]:border-r-0">
+            <thead className="border-b-2 border-gray-300 bg-gray-200">
               <tr>
                 {[
                   "Période",
@@ -647,14 +647,14 @@ function RapportsTab({
                 ].map((h) => (
                   <th
                     key={h}
-                    className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600"
+                    className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-800"
                   >
                     {h}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-200">
               <tr className="align-top">
                 <td className="px-4 py-3 font-medium text-gray-700">
                   {periodeLabel}
@@ -891,30 +891,30 @@ function DemandesTab({
       {/* Tableau */}
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50">
+          <table className="w-full text-sm [&_th]:border-r [&_th]:border-gray-300 [&_th:last-child]:border-r-0 [&_td]:border-r [&_td]:border-gray-200 [&_td:last-child]:border-r-0">
+            <thead className="border-b-2 border-gray-300 bg-gray-200">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-800">
                   Date
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-800">
                   Code
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-800">
                   Macro
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-800">
                   Compte rendu
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-800">
                   Patient informé
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-800">
                   Patient livré
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-200">
               {isLoading ? (
                 Array.from({ length: Math.min(pageSize, 10) }).map((_, i) => (
                   <tr key={i}>

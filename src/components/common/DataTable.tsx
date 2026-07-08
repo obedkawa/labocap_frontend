@@ -142,14 +142,14 @@ export function DataTable<T>({
       <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50">
+            <thead className="border-b-2 border-gray-300 bg-gray-200">
               <tr>
                 {table.getHeaderGroups().flatMap((hg) =>
                   hg.headers.map((header) => (
                     <th
                       key={header.id}
                       className={cn(
-                        "px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600",
+                        "border-r border-gray-300 px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-800 last:border-r-0",
                         header.column.getCanSort() && "cursor-pointer select-none"
                       )}
                       onClick={header.column.getToggleSortingHandler()}
@@ -157,13 +157,13 @@ export function DataTable<T>({
                       <div className="flex items-center gap-1">
                         {flexRender(header.column.columnDef.header, header.getContext())}
                         {header.column.getCanSort() && (
-                          <span className="text-gray-400">
+                          <span className="text-gray-600">
                             {header.column.getIsSorted() === "asc" ? (
-                              <ChevronUp className="h-3.5 w-3.5 text-blue-600" />
+                              <ChevronUp className="h-4 w-4 text-blue-600" strokeWidth={3} />
                             ) : header.column.getIsSorted() === "desc" ? (
-                              <ChevronDown className="h-3.5 w-3.5 text-blue-600" />
+                              <ChevronDown className="h-4 w-4 text-blue-600" strokeWidth={3} />
                             ) : (
-                              <ChevronsUpDown className="h-3.5 w-3.5 opacity-50" />
+                              <ChevronsUpDown className="h-4 w-4 text-gray-600" strokeWidth={2.5} />
                             )}
                           </span>
                         )}
@@ -173,7 +173,7 @@ export function DataTable<T>({
                 )}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-200">
               {isLoading ? (
                 Array.from({ length: currentPageSize }).map((_, i) => (
                   <tr key={i}>
@@ -198,12 +198,12 @@ export function DataTable<T>({
                   <tr
                     key={row.id}
                     className={cn(
-                      "border-b border-gray-100 hover:bg-gray-50 transition-colors",
+                      "even:bg-gray-50 hover:bg-blue-50 transition-colors",
                       rowClassName?.(row.original)
                     )}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-4 py-3 text-gray-700">
+                      <td key={cell.id} className="border-r border-gray-200 px-4 py-3 text-gray-800 last:border-r-0">
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </td>
                     ))}

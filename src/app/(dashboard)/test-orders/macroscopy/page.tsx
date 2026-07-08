@@ -169,19 +169,19 @@ function PendingByTypeTable({
   return (
     <div className="space-y-3">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm [&_th]:border-r [&_th]:border-gray-300 [&_th:last-child]:border-r-0 [&_td]:border-r [&_td]:border-gray-200 [&_td:last-child]:border-r-0">
           <thead>
-            <tr className="border-b border-gray-200 bg-gray-50">
+            <tr className="border-b-2 border-gray-300 bg-gray-200">
               <th className="w-8 px-3 py-2 text-left">
                 <input type="checkbox" className="rounded border-gray-300" />
               </th>
-              <th className="px-3 py-2 text-left font-medium text-gray-600">
+              <th className="px-3 py-2 text-left font-bold text-gray-800">
                 Date limite
               </th>
-              <th className="px-3 py-2 text-left font-medium text-gray-600">
+              <th className="px-3 py-2 text-left font-bold text-gray-800">
                 Code
               </th>
-              <th className="px-3 py-2 text-left font-medium text-gray-600">
+              <th className="px-3 py-2 text-left font-bold text-gray-800">
                 Macro réalisé par
               </th>
             </tr>
@@ -195,7 +195,7 @@ function PendingByTypeTable({
               return (
                 <tr
                   key={order.id}
-                  className={`border-b border-gray-100 hover:bg-gray-50 ${
+                  className={`border-b border-gray-200 hover:bg-gray-50 ${
                     order.isUrgent ? "bg-red-50" : ""
                   }`}
                 >
@@ -489,7 +489,7 @@ export default function MacroscopyGlobalPage() {
           {/* Filtres — 4 colonnes */}
           <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">
+              <label className="mb-1 block text-xs font-bold text-gray-800">
                 Demande d&apos;examen
               </label>
               <SelectField
@@ -501,7 +501,7 @@ export default function MacroscopyGlobalPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">
+              <label className="mb-1 block text-xs font-bold text-gray-800">
                 Date
               </label>
               <input
@@ -512,7 +512,7 @@ export default function MacroscopyGlobalPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">
+              <label className="mb-1 block text-xs font-bold text-gray-800">
                 Réalisé par
               </label>
               <SelectField
@@ -527,7 +527,7 @@ export default function MacroscopyGlobalPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">
+              <label className="mb-1 block text-xs font-bold text-gray-800">
                 Rechercher
               </label>
               <input
@@ -556,31 +556,31 @@ export default function MacroscopyGlobalPage() {
                 Aucune macroscopie enregistrée.
               </p>
             ) : (
-              <table className="w-full text-sm">
+              <table className="w-full text-sm [&_th]:border-r [&_th]:border-gray-300 [&_th:last-child]:border-r-0 [&_td]:border-r [&_td]:border-gray-200 [&_td:last-child]:border-r-0">
                 <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
+                  <tr className="border-b-2 border-gray-300 bg-gray-200">
                     <th className="w-8 px-3 py-2 text-left">
                       <input
                         type="checkbox"
                         className="rounded border-gray-300"
                       />
                     </th>
-                    <th className="px-3 py-2 text-left font-medium text-gray-600">
+                    <th className="px-3 py-2 text-left font-bold text-gray-800">
                       Code
                     </th>
-                    <th className="px-3 py-2 text-left font-medium text-gray-600">
+                    <th className="px-3 py-2 text-left font-bold text-gray-800">
                       Macro Réalisée par
                     </th>
-                    <th className="px-3 py-2 text-left font-medium text-gray-600">
+                    <th className="px-3 py-2 text-left font-bold text-gray-800">
                       Date Macro
                     </th>
-                    <th className="px-3 py-2 text-left font-medium text-gray-600">
+                    <th className="px-3 py-2 text-left font-bold text-gray-800">
                       Date Montage
                     </th>
-                    <th className="px-3 py-2 text-left font-medium text-gray-600">
+                    <th className="px-3 py-2 text-left font-bold text-gray-800">
                       Etapes
                     </th>
-                    <th className="px-3 py-2 text-left font-medium text-gray-600">
+                    <th className="px-3 py-2 text-left font-bold text-gray-800">
                       Actions
                     </th>
                   </tr>
@@ -589,7 +589,7 @@ export default function MacroscopyGlobalPage() {
                   {macros.map((macro) => (
                     <tr
                       key={macro.id}
-                      className="border-b border-gray-100 hover:bg-gray-50"
+                      className="border-b border-gray-200 hover:bg-gray-50"
                     >
                       <td className="px-3 py-2">
                         <input
@@ -657,7 +657,7 @@ export default function MacroscopyGlobalPage() {
 
           {/* Filtre type examen */}
           <div className="mb-4 max-w-xs">
-            <label className="mb-1 block text-xs font-medium text-gray-600">
+            <label className="mb-1 block text-xs font-bold text-gray-800">
               Type d&apos;examen
             </label>
             <SelectField
