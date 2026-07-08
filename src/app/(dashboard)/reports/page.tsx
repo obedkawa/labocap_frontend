@@ -463,24 +463,24 @@ export default function ReportsPage() {
 
         {/* Tableau statistique */}
         <div className="overflow-hidden rounded-lg border border-gray-200">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50">
+          <table className="w-full text-sm [&_th]:border-r [&_th]:border-gray-300 [&_th:last-child]:border-r-0 [&_td]:border-r [&_td]:border-gray-200 [&_td:last-child]:border-r-0">
+            <thead className="border-b-2 border-gray-300 bg-gray-200">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-800">
                   Période
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-800">
                   Comptes sortis
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-800">
                   Délai respecté
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
+                <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-800">
                   Hors Délai
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-200">
               <tr>
                 <td className="px-4 py-3 text-gray-800">{periodLabel}</td>
                 <td className="px-4 py-3 text-gray-800">
