@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, Suspense } from "react";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -78,7 +79,7 @@ function ResetPasswordForm() {
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           {/* Header avec logo */}
           <div className="bg-gray-50 px-8 py-6 text-center border-b">
-            <a href="/">
+            <Link href="/">
               <img
                 src="/logo.png"
                 alt="Logo"
@@ -97,7 +98,7 @@ function ResetPasswordForm() {
               >
                 Labo AnaPath
               </span>
-            </a>
+            </Link>
           </div>
 
           {/* Body */}

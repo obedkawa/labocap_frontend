@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Trash2, Plus, ArrowLeft, Star, Search } from "lucide-react";
@@ -92,34 +92,19 @@ export default function ReportSettingsPage() {
       toast.error(err.response?.data?.message ?? "Erreur"),
   });
 
-  useEffect(() => {
-    if (editTarget) {
-      setTitleForm({ name: editTarget.name, isDefault: editTarget.isDefault });
-    }
-  }, [editTarget]);
+  // Ouvre la modale d'édition en pré-remplissant le formulaire depuis la ligne
+  // cliquée, plutôt que de le synchroniser après coup dans un effet.
+  const openEdit = (target: TitleReport) => {
+    setEditTarget(target);
+    setTitleForm({ name: target.name, isDefault: target.isDefault });
+  };
 
   // === Onglet Placeholder ===
-  const [footerValue, setFooterValue] = useState("");
-
   const settingsQuery = useQuery({
     queryKey: ["settings"],
     queryFn: () => usersApi.getSettings().then((r) => r.data),
   });
-
-  useEffect(() => {
-    if (settingsQuery.data?.reportFooter) {
-      setFooterValue(settingsQuery.data.reportFooter);
-    }
-  }, [settingsQuery.data]);
-
-  const saveFooterMutation = useMutation({
-    mutationFn: () => usersApi.updateSettings({ reportFooter: footerValue }),
-    onSuccess: () => {
-      toast.success("Placeholder mis à jour");
-      qc.invalidateQueries({ queryKey: ["settings"] });
-    },
-    onError: () => toast.error("Erreur lors de la mise à jour"),
-  });
+  const reportFooter = settingsQuery.data?.reportFooter ?? "";
 
   return (
     <div className="space-y-6">
@@ -263,7 +248,7 @@ export default function ReportSettingsPage() {
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => setEditTarget(t)}
+                              onClick={() => openEdit(t)}
                               className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700"
                             >
                               <Pencil className="h-3.5 w-3.5" />
@@ -291,39 +276,11 @@ export default function ReportSettingsPage() {
 
       {/* === Onglet Placeholder === */}
       {tab === "placeholder" && (
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-4 text-base font-semibold text-gray-800">
-            Placeholder du pied de page
-          </h2>
-          <div className="space-y-4">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Texte affiché en bas des rapports
-              </label>
-              <textarea
-                value={footerValue}
-                onChange={(e) => setFooterValue(e.target.value)}
-                rows={8}
-                className={inputClass}
-                placeholder="Texte du placeholder (footer)..."
-              />
-            </div>
-            {canManage && (
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => saveFooterMutation.mutate()}
-                  disabled={saveFooterMutation.isPending}
-                  className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {saveFooterMutation.isPending
-                    ? "Enregistrement..."
-                    : "Mettre à jour"}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+        <FooterPlaceholderCard
+          key={reportFooter}
+          initialValue={reportFooter}
+          canManage={canManage}
+        />
       )}
 
       {/* Modale création titre */}
@@ -430,6 +387,64 @@ export default function ReportSettingsPage() {
         confirmVariant="danger"
         isLoading={deleteMutation.isPending}
       />
+    </div>
+  );
+}
+
+// Le parent monte ce composant avec `key={reportFooter}` : toute nouvelle valeur
+// venue du serveur le remonte et réinitialise l'état local, sans effet de synchro.
+function FooterPlaceholderCard({
+  initialValue,
+  canManage,
+}: {
+  initialValue: string;
+  canManage: boolean;
+}) {
+  const qc = useQueryClient();
+  const [footerValue, setFooterValue] = useState(initialValue);
+
+  const saveFooterMutation = useMutation({
+    mutationFn: () => usersApi.updateSettings({ reportFooter: footerValue }),
+    onSuccess: () => {
+      toast.success("Placeholder mis à jour");
+      qc.invalidateQueries({ queryKey: ["settings"] });
+    },
+    onError: () => toast.error("Erreur lors de la mise à jour"),
+  });
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <h2 className="mb-4 text-base font-semibold text-gray-800">
+        Placeholder du pied de page
+      </h2>
+      <div className="space-y-4">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">
+            Texte affiché en bas des rapports
+          </label>
+          <textarea
+            value={footerValue}
+            onChange={(e) => setFooterValue(e.target.value)}
+            rows={8}
+            className={inputClass}
+            placeholder="Texte du placeholder (footer)..."
+          />
+        </div>
+        {canManage && (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => saveFooterMutation.mutate()}
+              disabled={saveFooterMutation.isPending}
+              className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {saveFooterMutation.isPending
+                ? "Enregistrement..."
+                : "Mettre à jour"}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

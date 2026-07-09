@@ -261,7 +261,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
             {/* 1. Type d'examen */}
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-700">
-                Type d'examen
+                Type d&apos;examen
               </label>
               <Controller
                 name="typeOrderId"

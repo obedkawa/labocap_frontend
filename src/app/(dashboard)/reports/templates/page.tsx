@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Trash2, Plus, ArrowLeft, Search } from "lucide-react";
@@ -91,17 +91,17 @@ export default function ReportTemplatesPage() {
       toast.error(err.response?.data?.message ?? "Erreur"),
   });
 
-  // Pré-remplir le formulaire en édition
-  useEffect(() => {
-    if (editTarget) {
-      setForm({
-        title: editTarget.title ?? editTarget.name ?? "",
-        content: editTarget.content ?? editTarget.header ?? "",
-        footer: editTarget.footer ?? "",
-        description: editTarget.description ?? "",
-      });
-    }
-  }, [editTarget]);
+  // Ouvre la modale d'édition en pré-remplissant le formulaire depuis la ligne
+  // cliquée, plutôt que de le synchroniser après coup dans un effet.
+  const openEdit = (target: ReportTemplate) => {
+    setEditTarget(target);
+    setForm({
+      title: target.title ?? target.name ?? "",
+      content: target.content ?? target.header ?? "",
+      footer: target.footer ?? "",
+      description: target.description ?? "",
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -202,7 +202,7 @@ export default function ReportTemplatesPage() {
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => setEditTarget(t)}
+                            onClick={() => openEdit(t)}
                             className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700"
                           >
                             <Pencil className="h-3.5 w-3.5" />

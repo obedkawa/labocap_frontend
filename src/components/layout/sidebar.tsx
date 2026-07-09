@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -38,6 +38,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useUIStore } from "@/stores/ui.store";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useHydrated } from "@/hooks/useHydrated";
 import { useAuthStore } from "@/stores/auth.store";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { testOrdersApi } from "@/lib/api/testOrders";
@@ -229,9 +230,7 @@ export function Sidebar() {
   const { sidebarCollapsed } = useUIStore();
   const { can } = usePermissions();
   const { user } = useAuthStore();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => { setMounted(true); }, []);
+  const mounted = useHydrated();
 
   // Le rôle médecin est « Docteur » (slug « docteur ») en base — on accepte les
   // deux orthographes (FR/EN) sur le nom comme sur le slug.

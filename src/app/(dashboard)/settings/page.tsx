@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -1120,34 +1120,11 @@ function TitleReportsSection({ canManage }: { canManage: boolean }) {
 // ===========================================================================
 
 function InvoiceSettingsSection({ canManage }: { canManage: boolean }) {
-  const queryClient = useQueryClient();
-  const [ifu, setIfu] = useState("");
-  const [token, setToken] = useState("");
-  const [status, setStatus] = useState(false);
-
   const { data, isLoading } = useQuery({
     queryKey: ["setting-invoices"],
     queryFn: () => settingInvoicesApi.findAll({ size: 1 }).then((r) => r.data),
   });
   const setting: SettingInvoice | undefined = data?.content?.[0];
-
-  useEffect(() => {
-    if (setting) {
-      setIfu(setting.ifu ?? "");
-      setToken(setting.token ?? "");
-      setStatus(!!setting.status);
-    }
-  }, [setting]);
-
-  const updateMut = useMutation({
-    mutationFn: () =>
-      settingInvoicesApi.update(setting!.id, { ifu, token, status }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["setting-invoices"] });
-      toast.success("Configuration MECeF mise à jour");
-    },
-    onError: () => toast.error("Erreur lors de la mise à jour"),
-  });
 
   if (isLoading) {
     return (
@@ -1160,11 +1137,44 @@ function InvoiceSettingsSection({ canManage }: { canManage: boolean }) {
   if (!setting) {
     return (
       <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
-        Aucune configuration MECeF n'existe encore pour cette agence. Elle doit
+        Aucune configuration MECeF n&apos;existe encore pour cette agence. Elle doit
         être initialisée côté serveur avant de pouvoir être modifiée ici.
       </div>
     );
   }
+
+  // `key` : une configuration différente remonte le formulaire et réinitialise
+  // ses champs, sans effet de synchronisation.
+  return (
+    <InvoiceSettingsForm
+      key={setting.id}
+      setting={setting}
+      canManage={canManage}
+    />
+  );
+}
+
+function InvoiceSettingsForm({
+  setting,
+  canManage,
+}: {
+  setting: SettingInvoice;
+  canManage: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const [ifu, setIfu] = useState(setting.ifu ?? "");
+  const [token, setToken] = useState(setting.token ?? "");
+  const [status, setStatus] = useState(!!setting.status);
+
+  const updateMut = useMutation({
+    mutationFn: () =>
+      settingInvoicesApi.update(setting.id, { ifu, token, status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["setting-invoices"] });
+      toast.success("Configuration MECeF mise à jour");
+    },
+    onError: () => toast.error("Erreur lors de la mise à jour"),
+  });
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
