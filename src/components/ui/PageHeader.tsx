@@ -32,7 +32,9 @@ export function PageHeader({
       className={cn(
         "mb-6",
         sticky &&
-          "sticky top-0 z-30 border-b border-gray-200 bg-white/95 py-4 backdrop-blur supports-[backdrop-filter]:bg-white/80",
+          // z-20 : au-dessus du contenu défilant, mais sous la barre du haut
+          // (z-40) dont le menu profil doit pouvoir recouvrir cette zone.
+          "sticky top-0 z-20 border-b border-gray-200 bg-white/95 py-4 backdrop-blur supports-[backdrop-filter]:bg-white/80",
         className
       )}
     >

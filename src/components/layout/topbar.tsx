@@ -56,8 +56,11 @@ export function Topbar() {
     };
   }, [isOpen]);
 
+  // `relative` est indispensable : sans classe de positionnement, `z-index` est
+  // ignoré (position: static), et le menu profil passait alors sous le PageHeader
+  // collant du contenu (z-20). `shrink-0` empêche la barre d'être compressée.
   return (
-    <header className="bg-white shadow h-16 flex items-center px-4 justify-between z-10">
+    <header className="relative z-40 shrink-0 bg-white shadow h-16 flex items-center px-4 justify-between">
       {/* Left: hamburger */}
       <button
         onClick={toggleSidebar}

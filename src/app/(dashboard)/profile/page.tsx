@@ -8,7 +8,7 @@ import { Eye, EyeOff, Camera } from "lucide-react";
 import { toast } from "sonner";
 import Image from "next/image";
 import { useAuthStore } from "@/stores/auth.store";
-import apiClient from "@/lib/api/client";
+import { meApi } from "@/lib/api/me";
 import { FormField } from "@/components/ui/FormField";
 import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -21,26 +21,25 @@ const profileSchema = z.object({
   lastname: z.string().min(1, "Le nom est requis"),
 });
 
-const passwordSchema = z
-  .object({
-    currentPassword: z.string().min(1, "L'ancien mot de passe est requis"),
-    newPassword: z
-      .string()
-      .min(8, "Le nouveau mot de passe doit contenir au moins 8 caractères"),
-    newPasswordConfirmation: z.string().min(1, "La confirmation est requise"),
-  })
-  .refine((data) => data.newPassword === data.newPasswordConfirmation, {
-    message: "Les mots de passe ne correspondent pas",
-    path: ["newPasswordConfirmation"],
-  });
+const emailSchema = z.object({
+  newEmail: z.string().min(1, "L'adresse e-mail est requise").email("L'adresse e-mail est invalide"),
+  currentPassword: z.string().min(1, "Le mot de passe actuel est requis"),
+});
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
-type PasswordFormValues = z.infer<typeof passwordSchema>;
+type EmailFormValues = z.infer<typeof emailSchema>;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getInitials(firstname: string, lastname: string): string {
   return `${firstname.charAt(0)}${lastname.charAt(0)}`.toUpperCase();
+}
+
+/** Remonte le message d'erreur du backend (mot de passe faux, e-mail déjà pris…). */
+function apiMessage(err: unknown, fallback: string): string {
+  const message = (err as { response?: { data?: { message?: string } } })?.response
+    ?.data?.message;
+  return message ?? fallback;
 }
 
 // ── Composant principal ────────────────────────────────────────────────────────
@@ -53,11 +52,6 @@ export default function ProfilePage() {
   const [signaturePreview, setSignaturePreview] = useState<string | null>(
     user?.signature ?? null
   );
-
-  // Visibilité mots de passe
-  const [showCurrentPwd, setShowCurrentPwd] = useState(false);
-  const [showNewPwd, setShowNewPwd] = useState(false);
-  const [showConfirmPwd, setShowConfirmPwd] = useState(false);
 
   // ── Formulaire profil ───────────────────────────────────────────────────────
   const {
@@ -75,63 +69,60 @@ export default function ProfilePage() {
   const onSubmitProfile = async (values: ProfileFormValues) => {
     if (!user) return;
     try {
-      // Construire le body JSON (le backend accepte uniquement @RequestBody)
-      // IMPORTANT : inclure roleIds. Le UserServiceImpl.update remplace les rôles
-      // dès que `roleIds != null` (le DTO l'initialise à []), donc un PUT sans
-      // roleIds VIDE les rôles — et donc les permissions — de l'utilisateur courant.
-      const body: Record<string, unknown> = {
+      // `/users/me` ne touche ni aux rôles ni à l'e-mail : plus besoin de renvoyer
+      // roleIds pour éviter que le backend ne les efface.
+      const body: Parameters<typeof meApi.updateProfile>[0] = {
         firstname: values.firstname,
         lastname: values.lastname,
-        email: user.email,
-        roleIds: (user.roles ?? []).map((r) => r.id),
       };
 
-      // Convertir la signature (File) en base64 si elle a été changée
+      // Signature envoyée uniquement si un nouveau fichier a été choisi.
       if (signatureFile) {
-        const base64 = await new Promise<string>((resolve, reject) => {
+        body.signature = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onloadend = () => resolve(reader.result as string);
           reader.onerror = reject;
           reader.readAsDataURL(signatureFile);
         });
-        body.signature = base64;
       }
 
-      const response = await apiClient.put(`/users/${user.id}`, body);
-
-      setUser(response.data.data ?? response.data);
+      const response = await meApi.updateProfile(body);
+      setUser(response.data);
       toast.success("Profil mis à jour avec succès");
-    } catch {
-      toast.error("Erreur lors de la mise à jour du profil");
+    } catch (err) {
+      toast.error(apiMessage(err, "Erreur lors de la mise à jour du profil"));
     }
   };
 
-  // ── Formulaire mot de passe ─────────────────────────────────────────────────
+  // ── Formulaire e-mail de connexion ──────────────────────────────────────────
   const {
-    register: registerPassword,
-    handleSubmit: handleSubmitPassword,
-    reset: resetPassword,
-    formState: { errors: passwordErrors, isSubmitting: isPasswordSubmitting },
-  } = useForm<PasswordFormValues>({
-    resolver: zodResolver(passwordSchema),
-    defaultValues: {
-      currentPassword: "",
-      newPassword: "",
-      newPasswordConfirmation: "",
-    },
+    register: registerEmail,
+    handleSubmit: handleSubmitEmail,
+    reset: resetEmail,
+    formState: { errors: emailErrors, isSubmitting: isEmailSubmitting },
+  } = useForm<EmailFormValues>({
+    resolver: zodResolver(emailSchema),
+    defaultValues: { newEmail: user?.email ?? "", currentPassword: "" },
   });
 
-  const onSubmitPassword = async (values: PasswordFormValues) => {
+  const [showEmailPwd, setShowEmailPwd] = useState(false);
+
+  const onSubmitEmail = async (values: EmailFormValues) => {
     if (!user) return;
+    if (values.newEmail.trim().toLowerCase() === user.email.toLowerCase()) {
+      toast.error("Cette adresse est déjà votre adresse de connexion.");
+      return;
+    }
     try {
-      await apiClient.patch(`/users/${user.id}/password`, {
+      const response = await meApi.updateEmail({
+        newEmail: values.newEmail.trim(),
         currentPassword: values.currentPassword,
-        newPassword: values.newPassword,
       });
-      resetPassword();
-      toast.success("Mot de passe changé avec succès");
-    } catch {
-      toast.error("Erreur lors du changement de mot de passe");
+      setUser(response.data);
+      resetEmail({ newEmail: response.data.email, currentPassword: "" });
+      toast.success("Adresse e-mail de connexion mise à jour");
+    } catch (err) {
+      toast.error(apiMessage(err, "Erreur lors du changement d'adresse e-mail"));
     }
   };
 
@@ -157,7 +148,7 @@ export default function ProfilePage() {
     <div className="space-y-6">
       <PageHeader
         title="Mon profil"
-        subtitle="Gérez vos informations personnelles et votre mot de passe"
+        subtitle="Gérez vos informations personnelles et votre adresse de connexion"
         breadcrumbs={[{ label: "Accueil", href: "/home" }, { label: "Profil" }]}
       />
 
@@ -209,20 +200,6 @@ export default function ProfilePage() {
                         : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                     )}
                     placeholder="Votre nom"
-                  />
-                </FormField>
-              </div>
-
-              {/* Adresse e-mail (readonly) */}
-              <div className="mt-4">
-                <FormField label="Adresse e-mail">
-                  <input
-                    type="email"
-                    value={user.email}
-                    readOnly
-                    disabled
-                    autoComplete="email"
-                    className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500 cursor-not-allowed"
                   />
                 </FormField>
               </div>
@@ -296,28 +273,50 @@ export default function ProfilePage() {
             </form>
           </div>
 
-          {/* Section 2 — Changer le mot de passe */}
+          {/* Section 2 — Adresse e-mail de connexion (identifiant) */}
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-5 text-base font-semibold text-gray-900">
-              Changer le mot de passe
+            <h2 className="mb-1 text-base font-semibold text-gray-900">
+              Adresse e-mail de connexion
             </h2>
+            <p className="mb-5 text-sm text-gray-500">
+              C&apos;est l&apos;identifiant avec lequel vous vous connectez. Votre
+              mot de passe actuel est requis pour le modifier.
+            </p>
 
-            <form onSubmit={handleSubmitPassword(onSubmitPassword)} noValidate>
+            <form onSubmit={handleSubmitEmail(onSubmitEmail)} noValidate>
               <div className="space-y-4">
-                {/* Ancien mot de passe */}
                 <FormField
-                  label="Ancien mot de passe"
+                  label="Nouvelle adresse e-mail"
                   required
-                  error={passwordErrors.currentPassword?.message}
+                  error={emailErrors.newEmail?.message}
+                >
+                  <input
+                    {...registerEmail("newEmail")}
+                    type="email"
+                    autoComplete="email"
+                    className={cn(
+                      "w-full rounded-lg border px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-1",
+                      emailErrors.newEmail
+                        ? "border-red-300 focus:border-red-500 focus:ring-red-500"
+                        : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                    )}
+                    placeholder="nouvelle@adresse.com"
+                  />
+                </FormField>
+
+                <FormField
+                  label="Mot de passe actuel"
+                  required
+                  error={emailErrors.currentPassword?.message}
                 >
                   <div className="relative">
                     <input
-                      {...registerPassword("currentPassword")}
-                      type={showCurrentPwd ? "text" : "password"}
+                      {...registerEmail("currentPassword")}
+                      type={showEmailPwd ? "text" : "password"}
                       autoComplete="current-password"
                       className={cn(
                         "w-full rounded-lg border px-3 py-2 pr-10 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-1",
-                        passwordErrors.currentPassword
+                        emailErrors.currentPassword
                           ? "border-red-300 focus:border-red-500 focus:ring-red-500"
                           : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                       )}
@@ -326,94 +325,15 @@ export default function ProfilePage() {
                     <button
                       type="button"
                       tabIndex={-1}
-                      onClick={() => setShowCurrentPwd((v) => !v)}
+                      onClick={() => setShowEmailPwd((v) => !v)}
                       className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                       aria-label={
-                        showCurrentPwd
+                        showEmailPwd
                           ? "Masquer le mot de passe"
                           : "Afficher le mot de passe"
                       }
                     >
-                      {showCurrentPwd ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </FormField>
-
-                {/* Nouveau mot de passe */}
-                <FormField
-                  label="Nouveau mot de passe"
-                  required
-                  error={passwordErrors.newPassword?.message}
-                  hint="Au moins 8 caractères"
-                >
-                  <div className="relative">
-                    <input
-                      {...registerPassword("newPassword")}
-                      type={showNewPwd ? "text" : "password"}
-                      autoComplete="new-password"
-                      className={cn(
-                        "w-full rounded-lg border px-3 py-2 pr-10 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-1",
-                        passwordErrors.newPassword
-                          ? "border-red-300 focus:border-red-500 focus:ring-red-500"
-                          : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                      )}
-                      placeholder="••••••••"
-                    />
-                    <button
-                      type="button"
-                      tabIndex={-1}
-                      onClick={() => setShowNewPwd((v) => !v)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      aria-label={
-                        showNewPwd
-                          ? "Masquer le mot de passe"
-                          : "Afficher le mot de passe"
-                      }
-                    >
-                      {showNewPwd ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </FormField>
-
-                {/* Confirmation */}
-                <FormField
-                  label="Confirmer le mot de passe"
-                  required
-                  error={passwordErrors.newPasswordConfirmation?.message}
-                >
-                  <div className="relative">
-                    <input
-                      {...registerPassword("newPasswordConfirmation")}
-                      type={showConfirmPwd ? "text" : "password"}
-                      autoComplete="new-password"
-                      className={cn(
-                        "w-full rounded-lg border px-3 py-2 pr-10 text-sm shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-1",
-                        passwordErrors.newPasswordConfirmation
-                          ? "border-red-300 focus:border-red-500 focus:ring-red-500"
-                          : "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                      )}
-                      placeholder="••••••••"
-                    />
-                    <button
-                      type="button"
-                      tabIndex={-1}
-                      onClick={() => setShowConfirmPwd((v) => !v)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      aria-label={
-                        showConfirmPwd
-                          ? "Masquer le mot de passe"
-                          : "Afficher le mot de passe"
-                      }
-                    >
-                      {showConfirmPwd ? (
+                      {showEmailPwd ? (
                         <EyeOff className="h-4 w-4" />
                       ) : (
                         <Eye className="h-4 w-4" />
@@ -426,10 +346,10 @@ export default function ProfilePage() {
               <div className="mt-6 flex justify-end">
                 <button
                   type="submit"
-                  disabled={isPasswordSubmitting}
+                  disabled={isEmailSubmitting}
                   className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {isPasswordSubmitting && (
+                  {isEmailSubmitting && (
                     <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
                       <circle
                         className="opacity-25"
@@ -446,7 +366,7 @@ export default function ProfilePage() {
                       />
                     </svg>
                   )}
-                  Changer le mot de passe
+                  Changer l&apos;adresse e-mail
                 </button>
               </div>
             </form>
