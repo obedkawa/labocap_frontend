@@ -47,7 +47,10 @@ export default function ReportSettingsPage() {
     queryFn: () =>
       titleReportsApi.findAll({ size: 100 }).then((r) => r.data.content),
   });
-  const allTitles = titlesQuery.data ?? [];
+  const allTitles = useMemo(
+    () => titlesQuery.data ?? [],
+    [titlesQuery.data]
+  );
 
   // Champ de recherche local
   const [searchTitre, setSearchTitre] = useState("");

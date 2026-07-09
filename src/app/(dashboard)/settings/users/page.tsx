@@ -111,7 +111,7 @@ export default function UsersPage() {
     queryFn: () => usersApi.getAllPermissions().then((r) => r.data),
   });
 
-  const users: User[] = data?.content ?? [];
+  const users: User[] = useMemo(() => data?.content ?? [], [data?.content]);
   const roles = rolesData?.content ?? [];
   const allPermissions: Permission[] = allPermissionsData ?? [];
 

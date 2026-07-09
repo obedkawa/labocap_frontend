@@ -28,11 +28,7 @@ import {
   FlaskConical,
   ClipboardList,
   BarChart2,
-  CreditCard,
-  Banknote,
-  Archive,
   Search,
-  Shield,
   Syringe,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";

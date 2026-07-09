@@ -72,7 +72,10 @@ export default function HospitalsPage() {
     placeholderData: (prev) => prev,
   });
 
-  const allHospitals: Hospital[] = data?.content ?? [];
+  const allHospitals: Hospital[] = useMemo(
+    () => data?.content ?? [],
+    [data?.content]
+  );
 
   // Filtrage local (recherche dans la page courante)
   const hospitals = useMemo(() => {

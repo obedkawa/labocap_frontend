@@ -42,8 +42,6 @@ import {
   ReportToday,
   DoctorStat,
   RevenueData,
-  InvoiceStatusData,
-  ExamStatusChart,
   AppointmentItem,
   DoctorOrder,
 } from "@/lib/api/dashboard";

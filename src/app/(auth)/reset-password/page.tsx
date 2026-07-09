@@ -80,6 +80,9 @@ function ResetPasswordForm() {
           {/* Header avec logo */}
           <div className="bg-gray-50 px-8 py-6 text-center border-b">
             <Link href="/">
+              {/* Logo statique servi depuis /public : next/image n'apporte rien
+                  ici et ajouterait un optimiseur au runtime. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/logo.png"
                 alt="Logo"

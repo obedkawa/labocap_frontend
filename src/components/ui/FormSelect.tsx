@@ -14,8 +14,6 @@ export interface SelectOption {
   label: string;
 }
 
-type SelectValue = SingleValue<SelectOption> | MultiValue<SelectOption>;
-
 interface FormSelectBaseProps {
   label?: string;
   error?: string;

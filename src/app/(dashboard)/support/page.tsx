@@ -19,7 +19,6 @@ import { CrudModal } from "@/components/common/CrudModal";
 import { PermissionGate } from "@/components/common/PermissionGate";
 import { FormField } from "@/components/ui/FormField";
 import { Badge } from "@/components/ui/Badge";
-import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useAuthStore } from "@/stores/auth.store";
 import {
@@ -289,7 +288,6 @@ function TicketDetail({
 // ---------------------------------------------------------------------------
 
 export default function SupportPage() {
-  const { can } = usePermissions();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
 

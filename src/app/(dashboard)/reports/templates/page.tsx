@@ -44,7 +44,10 @@ export default function ReportTemplatesPage() {
     queryFn: () =>
       reportTemplatesApi.findAll({ size: 100 }).then((r) => r.data.content),
   });
-  const allTemplates = templatesQuery.data ?? [];
+  const allTemplates = useMemo(
+    () => templatesQuery.data ?? [],
+    [templatesQuery.data]
+  );
 
   const templates = useMemo(() => {
     const q = search.trim().toLowerCase();

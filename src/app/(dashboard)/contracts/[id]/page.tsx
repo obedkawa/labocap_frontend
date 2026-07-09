@@ -8,7 +8,6 @@ import { z } from "zod";
 import { toast } from "sonner";
 import {
   ArrowLeft,
-  Plus,
   Trash2,
   CheckCircle,
   XCircle,
@@ -25,7 +24,6 @@ import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { PermissionGate } from "@/components/common/PermissionGate";
 import { FormField } from "@/components/ui/FormField";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { contractsApi, type ContractDetail } from "@/lib/api/contracts";
 import { categoryTestsApi, labTestsApi } from "@/lib/api/examens";
@@ -77,7 +75,6 @@ export default function ContractDetailPage({
   const params = use(paramsPromise);
   const contractId = params.id;
 
-  const { can } = usePermissions();
   const queryClient = useQueryClient();
 
   const [addCatOpen, setAddCatOpen] = useState(false);

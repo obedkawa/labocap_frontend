@@ -104,7 +104,6 @@ function OrderForm({
 }: OrderFormProps) {
   const {
     control,
-    register,
     watch,
     formState: { errors },
   } = form;

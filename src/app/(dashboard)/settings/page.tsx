@@ -722,7 +722,6 @@ function SaveBar({
 // ===========================================================================
 
 function BanksSection() {
-  const { can } = usePermissions();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Bank | null>(null);

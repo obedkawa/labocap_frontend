@@ -18,7 +18,7 @@ import {
   type PendingMacroOrder,
 } from "@/lib/api/macroscopy";
 import { hrApi, type Employee } from "@/lib/api/hr";
-import { typeOrdersApi, type TypeOrder } from "@/lib/api/examens";
+import { typeOrdersApi } from "@/lib/api/examens";
 import { testOrdersApi, type TestOrder } from "@/lib/api/testOrders";
 import type { ApiError } from "@/types/api";
 
@@ -67,13 +67,7 @@ function StepBadges({ macro }: { macro: MacroListItem }) {
 // Composant : select inline d'étape (historique)
 // ---------------------------------------------------------------------------
 
-function StepSelect({
-  macro,
-  onUpdate,
-}: {
-  macro: MacroListItem;
-  onUpdate: (step: string) => void;
-}) {
+function StepSelect({ onUpdate }: { onUpdate: (step: string) => void }) {
   const steps = [
     { value: "circulation", label: "Circulation" },
     { value: "embedding", label: "Enrobage" },
@@ -615,7 +609,6 @@ export default function MacroscopyGlobalPage() {
                         <div className="space-y-1">
                           <StepBadges macro={macro} />
                           <StepSelect
-                            macro={macro}
                             onUpdate={(step) =>
                               handleStepUpdate(macro.id, step)
                             }

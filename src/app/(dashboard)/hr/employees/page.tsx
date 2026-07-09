@@ -89,7 +89,10 @@ export default function EmployeesPage() {
     queryFn: () => hrApi.findAll({ size: 1000 }).then((r) => r.data),
   });
 
-  const employees: Employee[] = data?.content ?? [];
+  const employees: Employee[] = useMemo(
+    () => data?.content ?? [],
+    [data?.content]
+  );
 
   // Employés filtrés (filtrage local)
   const filtered = useMemo(() => {
