@@ -52,12 +52,6 @@ jobs:
 
           script: |
 
-            cd /var/www/frontend
+            cd ${{ secrets.SERVER_PROJECT_PATH }}
 
             git pull origin main
-
-            npm ci
-
-            npm run build
-
-            pm2 restart frontend
