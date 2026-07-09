@@ -55,3 +55,23 @@ jobs:
             cd ${{ secrets.SERVER_PROJECT_PATH }}
 
             git pull origin main
+            
+            git fetch origin main
+            git reset --hard origin/main
+            echo "✅ Git HEAD: $(git log --oneline -1)"
+
+            echo "🛑 Stop everything"
+            docker compose down
+
+            echo "🧹 Clean old Docker images and build cache"
+            docker image prune -af
+            docker builder prune -af
+
+            echo "🔨 Build fresh image (no cache)"
+            docker compose build --no-cache
+
+            echo "🚀 Start all services"
+            docker compose up -d
+
+            echo "⏳ Wait for DB to be ready"
+            sleep 5
