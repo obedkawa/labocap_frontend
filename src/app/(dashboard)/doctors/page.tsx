@@ -67,7 +67,10 @@ export default function DoctorsPage() {
     placeholderData: (prev) => prev,
   });
 
-  const allDoctors: Doctor[] = data?.content ?? [];
+  const allDoctors: Doctor[] = useMemo(
+    () => data?.content ?? [],
+    [data?.content]
+  );
 
   // Filtrage local (recherche dans la page courante)
   const doctors = useMemo(() => {

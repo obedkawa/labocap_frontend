@@ -90,7 +90,12 @@ export default function CashboxVentePage() {
     enabled: !!venteCashbox?.id,
   });
 
-  const allOperations = operationsData?.content ?? [];
+  // `?? []` crée un tableau neuf à chaque rendu : sans useMemo, toute dépendance
+  // qui l'observe change en permanence.
+  const allOperations = useMemo(
+    () => operationsData?.content ?? [],
+    [operationsData?.content]
+  );
 
   // Filtrage local
   const operations = useMemo(() => {

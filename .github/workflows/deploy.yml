@@ -50,12 +50,21 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
 
+          # Sans cela, une commande qui échoue laisse le script continuer et le
+          # job passe au vert : on redéploierait l'ancien code sans le voir.
+          script_stop: true
+
           script: |
+            set -euo pipefail
 
             cd ${{ secrets.SERVER_PROJECT_PATH }}
 
-            git pull origin main
-            
+            # Le dépôt appartient à un autre utilisateur que celui du déploiement
+            # (clone initial fait en sudo). À corriger à la source par un
+            # `sudo chown -R <user>:<user> .` sur le serveur ; d'ici là git refuse
+            # d'opérer sans cette exception.
+            git config --global --add safe.directory "$PWD"
+
             git fetch origin main
             git reset --hard origin/main
             echo "✅ Git HEAD: $(git log --oneline -1)"

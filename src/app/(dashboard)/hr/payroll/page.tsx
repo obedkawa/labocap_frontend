@@ -109,7 +109,10 @@ export default function PayrollPage() {
     enabled: !!selectedEmployeeId,
   });
 
-  const payrolls: Payroll[] = payrollData?.content ?? [];
+  const payrolls: Payroll[] = useMemo(
+    () => payrollData?.content ?? [],
+    [payrollData?.content]
+  );
 
   // Fiches filtrées
   const filtered = useMemo(() => {

@@ -112,7 +112,10 @@ export default function TimeOffPage() {
     enabled: !!selectedEmployeeId,
   });
 
-  const timeOffs: TimeOff[] = timeoffData?.content ?? [];
+  const timeOffs: TimeOff[] = useMemo(
+    () => timeoffData?.content ?? [],
+    [timeoffData?.content]
+  );
 
   // Congés filtrés
   const filtered = useMemo(() => {

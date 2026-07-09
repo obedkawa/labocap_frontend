@@ -20,7 +20,6 @@ import { FormField } from "@/components/ui/FormField";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import {
   cashboxApi,
-  CashboxDailyResponseDto,
   CashboxOperationResponseDto,
   CashboxDailyCloseDto,
 } from "@/lib/api/cashbox";
