@@ -358,7 +358,7 @@ export default function TestOrderCreatePage() {
             {/* 1. Type d'examen */}
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-700">
-                Type d'examen <span className="text-red-500">*</span>
+                Type d&apos;examen <span className="text-red-500">*</span>
               </label>
               <Controller
                 name="typeOrderId"
@@ -597,7 +597,7 @@ export default function TestOrderCreatePage() {
             <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
               <div className="flex flex-col gap-1">
                 <label className="text-sm font-medium text-gray-700">
-                  Demande d'examen de référence
+                  Demande d&apos;examen de référence
                 </label>
                 <Controller
                   name="examenReferenceOrderId"
@@ -664,7 +664,7 @@ export default function TestOrderCreatePage() {
                   />
                 </svg>
               )}
-              Ajouter une nouvelle demande d'examen
+              Ajouter une nouvelle demande d&apos;examen
             </button>
           </div>
         </form>

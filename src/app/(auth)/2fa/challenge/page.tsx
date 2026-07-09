@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { authApi } from "@/lib/api/auth";
+import { useSessionStorageValue } from "@/hooks/useHydrated";
 import { useAuthStore } from "@/stores/auth.store";
 
 const twoFactorSchema = z.object({
@@ -31,14 +33,13 @@ function maskEmail(email: string): string {
 export default function TwoFactorChallengePage() {
   const router = useRouter();
   const setUser = useAuthStore((state) => state.setUser);
-  const [maskedEmail, setMaskedEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isResending, setIsResending] = useState(false);
 
-  useEffect(() => {
-    const email = sessionStorage.getItem("2fa_email") || "";
-    setMaskedEmail(email ? maskEmail(email) : "votre adresse e-mail");
-  }, []);
+  const storedEmail = useSessionStorageValue("2fa_email");
+  const maskedEmail = storedEmail
+    ? maskEmail(storedEmail)
+    : "votre adresse e-mail";
 
   const {
     register,
@@ -102,7 +103,7 @@ export default function TwoFactorChallengePage() {
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           {/* Header avec logo */}
           <div className="bg-gray-50 px-8 py-6 text-center border-b">
-            <a href="/">
+            <Link href="/">
               <img
                 src="/logo.png"
                 alt="Logo"
@@ -121,7 +122,7 @@ export default function TwoFactorChallengePage() {
               >
                 Labo AnaPath
               </span>
-            </a>
+            </Link>
           </div>
 
           {/* Body */}

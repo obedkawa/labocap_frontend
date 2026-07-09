@@ -363,7 +363,7 @@ export default function EmployeeProfilePage({
               <dd className="mt-1 text-sm text-gray-900">{formatSalary(employee.salary)}</dd>
             </div>
             <div>
-              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Date d'embauche</dt>
+              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Date d&apos;embauche</dt>
               <dd className="mt-1 text-sm text-gray-900">{formatDate(employee.hireDate)}</dd>
             </div>
             <div>
