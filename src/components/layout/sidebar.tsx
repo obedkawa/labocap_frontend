@@ -286,7 +286,6 @@ export function Sidebar() {
           <CollapseItem icon={<FlaskConical className="w-5 h-5" />} label="Catalogue d'examens" collapsed={collapsed}>
             {can(PERMISSIONS.VIEW_TESTS) && <SubItem href="/examens" label="Tous les examens" />}
             {can(PERMISSIONS.VIEW_CATEGORY_TESTS) && <SubItem href="/examens/categories" label="Catégories" />}
-            <SubItem href="/examens/vitrine" label="Vitrine des composants" />
           </CollapseItem>
         )}
 
