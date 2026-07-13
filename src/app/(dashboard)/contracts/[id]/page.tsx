@@ -1,32 +1,22 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { toast } from "sonner";
-import {
-  ArrowLeft,
-  Trash2,
-  CheckCircle,
-  XCircle,
-  Tag,
-  FlaskConical,
-} from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import type { AxiosError } from "axios";
 
 import { PageHeader } from "@/components/ui/PageHeader";
-import { RHFSelect } from "@/components/ui/RHFSelect";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 import { CrudModal } from "@/components/common/CrudModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { PermissionGate } from "@/components/common/PermissionGate";
 import { FormField } from "@/components/ui/FormField";
-import { StatusBadge } from "@/components/ui/StatusBadge";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { contractsApi, type ContractDetail } from "@/lib/api/contracts";
-import { categoryTestsApi, labTestsApi } from "@/lib/api/examens";
+import { labTestsApi } from "@/lib/api/examens";
 import type { ApiError } from "@/types/api";
 
 // ---------------------------------------------------------------------------
@@ -44,24 +34,7 @@ function formatAmount(v?: number | null) {
 }
 
 const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
-
-// ---------------------------------------------------------------------------
-// Schemas
-// ---------------------------------------------------------------------------
-
-const categoryDetailSchema = z.object({
-  categoryTestId: z.string().min(1, "La catégorie est requise"),
-  discount: z.string().min(1, "La remise est requise"),
-});
-type CategoryDetailForm = z.infer<typeof categoryDetailSchema>;
-
-const testDetailSchema = z.object({
-  testId: z.string().min(1, "L'examen est requis"),
-  amountRemise: z.string().min(1, "Montant remise requis"),
-  amountAfterRemise: z.string().min(1, "Montant après remise requis"),
-});
-type TestDetailForm = z.infer<typeof testDetailSchema>;
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 read-only:bg-gray-50 read-only:text-gray-500";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -75,73 +48,74 @@ export default function ContractDetailPage({
   const params = use(paramsPromise);
   const contractId = params.id;
 
+  const router = useRouter();
   const queryClient = useQueryClient();
 
-  const [addCatOpen, setAddCatOpen] = useState(false);
-  const [addTestOpen, setAddTestOpen] = useState(false);
-  const [deleteDetail, setDeleteDetail] = useState<ContractDetail | null>(null);
+  // Formulaire « Ajouter des examens » (inline, comme dans la vue Laravel)
+  const [testId, setTestId] = useState("");
+  const [price, setPrice] = useState(0);
+  const [remise, setRemise] = useState("");
 
-  // ---- Query ---------------------------------------------------------------
+  const [deleteDetail, setDeleteDetail] = useState<ContractDetail | null>(null);
+  const [editDetail, setEditDetail] = useState<ContractDetail | null>(null);
+  const [editRemise, setEditRemise] = useState("");
+
+  // ---- Queries -------------------------------------------------------------
 
   const { data: contract, isLoading } = useQuery({
     queryKey: ["contract", contractId],
     queryFn: () => contractsApi.findById(contractId).then((r) => r.data),
   });
 
-  // Chargé indépendamment (pas seulement à l'ouverture du modal) afin de
-  // pouvoir résoudre le nom des catégories dans le tableau des lignes.
-  const { data: categoriesData } = useQuery({
-    queryKey: ["category-tests-all"],
-    queryFn: () => categoryTestsApi.findAll({ size: 200 }).then((r) => r.data),
-  });
-
   const { data: examensData } = useQuery({
     queryKey: ["examens-all"],
     queryFn: () => labTestsApi.findAll({ size: 200 }).then((r) => r.data),
-    enabled: addTestOpen,
   });
 
-  const categories = categoriesData?.content ?? [];
   const examens = examensData?.content ?? [];
 
-  // Résout le nom d'une catégorie à partir de son id (lignes de contrat ajoutées
-  // par catégorie, qui n'ont pas de labTestName).
-  function getCategoryName(categoryTestId?: string): string | null {
-    if (!categoryTestId) return null;
-    const found = categories.find((c) => c.id === categoryTestId);
-    return found?.name ?? null;
-  }
+  // Auto-remplissage du prix quand un examen est sélectionné
+  useEffect(() => {
+    const found = examens.find((e) => e.id === testId);
+    setPrice(found?.price ?? 0);
+  }, [testId, examens]);
+
+  const remiseNum = Number(remise) || 0;
+  const total = price - remiseNum;
+
+  const editRemiseNum = Number(editRemise) || 0;
+  const editTotal = (editDetail?.price ?? 0) - editRemiseNum;
 
   // ---- Mutations -----------------------------------------------------------
 
-  const addCategoryMutation = useMutation({
-    mutationFn: (d: CategoryDetailForm) =>
-      contractsApi.addDetail(contractId, {
-        categoryTestId: d.categoryTestId,
-        discount: Number(d.discount),
+  const addTestMutation = useMutation({
+    mutationFn: () =>
+      contractsApi.addTestDetail(contractId, {
+        testId,
+        amountRemise: remiseNum,
+        amountAfterRemise: total,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contract", contractId] });
-      toast.success("Ligne catégorie ajoutée");
-      setAddCatOpen(false);
-      catForm.reset();
+      toast.success("Donnée ajoutée avec succès");
+      setTestId("");
+      setPrice(0);
+      setRemise("");
     },
     onError: (e: AxiosError<ApiError>) =>
       toast.error(e.response?.data?.message ?? "Erreur"),
   });
 
-  const addTestMutation = useMutation({
-    mutationFn: (d: TestDetailForm) =>
-      contractsApi.addTestDetail(contractId, {
-        testId: d.testId,
-        amountRemise: Number(d.amountRemise),
-        amountAfterRemise: Number(d.amountAfterRemise),
+  const updateDetailMutation = useMutation({
+    mutationFn: () =>
+      contractsApi.updateTestDetail(contractId, editDetail!.id, {
+        amountRemise: editRemiseNum,
+        amountAfterRemise: editTotal,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contract", contractId] });
-      toast.success("Ligne examen ajoutée");
-      setAddTestOpen(false);
-      testForm.reset();
+      toast.success("Ligne mise à jour");
+      setEditDetail(null);
     },
     onError: (e: AxiosError<ApiError>) =>
       toast.error(e.response?.data?.message ?? "Erreur"),
@@ -165,6 +139,8 @@ export default function ContractDetailPage({
       queryClient.invalidateQueries({ queryKey: ["contract", contractId] });
       toast.success("Contrat activé");
     },
+    onError: (e: AxiosError<ApiError>) =>
+      toast.error(e.response?.data?.message ?? "Erreur"),
   });
 
   const closeMutation = useMutation({
@@ -173,12 +149,22 @@ export default function ContractDetailPage({
       queryClient.invalidateQueries({ queryKey: ["contract", contractId] });
       toast.success("Contrat clôturé");
     },
+    onError: (e: AxiosError<ApiError>) =>
+      toast.error(e.response?.data?.message ?? "Erreur"),
   });
 
-  // ---- Forms ---------------------------------------------------------------
-
-  const catForm = useForm<CategoryDetailForm>({ resolver: zodResolver(categoryDetailSchema) });
-  const testForm = useForm<TestDetailForm>({ resolver: zodResolver(testDetailSchema) });
+  // « Sauvegarder » = mise à jour du statut à ACTIF puis retour à la liste
+  // (équivalent Laravel contrat_details.update-status).
+  const saveMutation = useMutation({
+    mutationFn: () => contractsApi.activate(contractId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contract", contractId] });
+      toast.success("Statut mis à jour !");
+      router.push("/contracts");
+    },
+    onError: (e: AxiosError<ApiError>) =>
+      toast.error(e.response?.data?.message ?? "Erreur"),
+  });
 
   // ---- Render --------------------------------------------------------------
 
@@ -199,254 +185,376 @@ export default function ContractDetailPage({
   }
 
   const details = contract.details ?? [];
+  const isClose = contract.isClose === true;
+  const used = contract.usedTestsCount ?? 0;
+  const invoice = contract.invoice ?? null;
+  const showInvoiceCard = contract.invoiceUnique === true && invoice != null;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title={contract.name ?? `Contrat #${contract.id.slice(0, 8)}`}
+        title=""
         action={
           <Link
             href="/contracts"
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
           >
-            <ArrowLeft className="h-4 w-4" />
-            Retour
+            Retour à la liste des contrats
           </Link>
         }
       />
 
-      {/* Info card */}
-      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <div className="flex items-start justify-between flex-wrap gap-4">
-          <dl className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-4">
-            <div>
-              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Client</dt>
-              <dd className="mt-1 text-sm text-gray-900">{contract.clientName ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Type</dt>
-              <dd className="mt-1 text-sm text-gray-900">{contract.type ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Statut</dt>
-              <dd className="mt-1">
-                <StatusBadge status={contract.status} domain="contract" />
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Nbr tests</dt>
-              <dd className="mt-1 text-sm text-gray-900">{contract.nbrTests}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Date début</dt>
-              <dd className="mt-1 text-sm text-gray-900">{formatDate(contract.startDate)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Date fin</dt>
-              <dd className="mt-1 text-sm text-gray-900">{formatDate(contract.endDate)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Facturation unique</dt>
-              <dd className="mt-1 text-sm text-gray-900">{contract.invoiceUnique ? "Oui" : "Non"}</dd>
-            </div>
-          </dl>
-
-          <PermissionGate permission={PERMISSIONS.EDIT_CONTRACTS}>
-            <div className="flex gap-2">
-              {contract.status === "INACTIF" && (
-                <button
-                  type="button"
-                  onClick={() => activateMutation.mutate()}
-                  disabled={activateMutation.isPending}
-                  className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 transition-colors disabled:opacity-50"
-                >
-                  <CheckCircle className="h-4 w-4" />
-                  Activer
-                </button>
-              )}
-              {contract.status === "ACTIF" && (
+      {/* ============ Cartes Contrat / Facture ============ */}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        {/* --- Carte Contrat --- */}
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
+            <h2 className="text-base font-semibold text-gray-900">
+              Contrat : {contract.name ?? "—"}
+            </h2>
+            <PermissionGate permission={PERMISSIONS.EDIT_CONTRACTS}>
+              {contract.status === "ACTIF" && !isClose && (
                 <button
                   type="button"
                   onClick={() => closeMutation.mutate()}
                   disabled={closeMutation.isPending}
-                  className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+                  className="inline-flex items-center rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 transition-colors disabled:opacity-50"
                 >
-                  <XCircle className="h-4 w-4" />
                   Clôturer
                 </button>
               )}
-            </div>
-          </PermissionGate>
+              {contract.status === "INACTIF" && !isClose && (
+                <button
+                  type="button"
+                  onClick={() => activateMutation.mutate()}
+                  disabled={activateMutation.isPending}
+                  className="inline-flex items-center rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+                >
+                  Activer
+                </button>
+              )}
+            </PermissionGate>
+          </div>
+
+          <div className="space-y-2 px-5 py-4 text-sm text-gray-700">
+            <p>
+              <strong className="font-semibold text-gray-900">Date : </strong>
+              {formatDate(contract.createdAt)}
+            </p>
+            <p>
+              <strong className="font-semibold text-gray-900">Type : </strong>
+              {contract.type ?? "—"}
+            </p>
+            <p>
+              <strong className="font-semibold text-gray-900">Status : </strong>
+              {isClose
+                ? `CLÔTURER, le ${formatDate(contract.updatedAt)}`
+                : contract.status}
+            </p>
+            <p>
+              <strong className="font-semibold text-gray-900">
+                Nombre d&apos;examens :{" "}
+              </strong>
+              {contract.nbrTests === -1
+                ? `${used}/Illimité`
+                : `${used}/${contract.nbrTests}`}
+            </p>
+            <p>
+              <strong className="font-semibold text-gray-900">
+                Description :{" "}
+              </strong>
+              {contract.description ?? "—"}
+            </p>
+          </div>
         </div>
 
-        {contract.description && (
-          <p className="mt-4 text-sm text-gray-600 border-t border-gray-100 pt-4">
-            {contract.description}
-          </p>
+        {/* --- Carte Facture (uniquement facturation unique + facture existante) --- */}
+        {showInvoiceCard && (
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
+              <h2 className="text-base font-semibold text-gray-900">Facture</h2>
+              <Link
+                href={`/invoices/${invoice!.id}`}
+                className="inline-flex items-center rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 transition-colors"
+              >
+                Voir plus
+              </Link>
+            </div>
+
+            <div className="space-y-2 px-5 py-4 text-sm text-gray-700">
+              {invoice!.code && (
+                <p>
+                  <strong className="font-semibold text-gray-900">Code : </strong>
+                  {invoice!.code}
+                </p>
+              )}
+              <p>
+                <strong className="font-semibold text-gray-900">Client : </strong>
+                {contract.clientName ?? "—"}
+              </p>
+              <p>
+                <strong className="font-semibold text-gray-900">Status : </strong>
+                {invoice!.isPaid
+                  ? `Payé, le ${formatDate(invoice!.paidAt)}`
+                  : "Non payé"}
+              </p>
+              <p>
+                <strong className="font-semibold text-gray-900">Total : </strong>
+                {formatAmount(invoice!.total)}
+              </p>
+            </div>
+          </div>
         )}
       </div>
 
-      {/* Details / lignes */}
+      {/* ============ Ajouter des examens (formulaire inline) ============ */}
+      {!isClose && (
+        <PermissionGate permission={PERMISSIONS.EDIT_CONTRACTS}>
+          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <h2 className="mb-4 text-base font-semibold text-gray-900">
+              Ajouter des examens
+            </h2>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!testId) {
+                  toast.error("Veuillez sélectionner un examen");
+                  return;
+                }
+                addTestMutation.mutate();
+              }}
+              autoComplete="off"
+              className="grid grid-cols-1 items-end gap-4 md:grid-cols-12"
+            >
+              <div className="md:col-span-4">
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Examen
+                </label>
+                <NativeSelect
+                  value={testId}
+                  onChange={(e) => setTestId(e.target.value)}
+                  required
+                >
+                  <option value="">Sélectionner l&apos;examen</option>
+                  {examens.map((ex) => (
+                    <option key={ex.id} value={ex.id}>
+                      {ex.name}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Prix
+                </label>
+                <input
+                  type="text"
+                  value={price}
+                  readOnly
+                  className={inputClass}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Remise
+                </label>
+                <input
+                  type="number"
+                  value={remise}
+                  onChange={(e) => setRemise(e.target.value)}
+                  min={0}
+                  required
+                  className={inputClass}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Total
+                </label>
+                <input
+                  type="text"
+                  value={total}
+                  readOnly
+                  className={inputClass}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <button
+                  type="submit"
+                  disabled={addTestMutation.isPending}
+                  className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  Ajouter
+                </button>
+              </div>
+            </form>
+          </div>
+        </PermissionGate>
+      )}
+
+      {/* ============ Examens prises en compte ============ */}
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between p-5 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">Lignes du contrat</h2>
-          <PermissionGate permission={PERMISSIONS.EDIT_CONTRACTS}>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => { catForm.reset(); setAddCatOpen(true); }}
-                className="inline-flex items-center gap-2 rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
-              >
-                <Tag className="h-4 w-4" />
-                Par catégorie
-              </button>
-              <button
-                type="button"
-                onClick={() => { testForm.reset(); setAddTestOpen(true); }}
-                className="inline-flex items-center gap-2 rounded-lg border border-purple-300 bg-purple-50 px-3 py-1.5 text-sm font-medium text-purple-700 hover:bg-purple-100 transition-colors"
-              >
-                <FlaskConical className="h-4 w-4" />
-                Par examen
-              </button>
-            </div>
-          </PermissionGate>
+        <div className="px-5 py-4 border-b border-gray-100">
+          <h2 className="text-base font-semibold text-gray-900">
+            Examens prises en compte
+          </h2>
         </div>
 
-        {details.length === 0 ? (
-          <div className="flex items-center justify-center h-32">
-            <p className="text-sm text-gray-400">Aucune ligne dans ce contrat</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-100">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-100">
+              <tr>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">
+                  Nom examen
+                </th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">
+                  Prix
+                </th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">
+                  Réduction
+                </th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">
+                  Total
+                </th>
+                <th className="px-4 py-3 text-right font-medium text-gray-600">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {details.length === 0 ? (
                 <tr>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Examen / Catégorie</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">Prix</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">Remise %</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">Montant remise</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">Après remise</th>
-                  <th className="px-4 py-3" />
+                  <td
+                    colSpan={5}
+                    className="px-4 py-8 text-center text-sm text-gray-400"
+                  >
+                    Aucun examen pris en compte
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {details.map((d) => (
+              ) : (
+                details.map((d) => (
                   <tr key={d.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 text-gray-900">
-                      {d.labTestName ??
-                        getCategoryName(d.categoryTestId) ??
-                        (d.categoryTestId
-                          ? `Catégorie #${d.categoryTestId.slice(0, 8)}`
-                          : "—")}
+                      {d.labTestName ?? "—"}
                     </td>
-                    <td className="px-4 py-3 text-right text-gray-700">{formatAmount(d.price)}</td>
                     <td className="px-4 py-3 text-right text-gray-700">
-                      {d.pourcentage != null ? `${d.pourcentage}%` : "—"}
+                      {formatAmount(d.price)}
                     </td>
-                    <td className="px-4 py-3 text-right text-gray-700">{formatAmount(d.amountRemise)}</td>
+                    <td className="px-4 py-3 text-right text-gray-700">
+                      {formatAmount(d.amountRemise)}
+                    </td>
                     <td className="px-4 py-3 text-right font-medium text-gray-900">
                       {formatAmount(d.amountAfterRemise)}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3">
                       <PermissionGate permission={PERMISSIONS.EDIT_CONTRACTS}>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteDetail(d)}
-                          className="inline-flex items-center justify-center rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                          title="Supprimer cette ligne"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditDetail(d);
+                              setEditRemise(String(d.amountRemise ?? ""));
+                            }}
+                            className="inline-flex items-center justify-center rounded p-1.5 text-blue-600 hover:bg-blue-50 transition-colors"
+                            title="Modifier la réduction"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteDetail(d)}
+                            className="inline-flex items-center justify-center rounded p-1.5 text-red-600 hover:bg-red-50 transition-colors"
+                            title="Supprimer cette ligne"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </PermissionGate>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {!isClose && (
+          <PermissionGate permission={PERMISSIONS.EDIT_CONTRACTS}>
+            <div className="px-5 py-4 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => saveMutation.mutate()}
+                disabled={details.length === 0 || saveMutation.isPending}
+                className="w-full rounded-lg bg-green-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-green-700 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Sauvegarder
+              </button>
+            </div>
+          </PermissionGate>
         )}
       </div>
 
-      {/* ====================== MODALS ====================== */}
+      {/* ============ Modales ============ */}
 
-      {/* Ajouter ligne par catégorie */}
+      {/* Modifier la réduction d'une ligne */}
       <CrudModal
-        isOpen={addCatOpen}
-        onClose={() => setAddCatOpen(false)}
-        title="Ajouter une ligne — par catégorie"
-        onSubmit={catForm.handleSubmit((d) => addCategoryMutation.mutate(d))}
-        submitLabel="Ajouter"
-        isSubmitting={addCategoryMutation.isPending}
+        isOpen={editDetail !== null}
+        onClose={() => setEditDetail(null)}
+        title="Modifier la réduction"
+        onSubmit={() => updateDetailMutation.mutate()}
+        submitLabel="Enregistrer"
+        isSubmitting={updateDetailMutation.isPending}
       >
         <div className="flex flex-col gap-4">
-          <RHFSelect
-            control={catForm.control}
-            name="categoryTestId"
-            label="Catégorie d'examen"
-            required
-            options={categories.map((c) => ({ value: c.id, label: c.name }))}
-            placeholder="Sélectionner une catégorie…"
-            error={catForm.formState.errors.categoryTestId?.message}
-          />
-          <FormField label="Remise (%)" required error={catForm.formState.errors.discount?.message}>
+          <FormField label="Examen">
+            <input
+              type="text"
+              value={editDetail?.labTestName ?? ""}
+              readOnly
+              className={inputClass}
+            />
+          </FormField>
+          <div className="grid grid-cols-2 gap-4">
+            <FormField label="Prix">
+              <input
+                type="text"
+                value={editDetail?.price ?? 0}
+                readOnly
+                className={inputClass}
+              />
+            </FormField>
+            <FormField label="Total">
+              <input
+                type="text"
+                value={editTotal}
+                readOnly
+                className={inputClass}
+              />
+            </FormField>
+          </div>
+          <FormField label="Réduction" required>
             <input
               type="number"
-              {...catForm.register("discount")}
+              value={editRemise}
+              onChange={(e) => setEditRemise(e.target.value)}
               min={0}
-              max={100}
-              step={0.01}
-              placeholder="Ex : 10"
               className={inputClass}
             />
           </FormField>
         </div>
       </CrudModal>
 
-      {/* Ajouter ligne par examen */}
-      <CrudModal
-        isOpen={addTestOpen}
-        onClose={() => setAddTestOpen(false)}
-        title="Ajouter une ligne — par examen"
-        onSubmit={testForm.handleSubmit((d) => addTestMutation.mutate(d))}
-        submitLabel="Ajouter"
-        isSubmitting={addTestMutation.isPending}
-      >
-        <div className="flex flex-col gap-4">
-          <RHFSelect
-            control={testForm.control}
-            name="testId"
-            label="Examen"
-            required
-            options={examens.map((e) => ({ value: e.id, label: e.name }))}
-            placeholder="Sélectionner un examen…"
-            error={testForm.formState.errors.testId?.message}
-          />
-          <FormField label="Montant remise (FCFA)" required error={testForm.formState.errors.amountRemise?.message}>
-            <input
-              type="number"
-              {...testForm.register("amountRemise")}
-              min={0}
-              placeholder="Ex : 500"
-              className={inputClass}
-            />
-          </FormField>
-          <FormField label="Montant après remise (FCFA)" required error={testForm.formState.errors.amountAfterRemise?.message}>
-            <input
-              type="number"
-              {...testForm.register("amountAfterRemise")}
-              min={0}
-              placeholder="Ex : 4500"
-              className={inputClass}
-            />
-          </FormField>
-        </div>
-      </CrudModal>
-
-      {/* Confirmation suppression ligne */}
+      {/* Confirmation suppression */}
       <ConfirmModal
         isOpen={deleteDetail !== null}
         onClose={() => setDeleteDetail(null)}
-        onConfirm={() => { if (deleteDetail) deleteDetailMutation.mutate(deleteDetail.id); }}
+        onConfirm={() => {
+          if (deleteDetail) deleteDetailMutation.mutate(deleteDetail.id);
+        }}
         title="Supprimer cette ligne"
         message={`Supprimer "${deleteDetail?.labTestName ?? "cette ligne"}" du contrat ?`}
         confirmLabel="Supprimer"

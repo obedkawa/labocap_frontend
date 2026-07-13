@@ -27,7 +27,6 @@ import {
   ChevronRight,
   FlaskConical,
   ClipboardList,
-  BarChart2,
   Search,
   Syringe,
 } from "lucide-react";
@@ -459,14 +458,6 @@ export function Sidebar() {
         {/* Paramètres */}
         {can(PERMISSIONS.VIEW_SETTINGS) && (
           <NavItem href="/settings" icon={<Settings className="w-5 h-5" />} label="Paramètres" collapsed={collapsed} />
-        )}
-
-        {/* Finance */}
-        {can(PERMISSIONS.MANAGE_FINANCE) && (
-          <CollapseItem icon={<BarChart2 className="w-5 h-5" />} label="Finance" collapsed={collapsed}>
-            <SubItem href="/finance" label="Vue d'ensemble" />
-            <SubItem href="/finance/banks" label="Comptes bancaires" />
-          </CollapseItem>
         )}
 
         {/* ══════════════ EQUIPES ══════════════ */}

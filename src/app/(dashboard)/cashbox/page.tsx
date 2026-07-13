@@ -71,10 +71,16 @@ export default function CashboxVentePage() {
     queryFn: () => cashboxApi.getCashboxes().then((r) => r.data.content),
   });
 
-  // Sélectionne la première caisse de type "vente"
-  const venteCashbox: CashboxResponseDto | undefined = (cashboxesData ?? []).find(
-    (c) => c.type === "vente",
-  );
+  // Sélectionne la caisse de vente "principale". Des doublons vides peuvent exister
+  // (artefacts de migration : même type, solde 0, aucune opération) ; prendre la
+  // première ferait afficher une caisse vide. On retient donc, parmi les caisses de
+  // type "vente", celle au solde le plus élevé (la caisse réellement active).
+  const venteCashbox: CashboxResponseDto | undefined = (cashboxesData ?? [])
+    .filter((c) => c.type === "vente")
+    .reduce<CashboxResponseDto | undefined>(
+      (best, c) => (!best || Number(c.balance ?? 0) > Number(best.balance ?? 0) ? c : best),
+      undefined,
+    );
 
   // === Opérations de la caisse de vente
   const { data: operationsData, isLoading } = useQuery({

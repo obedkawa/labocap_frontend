@@ -311,7 +311,7 @@ export default function ContractsPage() {
         <div className="flex items-center gap-2">
           <Link
             href={`/contracts/${row.original.id}`}
-            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors"
+            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-amber-500 text-white hover:bg-amber-600 transition-colors"
           >
             <Eye className="h-3.5 w-3.5" />
             Détail
@@ -331,7 +331,7 @@ export default function ContractsPage() {
               <button
                 onClick={() => activateMutation.mutate(row.original.id)}
                 disabled={activateMutation.isPending}
-                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
                 aria-label="Activer"
               >
                 <CheckCircle className="h-3.5 w-3.5" />
@@ -342,7 +342,7 @@ export default function ContractsPage() {
               <button
                 onClick={() => closeMutation.mutate(row.original.id)}
                 disabled={closeMutation.isPending}
-                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-50 text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-gray-600 text-white hover:bg-gray-700 transition-colors disabled:opacity-50"
                 aria-label="Clôturer"
               >
                 <XCircle className="h-3.5 w-3.5" />

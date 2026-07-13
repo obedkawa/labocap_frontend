@@ -319,9 +319,14 @@ textarea::placeholder {
   .native-select option:focus {
     background: #eff6ff;
   }
+  /* Option sélectionnée : surbrillance légère + texte bleu LISIBLE.
+     Ne jamais mettre `color: #ffffff` ici : avec appearance:base-select, Chromium
+     clone l'option cochée dans le champ fermé (fond blanc) → texte blanc sur blanc,
+     la valeur sélectionnée devient invisible. Un bleu foncé reste lisible aussi bien
+     sur le fond blanc du champ fermé que sur la surbrillance claire de la liste. */
   .native-select option:checked {
-    background: #2563eb;
-    color: #ffffff;
+    background: #eff6ff;
+    color: #1d4ed8;
   }
   /* La coche (nouveau pseudo-élément) reste à droite, le texte à gauche */
   .native-select option::checkmark {
