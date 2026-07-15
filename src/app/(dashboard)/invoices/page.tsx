@@ -298,7 +298,9 @@ export default function InvoicesPage() {
     );
   }
 
-  // --- Colonnes du tableau (Date / Demande / Patient / Contrat / Total / Code normalisé / Type paiement / Statut / Actions)
+  // --- Colonnes du tableau (Date / Demande / Patient / Total / Code normalisé / Type paiement / Statut / Actions)
+  // NB : la colonne « Contrat » est volontairement absente — elle est commentée
+  // dans la vue Laravel `invoices/index.blade.php` (conformité).
   const columns: ColumnDef<Invoice>[] = [
     {
       header: "Date",
@@ -332,18 +334,6 @@ export default function InvoicesPage() {
         if (!name) return <span className="text-gray-400 text-xs">—</span>;
         return <span className="text-sm font-medium text-gray-800">{name}</span>;
       },
-    },
-    {
-      header: "Contrat",
-      id: "contrat",
-      accessorFn: (row) => row.contratName ?? "",
-      enableSorting: true,
-      cell: ({ row }) =>
-        row.original.contratName ? (
-          <span className="text-sm text-gray-700">{row.original.contratName}</span>
-        ) : (
-          <span className="text-gray-400 text-xs">—</span>
-        ),
     },
     {
       header: "Total",

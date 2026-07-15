@@ -1,13 +1,14 @@
 "use client";
 
 import { useId } from "react";
-import Select, {
-  type MultiValue,
-  type SingleValue,
-  type StylesConfig,
+import type {
+  MultiValue,
+  SingleValue,
+  StylesConfig,
 } from "react-select";
 import { cn } from "@/lib/utils";
 import type { SelectOption } from "./FormSelect";
+import { LimitedSelect as Select } from "./LimitedSelect";
 import { buildSelectStyles, SELECT_MENU_CLASSNAMES } from "./selectStyles";
 
 // ---------------------------------------------------------------------------
@@ -55,8 +56,8 @@ type SelectFieldProps = SingleProps | MultiProps;
 
 /**
  * Champ de sélection (mono ou multi) avec recherche interne et design soigné.
- * Le menu déroulant a une barre de défilement fine qui n'apparaît qu'au survol
- * (classe `select-menu-scroll` définie dans globals.css).
+ * Le menu n'affiche que 6 options, sans défilement : au-delà, on tape sa
+ * recherche (qui porte sur toute la liste). Voir `LimitedSelect`.
  *
  * API par chaînes : `value`/`onChange` manipulent des `string` (mono) ou
  * `string[]` (multi), pas les objets internes de react-select.

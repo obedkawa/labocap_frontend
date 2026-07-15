@@ -39,11 +39,6 @@ function formatAmount(v?: number) {
   return new Intl.NumberFormat("fr-FR").format(v) + " FCFA";
 }
 
-function formatDate(s?: string) {
-  if (!s) return "—";
-  return new Date(s).toLocaleDateString("fr-FR");
-}
-
 // ---------------------------------------------------------------------------
 // Schema
 // ---------------------------------------------------------------------------
@@ -163,7 +158,16 @@ export default function CashboxTicketsPage() {
 
   // ---- Columns -------------------------------------------------------------
 
+  // Colonnes alignées sur la vue Laravel « Bon de caisse » :
+  // #, Code, Montant, Fournisseur, Description, Status, Actions.
   const columns: ColumnDef<CashboxVoucherResponseDto>[] = [
+    {
+      header: "#",
+      id: "rownum",
+      cell: ({ row }) => (
+        <span className="text-xs text-gray-500">{row.index + 1}</span>
+      ),
+    },
     {
       header: "Code",
       accessorKey: "code",
@@ -172,34 +176,29 @@ export default function CashboxTicketsPage() {
       ),
     },
     {
-      header: "Description",
-      accessorKey: "description",
-      cell: ({ row }) => row.original.description ?? "—",
-    },
-    {
       header: "Montant",
       accessorKey: "amount",
       cell: ({ row }) => formatAmount(row.original.amount),
     },
     {
-      header: "Statut",
-      accessorKey: "status",
+      header: "Fournisseur",
+      accessorKey: "supplierName",
       cell: ({ row }) => (
-        <StatusBadge status={row.original.status} domain="general" />
+        <span className="text-sm text-gray-700">
+          {row.original.supplierName ?? "Aucun"}
+        </span>
       ),
     },
     {
-      header: "Date",
-      accessorKey: "createdAt",
-      cell: ({ row }) => formatDate(row.original.createdAt),
+      header: "Description",
+      accessorKey: "description",
+      cell: ({ row }) => row.original.description ?? "—",
     },
     {
-      header: "Lignes",
-      id: "details",
+      header: "Status",
+      accessorKey: "status",
       cell: ({ row }) => (
-        <span className="text-sm text-gray-600">
-          {row.original.details?.length ?? 0} ligne(s)
-        </span>
+        <StatusBadge status={row.original.status} domain="general" />
       ),
     },
     {
@@ -224,7 +223,7 @@ export default function CashboxTicketsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Tickets de caisse"
+        title="Bon de caisse"
         action={
           can(PERMISSIONS.CREATE_CASHBOX_TICKETS) ? (
             <button

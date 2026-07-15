@@ -3,12 +3,14 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Download } from "lucide-react";
-import ReactSelect from "react-select";
+import { LimitedSelect as ReactSelect } from "@/components/ui/LimitedSelect";
 import { toast } from "sonner";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { PageHeader } from "@/components/ui/PageHeader";
 import { NativeSelect } from "@/components/ui/NativeSelect";
+import { RemoteMultiSelectField } from "@/components/ui/RemoteSelectField";
+import { MAX_VISIBLE_OPTIONS } from "@/components/ui/LimitedSelect";
 import { DataTable } from "@/components/common/DataTable";
 import { formatDate } from "@/lib/utils";
 import {
@@ -16,10 +18,10 @@ import {
   type ReportGlobalSearchRow,
 } from "@/lib/api/reports";
 import { typeOrdersApi } from "@/lib/api/examens";
-import { doctorsApi } from "@/lib/api/doctors";
 import { hospitalsApi } from "@/lib/api/hospitals";
 import { patientsApi } from "@/lib/api/patients";
 import { contractsApi } from "@/lib/api/contracts";
+import { loadDoctorOptions } from "@/lib/api/optionLoaders";
 
 // ---------------------------------------------------------------------------
 // Types locaux pour les options react-select
@@ -36,6 +38,23 @@ interface PatientOption extends SelectOption {
   lastname?: string;
 }
 
+/**
+ * Recherche serveur des patients (13 000+) : le filtre interroge la base, il ne
+ * se limite pas aux 6 options affichées.
+ */
+const loadPatientFilterOptions = (input: string): Promise<PatientOption[]> =>
+  patientsApi
+    .findAll({ size: MAX_VISIBLE_OPTIONS, search: input || undefined })
+    .then((r) =>
+      r.data.content.map((p) => ({
+        value: p.id,
+        label: `${p.code ?? ""} - ${p.firstname ?? ""} ${p.lastname ?? ""}`.trim(),
+        code: p.code,
+        firstname: p.firstname,
+        lastname: p.lastname,
+      }))
+    );
+
 // ---------------------------------------------------------------------------
 // Page principale — Recherche avancée des comptes-rendus
 // ---------------------------------------------------------------------------
@@ -51,6 +70,10 @@ export default function SearchPage() {
   const [contratIds, setContratIds] = useState<string[]>([]);
   const [patientIds, setPatientIds] = useState<string[]>([]);
   const [doctorIds, setDoctorIds] = useState<string[]>([]);
+  // Patients/médecins choisis : on garde les options entières, elles ne sont
+  // plus retrouvables dans une liste préchargée (recherche serveur).
+  const [selectedPatients, setSelectedPatients] = useState<PatientOption[]>([]);
+  const [selectedDoctors, setSelectedDoctors] = useState<SelectOption[]>([]);
   const [hospitalIds, setHospitalIds] = useState<string[]>([]);
   const [referenceHospital, setReferenceHospital] = useState("");
   const [dateBegin, setDateBegin] = useState("");
@@ -85,13 +108,6 @@ export default function SearchPage() {
     staleTime: 5 * 60_000,
   });
 
-  const { data: doctors } = useQuery({
-    queryKey: ["doctors-all"],
-    queryFn: () =>
-      doctorsApi.findAll({ size: 1000 }).then((r) => r.data.content),
-    staleTime: 5 * 60_000,
-  });
-
   const { data: hospitals } = useQuery({
     queryKey: ["hospitals-all"],
     queryFn: () =>
@@ -99,12 +115,8 @@ export default function SearchPage() {
     staleTime: 5 * 60_000,
   });
 
-  const { data: patients } = useQuery({
-    queryKey: ["patients-all-for-search"],
-    queryFn: () =>
-      patientsApi.findAll({ size: 1000 }).then((r) => r.data.content),
-    staleTime: 5 * 60_000,
-  });
+  // Patients et médecins : trop nombreux pour être préchargés, leurs filtres
+  // cherchent directement en base (voir `RemoteMultiSelectField`).
 
   const { data: contrats } = useQuery({
     queryKey: ["contracts-all-for-search"],
@@ -129,23 +141,6 @@ export default function SearchPage() {
         label: c.name ?? "(sans nom)",
       })),
     [contrats],
-  );
-
-  const patientOptions = useMemo<PatientOption[]>(
-    () =>
-      (patients ?? []).map((p) => ({
-        value: p.id,
-        label: `${p.code ?? ""} - ${p.firstname ?? ""} ${p.lastname ?? ""}`.trim(),
-        code: p.code,
-        firstname: p.firstname,
-        lastname: p.lastname,
-      })),
-    [patients],
-  );
-
-  const doctorOptions = useMemo<SelectOption[]>(
-    () => (doctors ?? []).map((d) => ({ value: d.id, label: d.name })),
-    [doctors],
   );
 
   const hospitalOptions = useMemo<SelectOption[]>(
@@ -428,19 +423,17 @@ export default function SearchPage() {
             <label className="mb-1 block text-xs font-medium text-gray-600">
               Patient
             </label>
-            <ReactSelect<PatientOption, true>
-              isMulti
-              instanceId="filter-patient"
-              options={patientOptions}
-              value={patientOptions.filter((o) => patientIds.includes(o.value))}
-              onChange={(opts) =>
+            <RemoteMultiSelectField<PatientOption>
+              id="filter-patient"
+              loadOptions={loadPatientFilterOptions}
+              value={selectedPatients}
+              onChange={(opts) => {
+                setSelectedPatients(opts);
                 onFilterChange<string[]>(setPatientIds)(
                   opts.map((o) => o.value),
-                )
-              }
+                );
+              }}
               placeholder="Tous"
-              classNamePrefix="react-select"
-              noOptionsMessage={() => "Aucun patient"}
               formatOptionLabel={(opt) => (
                 <span>
                   <span className="font-mono text-xs text-gray-500">
@@ -452,16 +445,6 @@ export default function SearchPage() {
                   </span>
                 </span>
               )}
-              filterOption={(option, input) => {
-                if (!input) return true;
-                const q = input.toLowerCase();
-                const d = option.data;
-                return (
-                  (d.code ?? "").toLowerCase().includes(q) ||
-                  (d.firstname ?? "").toLowerCase().includes(q) ||
-                  (d.lastname ?? "").toLowerCase().includes(q)
-                );
-              }}
             />
           </div>
 
@@ -470,19 +453,17 @@ export default function SearchPage() {
             <label className="mb-1 block text-xs font-medium text-gray-600">
               Médecin traitant
             </label>
-            <ReactSelect<SelectOption, true>
-              isMulti
-              instanceId="filter-doctor"
-              options={doctorOptions}
-              value={doctorOptions.filter((o) => doctorIds.includes(o.value))}
-              onChange={(opts) =>
+            <RemoteMultiSelectField<SelectOption>
+              id="filter-doctor"
+              loadOptions={loadDoctorOptions}
+              value={selectedDoctors}
+              onChange={(opts) => {
+                setSelectedDoctors(opts);
                 onFilterChange<string[]>(setDoctorIds)(
                   opts.map((o) => o.value),
-                )
-              }
+                );
+              }}
               placeholder="Tous"
-              classNamePrefix="react-select"
-              noOptionsMessage={() => "Aucun médecin"}
             />
           </div>
 

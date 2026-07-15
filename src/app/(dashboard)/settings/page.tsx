@@ -16,6 +16,8 @@ import {
   Plus,
   Pencil,
   Trash2,
+  ChevronRight,
+  Settings as SettingsIcon,
   Image as ImageIcon,
 } from "lucide-react";
 
@@ -47,7 +49,7 @@ import {
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
+  "w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 shadow-sm transition-all duration-150 placeholder:text-gray-400 hover:border-gray-400 focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500";
 
 // ---------------------------------------------------------------------------
 // Définition des champs clé/valeur (fidèle aux onglets Laravel)
@@ -242,26 +244,55 @@ export default function SettingsPage() {
   return (
     <PermissionGate permission={PERMISSIONS.VIEW_SETTINGS}>
       <div className="space-y-6">
-        <PageHeader title="Paramètres" />
+        <PageHeader
+          title="Paramètres"
+          subtitle="Configuration du laboratoire, des logos, des e-mails et des documents."
+        />
 
         <div className="flex flex-col gap-6 lg:flex-row">
           {/* Menu latéral (comme Laravel) */}
-          <nav className="w-full flex-shrink-0 lg:w-64">
-            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-              {TABS.map((t) => (
-                <button
-                  key={t.key}
-                  onClick={() => setTab(t.key)}
-                  className={`flex w-full items-center gap-2.5 border-b border-gray-100 px-4 py-3 text-left text-sm font-medium transition-colors last:border-0 ${
-                    tab === t.key
-                      ? "bg-blue-50 text-blue-700"
-                      : "text-gray-700 hover:bg-gray-50"
-                  }`}
-                >
-                  {t.icon}
-                  {t.label}
-                </button>
-              ))}
+          <nav className="w-full flex-shrink-0 lg:w-72">
+            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+              <div className="flex items-center gap-2.5 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white px-4 py-3.5">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm">
+                  <SettingsIcon className="h-4 w-4" />
+                </span>
+                <span className="text-sm font-semibold text-gray-800">
+                  Paramètres système
+                </span>
+              </div>
+              <div className="p-2">
+                {TABS.map((t) => {
+                  const activeTab = tab === t.key;
+                  return (
+                    <button
+                      key={t.key}
+                      onClick={() => setTab(t.key)}
+                      className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-all ${
+                        activeTab
+                          ? "bg-blue-600 text-white shadow-sm shadow-blue-600/20"
+                          : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                      }`}
+                    >
+                      <span
+                        className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-colors ${
+                          activeTab
+                            ? "bg-white/20 text-white"
+                            : "bg-gray-100 text-gray-500 group-hover:bg-white group-hover:text-blue-600"
+                        }`}
+                      >
+                        {t.icon}
+                      </span>
+                      <span className="flex-1 truncate">{t.label}</span>
+                      <ChevronRight
+                        className={`h-4 w-4 flex-shrink-0 transition-opacity ${
+                          activeTab ? "opacity-90" : "opacity-0 group-hover:opacity-40"
+                        }`}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </nav>
 
@@ -487,10 +518,10 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-      <div className="border-b border-gray-200 px-6 py-4">
-        <h2 className="text-base font-semibold text-gray-900">{title}</h2>
-        {subtitle && <p className="mt-0.5 text-sm text-gray-500">{subtitle}</p>}
+    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+      <div className="border-b border-gray-100 bg-gradient-to-r from-gray-50/80 to-white px-6 py-5">
+        <h2 className="text-lg font-semibold tracking-tight text-gray-900">{title}</h2>
+        {subtitle && <p className="mt-1 text-sm text-gray-500">{subtitle}</p>}
       </div>
       <div className="p-6">{children}</div>
     </div>
@@ -507,15 +538,15 @@ function SubTabs({
   tabs: { key: string; label: string }[];
 }) {
   return (
-    <div className="mb-5 flex gap-1 border-b border-gray-200">
+    <div className="mb-6 inline-flex gap-1 rounded-xl bg-gray-100 p-1">
       {tabs.map((t) => (
         <button
           key={t.key}
           onClick={() => onChange(t.key)}
-          className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+          className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-all ${
             active === t.key
-              ? "border-blue-600 text-blue-700"
-              : "border-transparent text-gray-500 hover:text-gray-700"
+              ? "bg-white text-blue-700 shadow-sm"
+              : "text-gray-500 hover:text-gray-700"
           }`}
         >
           {t.label}
@@ -601,19 +632,29 @@ function ServicesCheckboxes({
     onChange(Array.from(next).join(","));
   };
   return (
-    <div className="flex flex-wrap gap-4">
-      {EMAIL_SERVICES.map((s) => (
-        <label key={s.value} className="flex items-center gap-2 text-sm text-gray-700">
-          <input
-            type="checkbox"
-            checked={selected.has(s.value)}
-            onChange={() => toggle(s.value)}
-            disabled={disabled}
-            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-          />
-          {s.label}
-        </label>
-      ))}
+    <div className="flex flex-wrap gap-2">
+      {EMAIL_SERVICES.map((s) => {
+        const on = selected.has(s.value);
+        return (
+          <label
+            key={s.value}
+            className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
+              on
+                ? "border-blue-300 bg-blue-50 text-blue-700"
+                : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+            } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
+          >
+            <input
+              type="checkbox"
+              checked={on}
+              onChange={() => toggle(s.value)}
+              disabled={disabled}
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            {s.label}
+          </label>
+        );
+      })}
     </div>
   );
 }
@@ -638,56 +679,56 @@ function ImageField({
     reader.readAsDataURL(file);
   }
   return (
-    <div className="flex flex-col gap-2">
-      <label className="text-sm font-medium text-gray-700">{label}</label>
-      <div className="flex items-start gap-3">
-        {value ? (
-          <div className="relative">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={value}
-              alt={label}
-              className="h-20 w-20 rounded-lg border border-gray-200 object-contain"
-            />
-            {!disabled && (
-              <button
-                type="button"
-                onClick={() => {
-                  onChange("");
-                  if (inputRef.current) inputRef.current.value = "";
-                }}
-                className="absolute -right-2 -top-2 rounded-full bg-red-100 p-0.5 text-red-600 transition-colors hover:bg-red-200"
-                aria-label="Supprimer"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="flex h-20 w-20 items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50">
-            <ImageIcon className="h-7 w-7 text-gray-300" />
-          </div>
-        )}
-        {!disabled && (
-          <div>
-            <input
-              ref={inputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleFile}
-              className="hidden"
-            />
+    <div className="flex flex-col items-center gap-3 rounded-xl border border-gray-200 bg-gray-50/60 p-4 transition-colors hover:border-gray-300">
+      <span className="w-full text-center text-sm font-semibold text-gray-700">
+        {label}
+      </span>
+      {value ? (
+        <div className="relative">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={value}
+            alt={label}
+            className="h-24 w-24 rounded-xl border border-gray-200 bg-white object-contain p-1.5 shadow-sm"
+          />
+          {!disabled && (
             <button
               type="button"
-              onClick={() => inputRef.current?.click()}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+              onClick={() => {
+                onChange("");
+                if (inputRef.current) inputRef.current.value = "";
+              }}
+              className="absolute -right-2 -top-2 rounded-full border border-white bg-red-500 p-1 text-white shadow-sm transition-colors hover:bg-red-600"
+              aria-label="Supprimer"
             >
-              <Upload className="h-4 w-4" />
-              Choisir
+              <X className="h-3 w-3" />
             </button>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      ) : (
+        <div className="flex h-24 w-24 items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-white">
+          <ImageIcon className="h-8 w-8 text-gray-300" />
+        </div>
+      )}
+      {!disabled && (
+        <>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleFile}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            {value ? "Changer" : "Choisir un fichier"}
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -703,12 +744,12 @@ function SaveBar({
 }) {
   if (!show) return null;
   return (
-    <div className="mt-6 flex justify-end">
+    <div className="-mx-6 -mb-6 mt-6 flex items-center justify-end gap-3 border-t border-gray-100 bg-gray-50/70 px-6 py-4">
       <button
         type="button"
         onClick={onSave}
         disabled={pending}
-        className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition-all hover:bg-blue-700 hover:shadow-md hover:shadow-blue-600/25 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {pending && <Spinner className="h-4 w-4 text-white" />}
         Sauvegarder
@@ -813,7 +854,7 @@ function BanksSection() {
           <button
             type="button"
             onClick={openCreate}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition-all hover:bg-blue-700 hover:shadow-md"
           >
             <Plus className="h-4 w-4" />
             Ajouter une banque
@@ -821,14 +862,14 @@ function BanksSection() {
         </PermissionGate>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200">
+      <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
         <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50 text-left text-xs font-medium uppercase text-gray-500">
+          <thead className="border-b border-gray-200 bg-gray-50 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
             <tr>
-              <th className="px-4 py-2">Nom</th>
-              <th className="px-4 py-2">Numéro de compte</th>
-              <th className="px-4 py-2">Description</th>
-              <th className="px-4 py-2 text-right">Actions</th>
+              <th className="px-4 py-3">Nom</th>
+              <th className="px-4 py-3">Numéro de compte</th>
+              <th className="px-4 py-3">Description</th>
+              <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -846,11 +887,11 @@ function BanksSection() {
               </tr>
             ) : (
               banks.map((b) => (
-                <tr key={b.id}>
-                  <td className="px-4 py-2 font-medium text-gray-900">{b.name}</td>
-                  <td className="px-4 py-2">{b.accountNumber || "—"}</td>
-                  <td className="px-4 py-2">{b.description || "—"}</td>
-                  <td className="px-4 py-2">
+                <tr key={b.id} className="transition-colors hover:bg-gray-50">
+                  <td className="px-4 py-3 font-medium text-gray-900">{b.name}</td>
+                  <td className="px-4 py-3 text-gray-600">{b.accountNumber || "—"}</td>
+                  <td className="px-4 py-3 text-gray-600">{b.description || "—"}</td>
+                  <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
                       <PermissionGate permission={PERMISSIONS.EDIT_BANKS}>
                         <button
@@ -1006,7 +1047,7 @@ function TitleReportsSection({ canManage }: { canManage: boolean }) {
           <button
             type="button"
             onClick={openCreate}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition-all hover:bg-blue-700 hover:shadow-md"
           >
             <Plus className="h-4 w-4" />
             Ajouter un titre
@@ -1014,13 +1055,13 @@ function TitleReportsSection({ canManage }: { canManage: boolean }) {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200">
+      <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
         <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50 text-left text-xs font-medium uppercase text-gray-500">
+          <thead className="border-b border-gray-200 bg-gray-50 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
             <tr>
-              <th className="px-4 py-2">Titre</th>
-              <th className="px-4 py-2">Par défaut</th>
-              <th className="px-4 py-2 text-right">Actions</th>
+              <th className="px-4 py-3">Titre</th>
+              <th className="px-4 py-3">Par défaut</th>
+              <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -1038,9 +1079,9 @@ function TitleReportsSection({ canManage }: { canManage: boolean }) {
               </tr>
             ) : (
               titles.map((t) => (
-                <tr key={t.id}>
-                  <td className="px-4 py-2 font-medium text-gray-900">{t.name}</td>
-                  <td className="px-4 py-2">
+                <tr key={t.id} className="transition-colors hover:bg-gray-50">
+                  <td className="px-4 py-3 font-medium text-gray-900">{t.name}</td>
+                  <td className="px-4 py-3">
                     {t.isDefault ? (
                       <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
                         Oui
@@ -1049,7 +1090,7 @@ function TitleReportsSection({ canManage }: { canManage: boolean }) {
                       "—"
                     )}
                   </td>
-                  <td className="px-4 py-2">
+                  <td className="px-4 py-3">
                     {canManage && (
                       <div className="flex items-center justify-end gap-1">
                         <button
@@ -1197,7 +1238,11 @@ function InvoiceSettingsForm({
           className={inputClass}
         />
       </div>
-      <label className="flex items-center gap-2 text-sm text-gray-700 sm:col-span-2">
+      <label
+        className={`flex items-center gap-3 rounded-lg border px-4 py-3 text-sm transition-colors sm:col-span-2 ${
+          status ? "border-blue-300 bg-blue-50" : "border-gray-200 bg-white"
+        } ${!canManage ? "opacity-60" : "cursor-pointer hover:bg-gray-50"}`}
+      >
         <input
           type="checkbox"
           checked={status}
@@ -1205,7 +1250,9 @@ function InvoiceSettingsForm({
           disabled={!canManage}
           className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
         />
-        Activer la synchronisation MECeF
+        <span className="font-medium text-gray-700">
+          Activer la synchronisation MECeF
+        </span>
       </label>
       <div className="sm:col-span-2">
         <SaveBar

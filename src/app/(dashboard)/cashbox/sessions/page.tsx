@@ -130,8 +130,17 @@ export default function CashboxSessionsPage() {
     openMutation.mutate();
   };
 
-  // ---- Colonnes ----
+  // ---- Colonnes — alignées sur la vue Laravel « Ouverture et fermeture » :
+  // ID, Code, Date d'ouverture, Solde d'ouverture, Date de fermeture,
+  // Solde de fermeture, Utilisateur, Écart, Statut, Actions.
   const columns: ColumnDef<CashboxDailyResponseDto>[] = [
+    {
+      header: "ID",
+      id: "rownum",
+      cell: ({ row }) => (
+        <span className="text-xs text-gray-500">{row.index + 1}</span>
+      ),
+    },
     {
       header: "Code",
       accessorKey: "code",
@@ -142,24 +151,56 @@ export default function CashboxSessionsPage() {
       ),
     },
     {
-      header: "Date",
-      accessorKey: "date",
-      cell: ({ row }) => formatDate(row.original.date),
+      header: "Date d'ouverture",
+      accessorKey: "createdAt",
+      cell: ({ row }) => formatDate(row.original.createdAt),
     },
     {
-      header: "Solde ouverture",
+      header: "Solde d'ouverture",
       accessorKey: "openingBalance",
       cell: ({ row }) => formatFCFA(row.original.openingBalance),
     },
     {
-      header: "Solde fermeture",
+      header: "Date de fermeture",
+      id: "closedAt",
+      cell: ({ row }) =>
+        row.original.status === 1 || !row.original.updatedAt ? (
+          <span className="text-xs text-gray-400">Non disponible</span>
+        ) : (
+          formatDate(row.original.updatedAt)
+        ),
+    },
+    {
+      header: "Solde de fermeture",
       accessorKey: "closingBalance",
       cell: ({ row }) => formatFCFA(row.original.closingBalance),
     },
     {
-      header: "Total calculé",
-      accessorKey: "totalCalculated",
-      cell: ({ row }) => formatFCFA(row.original.totalCalculated),
+      header: "Utilisateur",
+      accessorKey: "userName",
+      cell: ({ row }) => (
+        <span className="text-sm text-gray-700">
+          {row.original.userName ?? "—"}
+        </span>
+      ),
+    },
+    {
+      header: "Écart",
+      accessorKey: "totalEcart",
+      cell: ({ row }) => {
+        const ecart = row.original.totalEcart;
+        if (ecart === null || ecart === undefined)
+          return <span className="text-gray-400">—</span>;
+        return (
+          <span
+            className={
+              ecart < 0 ? "font-medium text-red-600" : "text-gray-700"
+            }
+          >
+            {formatFCFA(ecart)}
+          </span>
+        );
+      },
     },
     {
       header: "Statut",
@@ -194,12 +235,12 @@ export default function CashboxSessionsPage() {
     >
       <div className="space-y-6">
         <PageHeader
-          title="Sessions journalières"
+          title="Ouverture et fermeture (Caisse de vente)"
           subtitle="Historique des ouvertures et fermetures de caisse"
           breadcrumbs={[
             { label: "Trésorerie" },
             { label: "Caisse de vente", href: "/cashbox" },
-            { label: "Sessions" },
+            { label: "Ouverture et fermeture" },
           ]}
           action={
             can(PERMISSIONS.CREATE_CASHBOX_DAILIES) ? (
@@ -280,7 +321,12 @@ export default function CashboxSessionsPage() {
                 <option value="">Sélectionner une caisse…</option>
                 {(cashboxes ?? []).map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name}
+                    {c.name?.trim() ||
+                      (c.type === "vente"
+                        ? "Caisse de vente"
+                        : c.type === "depense"
+                          ? "Caisse de dépense"
+                          : "Caisse")}
                   </option>
                 ))}
               </NativeSelect>

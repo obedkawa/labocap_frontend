@@ -21,7 +21,30 @@ import {
 } from "@/lib/api/assignments";
 import { usersApi, type User } from "@/lib/api/users";
 import { testOrdersApi } from "@/lib/api/testOrders";
+import { RemoteSelectField } from "@/components/ui/RemoteSelectField";
+import { MAX_VISIBLE_OPTIONS } from "@/components/ui/LimitedSelect";
+import type { SelectOption } from "@/components/ui/FormSelect";
 import type { ApiError, PageResponse } from "@/types/api";
+
+/**
+ * Filtre « Demande d'examen » : la liste est filtrée **par code**, et la
+ * recherche part au serveur (14 000 demandes en base, pas 500 préchargées).
+ */
+const loadOrderCodeOptions = (input: string): Promise<SelectOption[]> =>
+  testOrdersApi
+    .findAll({
+      size: MAX_VISIBLE_OPTIONS,
+      status: "VALIDATED",
+      search: input || undefined,
+    })
+    .then((r) =>
+      r.data.content
+        .filter((o) => !!o.code)
+        .map((o) => ({
+          value: o.code,
+          label: `${o.code} — ${o.patientFirstname} ${o.patientLastname}`.trim(),
+        }))
+    );
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -54,6 +77,8 @@ export default function AssignmentsPage() {
 
   // ---- Filtres (3 filtres comme Laravel : Demande d'examen + Docteur + Rechercher)
   const [testOrderFilter, setTestOrderFilter] = useState("");
+  const [testOrderFilterOption, setTestOrderFilterOption] =
+    useState<SelectOption | null>(null);
   const [doctorFilter, setDoctorFilter] = useState("");
   const [search, setSearch] = useState("");
 
@@ -83,15 +108,7 @@ export default function AssignmentsPage() {
         .then((r) => r.data.content as User[]),
   });
 
-  // Liste des bons d'examen pour le filtre "Demande d'examen"
-  const { data: testOrdersData } = useQuery({
-    queryKey: ["test-orders-for-assignment-filter"],
-    queryFn: () =>
-      testOrdersApi
-        .findAll({ size: 500, status: "VALIDATED" })
-        .then((r) => r.data.content),
-  });
-  const testOrders = testOrdersData ?? [];
+  // Le filtre « Demande d'examen » cherche en base (voir `loadOrderCodeOptions`).
 
   const doctors = useMemo(() => {
     const list = usersData ?? [];
@@ -294,20 +311,18 @@ export default function AssignmentsPage() {
             >
               Demande d&apos;examen
             </label>
-            <NativeSelect
+            <RemoteSelectField
               id="filter-test-order"
-              value={testOrderFilter}
-              onChange={(e) => setTestOrderFilter(e.target.value)}
-            >
-              <option value="">Tous</option>
-              {testOrders.map((o) =>
-                o.code ? (
-                  <option key={o.id} value={o.code}>
-                    {o.code}
-                  </option>
-                ) : null
-              )}
-            </NativeSelect>
+              loadOptions={loadOrderCodeOptions}
+              value={testOrderFilter || null}
+              onChange={(v, opt) => {
+                setTestOrderFilter(v ?? "");
+                setTestOrderFilterOption(opt);
+              }}
+              selectedOption={testOrderFilterOption}
+              placeholder="Toutes"
+              isClearable
+            />
           </div>
 
           {/* 2. Docteur */}

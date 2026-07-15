@@ -1,15 +1,27 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import Select from "react-select";
+import { LimitedSelect as Select } from "@/components/ui/LimitedSelect";
+import { RemoteSelectField } from "@/components/ui/RemoteSelectField";
+import {
+  doctorToOption,
+  hospitalToOption,
+  loadDoctorOptions,
+  loadHospitalOptions,
+  loadPatientOptions,
+  loadTestOrderOptions,
+  patientToOption,
+  type TestOrderOption,
+} from "@/lib/api/optionLoaders";
 import type { AxiosError } from "axios";
 import { useState } from "react";
 
+import { UserPlus } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { AlertBox } from "@/components/ui/AlertBox";
 import { FormToggle } from "@/components/ui/FormToggle";
@@ -38,6 +50,9 @@ interface ContractOption {
 interface CashboxStatus {
   isOpen: boolean;
 }
+
+/** Recherche des demandes d'examen (toutes) pour la référence Immuno Interne. */
+const loadTestOrderReferences = loadTestOrderOptions();
 
 // ---------------------------------------------------------------------------
 // Zod schemas
@@ -108,10 +123,19 @@ function dedupeByLabel(options: SelectOption[]): SelectOption[] {
 
 export default function TestOrderCreatePage() {
   const router = useRouter();
-  const queryClient = useQueryClient();
 
   // Modal state
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
+
+  // Libellé des valeurs posées hors du menu (entité créée à la volée) : les
+  // listes n'étant plus préchargées, le select ne peut pas le retrouver seul.
+  const [patientOption, setPatientOption] = useState<SelectOption | null>(null);
+  const [doctorOption, setDoctorOption] = useState<SelectOption | null>(null);
+  const [hospitalOption, setHospitalOption] = useState<SelectOption | null>(
+    null
+  );
+  const [referenceOrderOption, setReferenceOrderOption] =
+    useState<TestOrderOption | null>(null);
 
   // Main form
   const {
@@ -158,24 +182,6 @@ export default function TestOrderCreatePage() {
     },
   });
 
-  const { data: patientsData } = useQuery({
-    queryKey: ["patients-all"],
-    queryFn: () =>
-      patientsApi.findAll({ size: 1000 }).then((r) => r.data.content),
-  });
-
-  const { data: doctorsData } = useQuery({
-    queryKey: ["doctors-all"],
-    queryFn: () =>
-      doctorsApi.findAll({ size: 1000 }).then((r) => r.data.content),
-  });
-
-  const { data: hospitalsData } = useQuery({
-    queryKey: ["hospitals-all"],
-    queryFn: () =>
-      hospitalsApi.findAll({ size: 1000 }).then((r) => r.data.content),
-  });
-
   const { data: contractsData } = useQuery<ContractOption[]>({
     queryKey: ["contracts-active"],
     queryFn: async () => {
@@ -192,13 +198,6 @@ export default function TestOrderCreatePage() {
     queryFn: () => typeOrdersApi.findAll().then((r) => r.data),
   });
 
-  // Charger les demandes d'examen existantes pour la référence Immuno Interne
-  const { data: existingTestOrders } = useQuery({
-    queryKey: ["test-orders-reference"],
-    queryFn: () =>
-      testOrdersApi.findAll({ size: 500 }).then((r) => r.data.content),
-  });
-
   // Détecter le titre du type sélectionné
   const selectedTypeOrder = typeOrdersData?.find(
     (t) => t.id === selectedTypeOrderId
@@ -213,26 +212,6 @@ export default function TestOrderCreatePage() {
   const isImmunoInterne = normalizedTypeTitle.includes("immuno interne");
 
   // Options React Select
-  const patientOptions =
-    patientsData?.map((p) => ({
-      value: p.id,
-      label: `${p.code} - ${p.firstname} ${p.lastname}`,
-    })) ?? [];
-
-  const doctorOptions = dedupeByLabel(
-    doctorsData?.map((d) => ({
-      value: d.id,
-      label: d.name,
-    })) ?? []
-  );
-
-  const hospitalOptions = dedupeByLabel(
-    hospitalsData?.map((h) => ({
-      value: h.id,
-      label: h.name,
-    })) ?? []
-  );
-
   const contractOptions =
     contractsData?.map((c) => ({
       value: c.id,
@@ -248,13 +227,6 @@ export default function TestOrderCreatePage() {
         label: t.title,
       })) ?? []
   );
-
-  // Options des demandes d'examen pour Immuno Interne
-  const testOrderReferenceOptions =
-    existingTestOrders?.map((o) => ({
-      value: o.id,
-      label: `${o.code} — ${o.patientFirstname} ${o.patientLastname}`,
-    })) ?? [];
 
   // --- Mutation création commande
   const createMutation = useMutation({
@@ -275,9 +247,9 @@ export default function TestOrderCreatePage() {
     mutationFn: (data: PatientRequest) => patientsApi.create(data),
     onSuccess: async (res) => {
       toast.success("Patient créé avec succès");
-      // Rafraîchir la liste des patients
-      await queryClient.invalidateQueries({ queryKey: ["patients-all"] });
-      // Sélectionner automatiquement le nouveau patient
+      // Sélectionner automatiquement le nouveau patient (option fournie au
+      // select : il ne peut plus la retrouver dans une liste préchargée).
+      setPatientOption(patientToOption(res.data));
       setValue("patientId", res.data.id);
       // Fermer et réinitialiser le modal
       setIsPatientModalOpen(false);
@@ -287,6 +259,32 @@ export default function TestOrderCreatePage() {
       toast.error(
         err.response?.data?.message ?? "Erreur lors de la création du patient"
       );
+    },
+  });
+
+  // --- Création à la volée d'un médecin depuis le select (si absent de la liste)
+  const createDoctorMutation = useMutation({
+    mutationFn: (name: string) => doctorsApi.create({ name }),
+    onSuccess: (res) => {
+      toast.success("Médecin ajouté");
+      setDoctorOption(doctorToOption(res.data));
+      setValue("doctorId", res.data.id);
+    },
+    onError: (err: AxiosError<ApiErrorType>) => {
+      toast.error(err.response?.data?.message ?? "Erreur lors de l'ajout du médecin");
+    },
+  });
+
+  // --- Création à la volée d'un hôpital depuis le select (si absent de la liste)
+  const createHospitalMutation = useMutation({
+    mutationFn: (name: string) => hospitalsApi.create({ name }),
+    onSuccess: (res) => {
+      toast.success("Hôpital ajouté");
+      setHospitalOption(hospitalToOption(res.data));
+      setValue("hospitalId", res.data.id);
+    },
+    onError: (err: AxiosError<ApiErrorType>) => {
+      toast.error(err.response?.data?.message ?? "Erreur lors de l'ajout de l'hôpital");
     },
   });
 
@@ -426,28 +424,24 @@ export default function TestOrderCreatePage() {
                 <button
                   type="button"
                   onClick={() => setIsPatientModalOpen(true)}
-                  className="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-200"
+                  className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-blue-700"
                 >
-                  + Nouveau patient
+                  <UserPlus className="h-3.5 w-3.5" />
+                  Nouveau patient
                 </button>
               </div>
               <Controller
                 name="patientId"
                 control={control}
                 render={({ field }) => (
-                  <Select
-                    instanceId="order-patient"
-                    inputId="patientId"
-                    options={patientOptions}
-                    placeholder="Sélectionner un patient..."
-                    value={
-                      patientOptions.find((o) => o.value === field.value) ??
-                      null
-                    }
-                    onChange={(opt) => field.onChange(opt?.value ?? "")}
+                  <RemoteSelectField
+                    id="patientId"
+                    loadOptions={loadPatientOptions}
+                    value={field.value || null}
+                    onChange={(v) => field.onChange(v ?? "")}
+                    selectedOption={patientOption}
+                    placeholder="Rechercher un patient (nom, code, téléphone)..."
                     isClearable
-                    isSearchable
-                    classNamePrefix="react-select"
                   />
                 )}
               />
@@ -467,18 +461,18 @@ export default function TestOrderCreatePage() {
                 name="doctorId"
                 control={control}
                 render={({ field }) => (
-                  <Select
-                    instanceId="order-doctor"
-                    inputId="doctorId"
-                    options={doctorOptions}
-                    placeholder="Sélectionner un médecin..."
-                    value={
-                      doctorOptions.find((o) => o.value === field.value) ?? null
-                    }
-                    onChange={(opt) => field.onChange(opt?.value ?? "")}
+                  <RemoteSelectField
+                    id="doctorId"
+                    loadOptions={loadDoctorOptions}
+                    value={field.value || null}
+                    onChange={(v) => field.onChange(v ?? "")}
+                    selectedOption={doctorOption}
+                    placeholder="Rechercher ou ajouter un médecin..."
+                    creatable
+                    onCreateOption={(name) => createDoctorMutation.mutate(name)}
+                    formatCreateLabel={(name) => `Ajouter le médecin « ${name} »`}
+                    isDisabled={createDoctorMutation.isPending}
                     isClearable
-                    isSearchable
-                    classNamePrefix="react-select"
                   />
                 )}
               />
@@ -498,19 +492,18 @@ export default function TestOrderCreatePage() {
                 name="hospitalId"
                 control={control}
                 render={({ field }) => (
-                  <Select
-                    instanceId="order-hospital"
-                    inputId="hospitalId"
-                    options={hospitalOptions}
-                    placeholder="Sélectionner un hôpital..."
-                    value={
-                      hospitalOptions.find((o) => o.value === field.value) ??
-                      null
-                    }
-                    onChange={(opt) => field.onChange(opt?.value ?? "")}
+                  <RemoteSelectField
+                    id="hospitalId"
+                    loadOptions={loadHospitalOptions}
+                    value={field.value || null}
+                    onChange={(v) => field.onChange(v ?? "")}
+                    selectedOption={hospitalOption}
+                    placeholder="Rechercher ou ajouter un hôpital..."
+                    creatable
+                    onCreateOption={(name) => createHospitalMutation.mutate(name)}
+                    formatCreateLabel={(name) => `Ajouter l'hôpital « ${name} »`}
+                    isDisabled={createHospitalMutation.isPending}
                     isClearable
-                    isSearchable
-                    classNamePrefix="react-select"
                   />
                 )}
               />
@@ -603,20 +596,17 @@ export default function TestOrderCreatePage() {
                   name="examenReferenceOrderId"
                   control={control}
                   render={({ field }) => (
-                    <Select
-                      instanceId="order-examen-reference"
-                      inputId="examenReferenceOrderId"
-                      options={testOrderReferenceOptions}
-                      placeholder="Sélectionner une demande de référence..."
-                      value={
-                        testOrderReferenceOptions.find(
-                          (o) => o.value === field.value
-                        ) ?? null
-                      }
-                      onChange={(opt) => field.onChange(opt?.value ?? "")}
+                    <RemoteSelectField
+                      id="examenReferenceOrderId"
+                      loadOptions={loadTestOrderReferences}
+                      value={field.value || null}
+                      onChange={(v, opt) => {
+                        field.onChange(v ?? "");
+                        setReferenceOrderOption(opt);
+                      }}
+                      selectedOption={referenceOrderOption}
+                      placeholder="Rechercher une demande de référence (code, patient)..."
                       isClearable
-                      isSearchable
-                      classNamePrefix="react-select"
                     />
                   )}
                 />

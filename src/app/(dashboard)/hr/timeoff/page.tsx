@@ -10,7 +10,7 @@ import { Check, X } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { AxiosError } from "axios";
 import type { UseFormReturn } from "react-hook-form";
-import ReactSelect from "react-select";
+import { LimitedSelect as ReactSelect } from "@/components/ui/LimitedSelect";
 
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DataTable } from "@/components/common/DataTable";

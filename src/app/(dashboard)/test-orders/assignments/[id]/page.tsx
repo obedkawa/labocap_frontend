@@ -1,13 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { Trash2, ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
-import Select, { type SingleValue } from "react-select";
+import { RemoteSelectField } from "@/components/ui/RemoteSelectField";
+import {
+  loadTestOrderOptions,
+  type TestOrderOption,
+} from "@/lib/api/optionLoaders";
 import type { AxiosError } from "axios";
 
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -22,7 +26,6 @@ import {
   type AssignmentPrint,
 } from "@/lib/api/assignments";
 import { usersApi, type User } from "@/lib/api/users";
-import { testOrdersApi, type TestOrder } from "@/lib/api/testOrders";
 import type { ApiError } from "@/types/api";
 
 // ---------------------------------------------------------------------------
@@ -51,10 +54,14 @@ interface UpdateForm {
   note: string;
 }
 
-interface OrderOption {
-  value: string;
-  label: string;
-}
+/**
+ * Demandes validées, cherchées côté serveur. On demande plus que les 6 lignes
+ * affichées : certaines seront écartées (déjà affectées à ce bordereau).
+ */
+const loadValidatedOrders = loadTestOrderOptions({
+  status: "VALIDATED",
+  size: 20,
+});
 
 // ---------------------------------------------------------------------------
 // Page
@@ -80,7 +87,9 @@ export default function AssignmentDetailsPage() {
   });
 
   // ---- Ajout détail
-  const [selectedOrder, setSelectedOrder] = useState<OrderOption | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<TestOrderOption | null>(
+    null
+  );
   const [detailNote, setDetailNote] = useState("");
 
   // ---- Modal suppression
@@ -130,29 +139,19 @@ export default function AssignmentDetailsPage() {
     [usersData]
   );
 
-  // Demandes d'examens VALIDATED
-  const { data: ordersData } = useQuery({
-    queryKey: ["test-orders-validated-for-assignment"],
-    queryFn: () =>
-      testOrdersApi
-        .findAll({ size: 500, status: "VALIDATED" })
-        .then((r) => r.data.content as TestOrder[]),
-  });
-
   const assignedOrderIds = useMemo(
     () => new Set(details.map((d) => d.testOrderId)),
     [details]
   );
 
-  const orderOptions: OrderOption[] = useMemo(
-    () =>
-      (ordersData ?? [])
-        .filter((o) => !assignedOrderIds.has(o.id))
-        .map((o) => ({
-          value: o.id,
-          label: `${o.code} — ${o.patientFirstname} ${o.patientLastname}`,
-        })),
-    [ordersData, assignedOrderIds]
+  // Demandes VALIDATED : cherchées en base (14 000 en tout), en écartant celles
+  // déjà présentes sur ce bordereau.
+  const loadOrderOptions = useCallback(
+    (input: string) =>
+      loadValidatedOrders(input).then((opts) =>
+        opts.filter((o) => !assignedOrderIds.has(o.value))
+      ),
+    [assignedOrderIds]
   );
 
   // ---- Initialisation form après chargement --------------------------------
@@ -374,18 +373,15 @@ export default function AssignmentDetailsPage() {
                       [Demande d&apos;examen/Reférence]
                     </span>
                   </label>
-                  <Select<OrderOption>
-                    instanceId="assignment-test-order"
-                    options={orderOptions}
-                    value={selectedOrder}
-                    onChange={(v: SingleValue<OrderOption>) =>
-                      setSelectedOrder(v)
-                    }
+                  <RemoteSelectField<TestOrderOption>
+                    id="assignment-test-order"
+                    loadOptions={loadOrderOptions}
+                    value={selectedOrder?.value ?? null}
+                    onChange={(_v, opt) => setSelectedOrder(opt)}
+                    selectedOption={selectedOrder}
                     isClearable
-                    placeholder="Sélectionner une demande d'examen"
-                    noOptionsMessage={() => "Aucune demande disponible"}
+                    placeholder="Rechercher une demande d'examen (code, patient)"
                     className="text-sm"
-                    classNamePrefix="react-select"
                   />
                 </div>
 

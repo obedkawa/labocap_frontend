@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Menu, User, LogOut, Search } from "lucide-react";
+import { Menu, User, LogOut, Search, ChevronDown } from "lucide-react";
 import { useUIStore } from "@/stores/ui.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { authApi } from "@/lib/api/auth";
@@ -19,6 +19,8 @@ export function Topbar() {
   const initials = user
     ? `${user.firstname.charAt(0)}${user.lastname.charAt(0)}`.toUpperCase()
     : "?";
+  const fullName = user ? `${user.firstname} ${user.lastname}`.trim() : "";
+  const roleName = user?.roles?.[0]?.name ?? "";
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,63 +62,84 @@ export function Topbar() {
   // ignoré (position: static), et le menu profil passait alors sous le PageHeader
   // collant du contenu (z-20). `shrink-0` empêche la barre d'être compressée.
   return (
-    <header className="relative z-40 shrink-0 bg-white shadow h-16 flex items-center px-4 justify-between">
+    <header className="relative z-40 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-white/90 px-3 backdrop-blur-sm sm:px-4">
       {/* Left: hamburger */}
       <button
         onClick={toggleSidebar}
-        className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 focus:outline-none"
-        aria-label="Toggle sidebar"
+        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+        aria-label="Afficher/masquer le menu"
       >
-        <Menu className="w-5 h-5" />
+        <Menu className="h-5 w-5" />
       </button>
 
       {/* Center: search bar */}
-      <form onSubmit={handleSearch} className="hidden sm:flex items-center gap-2 flex-1 max-w-md mx-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+      <form onSubmit={handleSearch} className="hidden flex-1 justify-center sm:flex">
+        <div className="relative w-full max-w-md">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Rechercher… (patients, examens…)"
-            className="w-full rounded-lg border border-gray-200 bg-gray-50 py-1.5 pl-9 pr-3 text-sm text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            placeholder="Rechercher un patient, un examen…"
+            className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2 pl-10 pr-3 text-sm text-gray-800 transition-all placeholder:text-gray-400 hover:border-gray-300 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10"
           />
         </div>
       </form>
 
       {/* Right: user dropdown */}
-      <div className="relative" ref={dropdownRef}>
+      <div className="relative flex-shrink-0" ref={dropdownRef}>
         <button
           onClick={() => setIsOpen((prev) => !prev)}
-          className="flex items-center gap-2 p-2 rounded-md hover:bg-gray-100 focus:outline-none"
+          className="flex items-center gap-2.5 rounded-xl p-1.5 pr-2 transition-colors hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
         >
-          <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-medium">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-blue-500 text-sm font-semibold text-white shadow-sm">
             {initials}
           </div>
-          <span className="text-sm font-medium text-gray-700">
-            {user?.firstname ?? ""}
-          </span>
+          <div className="hidden text-left leading-tight sm:block">
+            <p className="text-sm font-semibold text-gray-800">
+              {fullName || user?.firstname}
+            </p>
+            {roleName && <p className="text-xs text-gray-500">{roleName}</p>}
+          </div>
+          <ChevronDown
+            className={`hidden h-4 w-4 text-gray-400 transition-transform sm:block ${
+              isOpen ? "rotate-180" : ""
+            }`}
+          />
         </button>
 
         {isOpen && (
-          <div className="absolute right-0 mt-1 w-48 bg-white rounded-md shadow-lg border border-gray-200 py-1 z-50">
-            <div className="px-4 py-2 text-gray-500 text-sm">Bienvenue !</div>
-            <Link
-              href="/profile"
-              className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-              onClick={() => setIsOpen(false)}
-            >
-              <User className="w-4 h-4" />
-              Mon compte
-            </Link>
-            <hr className="my-1 border-gray-200" />
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left"
-            >
-              <LogOut className="w-4 h-4" />
-              Se déconnecter
-            </button>
+          <div className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg shadow-gray-300/40">
+            {/* En-tête utilisateur */}
+            <div className="flex items-center gap-3 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white px-4 py-3">
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-blue-500 text-sm font-semibold text-white shadow-sm">
+                {initials}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-gray-800">
+                  {fullName || "Utilisateur"}
+                </p>
+                <p className="truncate text-xs text-gray-500">{user?.email}</p>
+              </div>
+            </div>
+            {/* Actions */}
+            <div className="p-1.5">
+              <Link
+                href="/profile"
+                className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                onClick={() => setIsOpen(false)}
+              >
+                <User className="h-4 w-4 text-gray-400" />
+                Mon compte
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
+              >
+                <LogOut className="h-4 w-4" />
+                Se déconnecter
+              </button>
+            </div>
           </div>
         )}
       </div>

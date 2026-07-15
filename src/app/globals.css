@@ -104,6 +104,15 @@ textarea::placeholder {
 
 .react-select__menu-list {
   padding: 4px !important;
+  /* On n'affiche QUE 6 options, SANS défilement. Le reste ne se fait pas
+     défiler : l'utilisateur qui ne voit pas son choix tape pour rechercher.
+     (Voir la règle nth-child ci-dessous qui masque au-delà de la 6e.) */
+  max-height: none !important;
+  overflow: hidden !important;
+}
+/* Masquer toute option au-delà de la 6e — pas de « reste » à faire défiler. */
+.react-select__menu-list > .react-select__option:nth-child(n + 7) {
+  display: none !important;
 }
 
 .react-select__option {
@@ -113,6 +122,7 @@ textarea::placeholder {
   cursor: pointer !important;
   border-radius: 0.25rem !important;
 }
+/* Curseur (survol / navigation clavier) : BLEU CLAIR, dans tous les champs. */
 .react-select__option:hover,
 .react-select__option--is-focused {
   background-color: #eff6ff !important;
@@ -318,6 +328,7 @@ textarea::placeholder {
   .native-select option:hover,
   .native-select option:focus {
     background: #eff6ff;
+    color: #374151;
   }
   /* Option sélectionnée : surbrillance légère + texte bleu LISIBLE.
      Ne jamais mettre `color: #ffffff` ici : avec appearance:base-select, Chromium
@@ -325,8 +336,16 @@ textarea::placeholder {
      la valeur sélectionnée devient invisible. Un bleu foncé reste lisible aussi bien
      sur le fond blanc du champ fermé que sur la surbrillance claire de la liste. */
   .native-select option:checked {
-    background: #eff6ff;
-    color: #1d4ed8;
+    background: #2563eb;
+    color: #ffffff;
+  }
+  /* Le champ FERMÉ clone l'option cochée : on force un texte foncé lisible sur le
+     bouton blanc (sinon blanc sur blanc). La règle ci-dessus ne colore que la liste
+     ouverte visuellement, ce guard protège la valeur affichée dans le champ. */
+  .native-select:not(:open),
+  .native-select:not(:open) option:checked {
+    color: #111827 !important;
+    background: transparent !important;
   }
   /* La coche (nouveau pseudo-élément) reste à droite, le texte à gauche */
   .native-select option::checkmark {

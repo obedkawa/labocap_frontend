@@ -26,13 +26,13 @@ import {
   ChevronDown,
   ChevronRight,
   FlaskConical,
-  ClipboardList,
   Search,
   Syringe,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useUIStore } from "@/stores/ui.store";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAppSettings } from "@/hooks/useAppSettings";
 import { useHydrated } from "@/hooks/useHydrated";
 import { useAuthStore } from "@/stores/auth.store";
 import { PERMISSIONS } from "@/lib/constants/permissions";
@@ -245,25 +245,40 @@ export function Sidebar() {
 
   const collapsed = sidebarCollapsed;
 
+  // Logo + nom du labo depuis les paramètres (repli sur le défaut si absent).
+  const { data: appSettings } = useAppSettings();
+  const logoSrc = appSettings?.logo?.trim() || appSettings?.logo_white?.trim() || "";
+  const appName = appSettings?.app_name?.trim() || "Labo AnaPath";
+
   return (
     <aside
       className={`bg-gray-900 text-white flex flex-col flex-shrink-0 overflow-hidden transition-all duration-300 ease-in-out ${
         collapsed ? "w-16" : "w-64"
       }`}
     >
-      {/* Logo */}
+      {/* Logo — depuis les paramètres (setting_apps.logo), repli sur l'initiale. */}
       <div className="h-16 flex items-center justify-center flex-shrink-0 border-b border-gray-800">
         {collapsed ? (
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
-            L
-          </div>
+          logoSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logoSrc} alt={appName} className="h-9 w-9 rounded-lg object-contain" />
+          ) : (
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+              {appName.charAt(0).toUpperCase()}
+            </div>
+          )
         ) : (
           <div className="flex items-center gap-2 px-4">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-              L
-            </div>
+            {logoSrc ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logoSrc} alt={appName} className="h-9 w-auto max-w-[90px] rounded object-contain flex-shrink-0" />
+            ) : (
+              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                {appName.charAt(0).toUpperCase()}
+              </div>
+            )}
             <span className="font-semibold text-white text-base truncate">
-              Labo AnaPath
+              {appName}
             </span>
           </div>
         )}
@@ -342,31 +357,9 @@ export function Sidebar() {
           <NavItem href="/patients" icon={<User className="w-5 h-5" />} label="Patients" collapsed={collapsed} />
         )}
 
-        {/* Consultations */}
-        {can(PERMISSIONS.VIEW_CONSULTATIONS) && (
-          <CollapseItem icon={<Stethoscope className="w-5 h-5" />} label="Consultations" collapsed={collapsed}>
-            <SubItem href="/consultations" label="Toutes les consultations" />
-            {can(PERMISSIONS.VIEW_TYPE_CONSULTATIONS) && (
-              <SubItem href="/consultations/types" label="Types" />
-            )}
-          </CollapseItem>
-        )}
-
-        {/* Prestations */}
-        {(can(PERMISSIONS.VIEW_PRESTATIONS) ||
-          can(PERMISSIONS.VIEW_PRESTATION_ORDERS)) && (
-          <CollapseItem icon={<ClipboardList className="w-5 h-5" />} label="Prestations" collapsed={collapsed}>
-            {can(PERMISSIONS.VIEW_PRESTATIONS) && (
-              <SubItem href="/prestations" label="Toutes les prestations" />
-            )}
-            {can(PERMISSIONS.VIEW_PRESTATION_ORDERS) && (
-              <SubItem href="/prestations/orders" label="Commandes de prestations" />
-            )}
-            {can(PERMISSIONS.MANAGE_SETTINGS) && (
-              <SubItem href="/prestations/categories" label="Catégories" />
-            )}
-          </CollapseItem>
-        )}
+        {/* NB : « Consultations » et « Prestations » sont volontairement absents du
+            menu — comme dans la navigation Laravel (app2.blade.php), qui n'expose pas
+            ces modules dans la sidebar (les routes existent mais pas l'entrée de menu). */}
 
         {/* ══════════════ COMPTABILITÉS ══════════════ */}
         <SectionLabel label="COMPTABILITÉS" collapsed={collapsed} />
@@ -386,8 +379,8 @@ export function Sidebar() {
         {can(PERMISSIONS.VIEW_CASHBOXES) && (
           <CollapseItem icon={<DollarSign className="w-5 h-5" />} label="Caisses" collapsed={collapsed}>
             <SubItem href="/cashbox" label="Caisse de vente" />
-            <SubItem href="/expenses" label="Caisse de dépense" />
-            <SubItem href="/cashbox/tickets" label="Billetage de caisse" />
+            <SubItem href="/cashbox/depense" label="Caisse de dépense" />
+            <SubItem href="/cashbox/tickets" label="Bon de caisse" />
             <SubItem href="/cashbox/sessions" label="Ouverture et fermeture" />
           </CollapseItem>
         )}
@@ -410,8 +403,8 @@ export function Sidebar() {
         {/* Stocks */}
         {can(PERMISSIONS.VIEW_ARTICLES) && (
           <CollapseItem icon={<Package className="w-5 h-5" />} label="Stocks" collapsed={collapsed}>
+            <SubItem href="/inventory/movements" label="Historique des stocks" />
             <SubItem href="/inventory/articles" label="Tous les articles" />
-            <SubItem href="/inventory/movements" label="Mouvements de stock" />
             <SubItem href="/inventory/units" label="Unité de mesure" />
           </CollapseItem>
         )}
@@ -430,6 +423,12 @@ export function Sidebar() {
         {can(PERMISSIONS.VIEW_REFUNDS) && (
           <CollapseItem icon={<RefreshCw className="w-5 h-5" />} label="Remboursements" collapsed={collapsed}>
             <SubItem href="/refunds" label="Historiques" />
+            {can(PERMISSIONS.MANAGE_REFUNDS) && (
+              <SubItem href="/refunds?new=1" label="Ajouter" />
+            )}
+            {can(PERMISSIONS.MANAGE_REFUNDS) && (
+              <SubItem href="/refunds/settings" label="Paramètres" />
+            )}
           </CollapseItem>
         )}
 
@@ -441,9 +440,10 @@ export function Sidebar() {
         {/* ══════════════ ADMINISTRATIONS ══════════════ */}
         <SectionLabel label="ADMINISTRATIONS" collapsed={collapsed} />
 
-        {/* Support */}
-        <CollapseItem icon={<AlertCircle className="w-5 h-5" />} label="Support" collapsed={collapsed}>
+        {/* Signaler un problème */}
+        <CollapseItem icon={<AlertCircle className="w-5 h-5" />} label="Signaler un problème" collapsed={collapsed}>
           <SubItem href="/support" label="Historiques" />
+          <SubItem href="/support?new=1" label="Signaler" />
         </CollapseItem>
 
         {/* Utilisateurs */}
@@ -474,14 +474,14 @@ export function Sidebar() {
         {/* ══════════════ DOCUMENTATIONS ══════════════ */}
         <SectionLabel label="DOCUMENTATIONS" collapsed={collapsed} />
 
-        {can(PERMISSIONS.VIEW_DOCS) && (
-          <CollapseItem icon={<BookOpen className="w-5 h-5" />} label="Documentations" collapsed={collapsed}>
-            <SubItem href="/docs" label="Tous les documents" />
-            <SubItem href="/docs/shared" label="Partagé avec moi" />
-            <SubItem href="/docs/trash" label="Corbeille" />
-            {can(PERMISSIONS.MANAGE_SETTINGS) && <SubItem href="/docs/categories" label="Toutes les catégories" />}
-          </CollapseItem>
-        )}
+        {/* Structure identique à Laravel (app2.blade.php) : seul « Tous les
+            documents » est protégé (view-docs) ; « Partagé avec moi » et
+            « Toutes les catégories » sont visibles par tous ; pas de corbeille. */}
+        <CollapseItem icon={<BookOpen className="w-5 h-5" />} label="Documentations" collapsed={collapsed}>
+          {can(PERMISSIONS.VIEW_DOCS) && <SubItem href="/docs" label="Tous les documents" />}
+          <SubItem href="/docs/shared" label="Partagé avec moi" />
+          <SubItem href="/docs/categories" label="Toutes les catégories" />
+        </CollapseItem>
 
         <NavItem href="/search" icon={<Search className="w-5 h-5" />} label="Recherche" collapsed={collapsed} />
 

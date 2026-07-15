@@ -2,18 +2,23 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import Select from "react-select";
 import type { AxiosError } from "axios";
 
 import { PageHeader } from "@/components/ui/PageHeader";
 import { FormField } from "@/components/ui/FormField";
+import { RemoteSelectField } from "@/components/ui/RemoteSelectField";
 import { invoicesApi } from "@/lib/api/invoices";
-import { testOrdersApi, type TestOrder } from "@/lib/api/testOrders";
+import { type TestOrder } from "@/lib/api/testOrders";
+import {
+  loadTestOrderOptions,
+  testOrderToOption,
+  type TestOrderOption,
+} from "@/lib/api/optionLoaders";
 import type { ApiError } from "@/types/api";
 
 // ---------------------------------------------------------------------------
@@ -34,11 +39,18 @@ type CreateInvoiceFormValues = z.infer<typeof createInvoiceSchema>;
 const inputClass =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
-interface SelectOption {
-  value: string;
-  label: string;
-  order: TestOrder;
-}
+const loadPendingOrders = loadTestOrderOptions({ status: "PENDING" });
+const loadValidatedOrders = loadTestOrderOptions({ status: "VALIDATED" });
+
+/**
+ * Demandes facturables : en attente **ou** validées. La recherche part au
+ * serveur pour chacun des deux statuts (l'API n'en accepte qu'un à la fois),
+ * donc elle couvre les 14 000 demandes et pas une page préchargée.
+ */
+const loadInvoiceableOrders = (input: string): Promise<TestOrderOption[]> =>
+  Promise.all([loadPendingOrders(input), loadValidatedOrders(input)]).then(
+    ([pending, validated]) => [...pending, ...validated]
+  );
 
 // ---------------------------------------------------------------------------
 // Page
@@ -63,37 +75,6 @@ export default function InvoiceCreatePage() {
       date: today,
     },
   });
-
-  // --- Query : demandes PENDING
-  const { data: pendingData, isLoading: pendingLoading } = useQuery({
-    queryKey: ["test-orders-pending"],
-    queryFn: () =>
-      testOrdersApi
-        .findAll({ size: 1000, status: "PENDING" })
-        .then((r) => r.data.content),
-  });
-
-  // --- Query : demandes VALIDATED
-  const { data: validatedData, isLoading: validatedLoading } = useQuery({
-    queryKey: ["test-orders-validated"],
-    queryFn: () =>
-      testOrdersApi
-        .findAll({ size: 1000, status: "VALIDATED" })
-        .then((r) => r.data.content),
-  });
-
-  const allOrders: TestOrder[] = [
-    ...(pendingData ?? []),
-    ...(validatedData ?? []),
-  ];
-
-  const testOrderOptions: SelectOption[] = allOrders.map((o) => ({
-    value: o.id,
-    label: `${o.code} — ${o.patientFirstname} ${o.patientLastname}`,
-    order: o,
-  }));
-
-  const isLoadingOrders = pendingLoading || validatedLoading;
 
   // --- Mutation création
   const createMutation = useMutation({
@@ -141,28 +122,19 @@ export default function InvoiceCreatePage() {
                 name="testOrderId"
                 control={control}
                 render={({ field }) => (
-                  <Select
-                    inputId="testOrderId"
-                    instanceId="invoice-create-testorder"
-                    options={testOrderOptions}
-                    isLoading={isLoadingOrders}
-                    placeholder="Rechercher une demande…"
-                    noOptionsMessage={() =>
-                      isLoadingOrders
-                        ? "Chargement…"
-                        : "Aucune demande disponible"
-                    }
-                    value={
-                      testOrderOptions.find((o) => o.value === field.value) ??
-                      null
-                    }
-                    onChange={(opt) => {
-                      field.onChange(opt?.value ?? "");
+                  <RemoteSelectField<TestOrderOption>
+                    id="testOrderId"
+                    loadOptions={loadInvoiceableOrders}
+                    value={field.value || null}
+                    onChange={(v, opt) => {
+                      field.onChange(v ?? "");
                       setSelectedOrder(opt?.order ?? null);
                     }}
+                    selectedOption={
+                      selectedOrder ? testOrderToOption(selectedOrder) : null
+                    }
+                    placeholder="Rechercher une demande (code, patient)…"
                     isClearable
-                    isSearchable
-                    classNamePrefix="react-select"
                   />
                 )}
               />

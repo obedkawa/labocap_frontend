@@ -6,8 +6,8 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Pencil, Trash2 } from "lucide-react";
-import ReactSelect from "react-select";
+import { Pencil, Trash2, Paperclip } from "lucide-react";
+import { LimitedSelect as ReactSelect } from "@/components/ui/LimitedSelect";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { AxiosError } from "axios";
 import type { UseFormReturn } from "react-hook-form";
@@ -23,6 +23,7 @@ import { NativeSelect } from "@/components/ui/NativeSelect";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { expensesApi, Expense, ExpenseRequest, PaymentMethod } from "@/lib/api/expenses";
+import { downloadDocFile } from "@/lib/api/docs";
 import { suppliersApi } from "@/lib/api/suppliers";
 import apiClient from "@/lib/api/client";
 import type { PageResponse } from "@/types/api";
@@ -140,10 +141,6 @@ export default function ExpensesPage() {
   const categories: ExpenseCategory[] = categoriesData?.content ?? [];
   const categoryOptions = categories.map((c) => ({ value: c.id, label: c.name }));
 
-  function categoryName(id?: string): string {
-    return categories.find((c) => c.id === id)?.name ?? "—";
-  }
-
   const { data: suppliersData } = useQuery({
     queryKey: ["suppliers-select"],
     queryFn: () =>
@@ -152,6 +149,11 @@ export default function ExpensesPage() {
 
   const supplierOptions =
     suppliersData?.content?.map((s) => ({ value: s.id, label: s.name })) ?? [];
+
+  function supplierName(id?: string): string {
+    if (!id) return "—";
+    return supplierOptions.find((o) => o.value === id)?.label ?? "—";
+  }
 
   // ---- Mutations -----------------------------------------------------------
 
@@ -254,21 +256,16 @@ export default function ExpensesPage() {
 
   // ---- Columns -------------------------------------------------------------
 
+  // Colonnes alignées sur la vue Laravel `expenses/index.blade.php` :
+  // #, Date, Fournisseur, Objet de la dépense, Montant (+ mode de paiement),
+  // Piece jointe (n° facture + reçu), Traitement (statut), Action.
   const columns: ColumnDef<Expense>[] = [
     {
-      header: "Description",
-      accessorKey: "description",
-      cell: ({ row }) => row.original.description ?? "—",
-    },
-    {
-      header: "Catégorie",
-      id: "category",
-      cell: ({ row }) => categoryName(row.original.expenseCategorieId),
-    },
-    {
-      header: "Montant (FCFA)",
-      accessorKey: "amount",
-      cell: ({ row }) => formatAmount(row.original.amount),
+      header: "#",
+      id: "rownum",
+      cell: ({ row }) => (
+        <span className="text-sm text-gray-500">{row.index + 1}</span>
+      ),
     },
     {
       header: "Date",
@@ -279,17 +276,57 @@ export default function ExpensesPage() {
           : "—",
     },
     {
-      header: "N° facture",
-      accessorKey: "invoiceNumber",
-      cell: ({ row }) => row.original.invoiceNumber ?? "—",
+      header: "Fournisseur",
+      id: "supplier",
+      cell: ({ row }) => supplierName(row.original.supplierId),
     },
     {
-      header: "Paiement",
-      accessorKey: "payment",
-      cell: ({ row }) => paymentLabel(row.original.payment),
+      header: "Objet de la dépense",
+      accessorKey: "description",
+      cell: ({ row }) => row.original.description ?? "—",
     },
     {
-      header: "Statut",
+      header: "Montant",
+      accessorKey: "amount",
+      cell: ({ row }) => (
+        <div className="leading-tight">
+          <div className="font-medium text-gray-900">
+            {formatAmount(row.original.amount)}
+          </div>
+          <div className="text-xs text-gray-500">
+            {paymentLabel(row.original.payment)}
+          </div>
+        </div>
+      ),
+    },
+    {
+      header: "Piece jointe",
+      id: "attachment",
+      cell: ({ row }) => {
+        const { invoiceNumber, receipt } = row.original;
+        if (!invoiceNumber && !receipt)
+          return <span className="text-gray-400">—</span>;
+        return (
+          <div className="flex flex-col gap-1">
+            {invoiceNumber && (
+              <span className="text-sm text-gray-700">Re: {invoiceNumber}</span>
+            )}
+            {receipt && (
+              <button
+                type="button"
+                onClick={() => downloadDocFile(receipt)}
+                className="inline-flex w-fit items-center gap-1 text-xs font-medium text-blue-600 hover:underline"
+              >
+                <Paperclip className="h-3.5 w-3.5" />
+                Reçu
+              </button>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      header: "Traitement",
       accessorKey: "paid",
       cell: ({ row }) => (
         <span
@@ -304,7 +341,7 @@ export default function ExpensesPage() {
       ),
     },
     {
-      header: "Actions",
+      header: "Action",
       id: "actions",
       cell: ({ row }) => (
         <div className="flex items-center gap-2">

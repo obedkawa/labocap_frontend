@@ -221,7 +221,15 @@ export default function InvoiceDetailPage({
           <p className="text-sm text-gray-500">Facture introuvable.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <>
+          {/* Titre dynamique conforme à Laravel (invoices/show) :
+              reçu de paiement (vente) ou facture d'avoir. */}
+          <h1 className="text-xl font-bold text-gray-900">
+            {invoice.statusInvoice === 1
+              ? `Facture d'avoir de ${invoice.code}`
+              : `Reçu de paiement de ${invoice.testOrderCode ?? invoice.code}`}
+          </h1>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* -------------------------------------------------------
               Colonne gauche — Résumé facture
           ------------------------------------------------------- */}
@@ -483,13 +491,13 @@ export default function InvoiceDetailPage({
                         #
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                        Examen
+                        Désignation
                       </th>
                       <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
-                        P.U.
+                        Quantité
                       </th>
                       <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
-                        Qté
+                        Prix
                       </th>
                       <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
                         Remise
@@ -511,10 +519,10 @@ export default function InvoiceDetailPage({
                         <tr key={detail.id} className="hover:bg-gray-50 transition-colors">
                           <td className="px-4 py-3 text-xs text-gray-400">{idx + 1}</td>
                           <td className="px-4 py-3 text-gray-800 font-medium">{detail.testName}</td>
+                          <td className="px-4 py-3 text-right text-gray-600">{detail.quantity}</td>
                           <td className="px-4 py-3 text-right text-gray-600">
                             {formatFCFA(detail.unitPrice)}
                           </td>
-                          <td className="px-4 py-3 text-right text-gray-600">{detail.quantity}</td>
                           <td className="px-4 py-3 text-right text-gray-600">
                             {detail.discount > 0 ? formatFCFA(detail.discount) : "—"}
                           </td>
@@ -542,6 +550,7 @@ export default function InvoiceDetailPage({
             </div>
           </div>
         </div>
+        </>
       )}
     </div>
   );

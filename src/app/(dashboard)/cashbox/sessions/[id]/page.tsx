@@ -255,7 +255,7 @@ export default function CashboxSessionDetailPage({ params }: PageProps) {
           breadcrumbs={[
             { label: "Trésorerie" },
             { label: "Caisse de vente", href: "/cashbox" },
-            { label: "Sessions", href: "/cashbox/sessions" },
+            { label: "Ouverture et fermeture", href: "/cashbox/sessions" },
             { label: "Détail" },
           ]}
           action={

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -288,10 +289,23 @@ function TicketDetail({
 // ---------------------------------------------------------------------------
 
 export default function SupportPage() {
+  return (
+    <Suspense fallback={null}>
+      <SupportPageInner />
+    </Suspense>
+  );
+}
+
+function SupportPageInner() {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const searchParams = useSearchParams();
 
-  const [createOpen, setCreateOpen] = useState(false);
+  // Le sous-menu « Signaler » (sidebar) pointe vers /support?new=1 : on ouvre
+  // alors directement le formulaire de création de ticket (état initial dérivé de l'URL).
+  const [createOpen, setCreateOpen] = useState(
+    () => searchParams.get("new") === "1"
+  );
   const [detailId, setDetailId] = useState<string | null>(null);
   const [messagesTicketId, setMessagesTicketId] = useState<string | null>(null);
 
@@ -481,7 +495,7 @@ export default function SupportPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Support — Tickets"
+        title="Signaler un problème"
         action={
           <button
             onClick={() => {

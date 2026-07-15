@@ -1,13 +1,14 @@
 "use client";
 
 import { useId } from "react";
-import Select, {
+import type {
   MultiValue,
   SingleValue,
   StylesConfig,
   GroupBase,
 } from "react-select";
 import { cn } from "@/lib/utils";
+import { LimitedSelect as Select } from "./LimitedSelect";
 
 export interface SelectOption {
   value: string;
@@ -61,11 +62,12 @@ const selectStyles: StylesConfig<SelectOption, boolean, GroupBase<SelectOption>>
   }),
   option: (base, state) => ({
     ...base,
+    // Sélection (statique) en BLEU PUR ; curseur (survol/navigation) en BLEU CLAIR.
     backgroundColor: state.isSelected
       ? "#2563eb"
       : state.isFocused
-      ? "#eff6ff"
-      : "white",
+        ? "#eff6ff"
+        : "white",
     color: state.isSelected ? "white" : "#374151",
     fontSize: "0.875rem",
     cursor: "pointer",

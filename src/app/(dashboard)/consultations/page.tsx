@@ -7,7 +7,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Pencil, Trash2, Plus } from "lucide-react";
-import Select from "react-select";
+import { LimitedSelect as Select } from "@/components/ui/LimitedSelect";
+import { RemoteSelectField } from "@/components/ui/RemoteSelectField";
+import type { SelectOption } from "@/components/ui/FormSelect";
+import {
+  loadDoctorOptions,
+  loadPatientOptions,
+} from "@/lib/api/optionLoaders";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { AxiosError } from "axios";
 
@@ -26,8 +32,6 @@ import {
   type ConsultationRequest,
   type ConsultationFile,
 } from "@/lib/api/consultations";
-import { patientsApi } from "@/lib/api/patients";
-import { doctorsApi } from "@/lib/api/doctors";
 import type { PageResponse, ApiError } from "@/types/api";
 import apiClient from "@/lib/api/client";
 
@@ -69,8 +73,10 @@ const inputClass =
 
 interface ConsultationFormProps {
   form: ReturnType<typeof useForm<ConsultationFormData>>;
-  patientOptions: { value: string; label: string }[];
-  doctorOptions: { value: string; label: string }[];
+  /** Libellé du patient déjà sélectionné (édition) — la liste n'est pas préchargée. */
+  initialPatientOption?: SelectOption | null;
+  /** Idem pour le médecin. */
+  initialDoctorOption?: SelectOption | null;
   typeOptions: { value: string; label: string }[];
   /** Affiche la zone fichiers (édition uniquement — l'upload se fait sur PUT). */
   showFiles?: boolean;
@@ -80,8 +86,8 @@ interface ConsultationFormProps {
 
 function ConsultationForm({
   form,
-  patientOptions,
-  doctorOptions,
+  initialPatientOption = null,
+  initialDoctorOption = null,
   typeOptions,
   showFiles = false,
   existingFiles = [],
@@ -106,16 +112,14 @@ function ConsultationForm({
           name="patientId"
           control={control}
           render={({ field }) => (
-            <Select
-              instanceId="consultation-patient"
-              inputId="patientId"
-              options={patientOptions}
-              placeholder="Sélectionner le patient..."
-              value={patientOptions.find((o) => o.value === field.value) ?? null}
-              onChange={(opt) => field.onChange(opt?.value ?? "")}
+            <RemoteSelectField
+              id="patientId"
+              loadOptions={loadPatientOptions}
+              value={field.value || null}
+              onChange={(v) => field.onChange(v ?? "")}
+              selectedOption={initialPatientOption}
+              placeholder="Rechercher un patient (nom, code, téléphone)..."
               isClearable
-              isSearchable
-              classNamePrefix="react-select"
             />
           )}
         />
@@ -131,16 +135,14 @@ function ConsultationForm({
           name="doctorId"
           control={control}
           render={({ field }) => (
-            <Select
-              instanceId="consultation-doctor"
-              inputId="doctorId"
-              options={doctorOptions}
-              placeholder="Sélectionner le médecin..."
-              value={doctorOptions.find((o) => o.value === field.value) ?? null}
-              onChange={(opt) => field.onChange(opt?.value ?? "")}
+            <RemoteSelectField
+              id="doctorId"
+              loadOptions={loadDoctorOptions}
+              value={field.value || null}
+              onChange={(v) => field.onChange(v ?? "")}
+              selectedOption={initialDoctorOption}
+              placeholder="Rechercher un médecin..."
               isClearable
-              isSearchable
-              classNamePrefix="react-select"
             />
           )}
         />
@@ -328,19 +330,8 @@ export default function ConsultationsPage() {
         .then((r) => r.data),
   });
 
-  // --- Query : patients (pour React Select)
-  const { data: patientsData } = useQuery({
-    queryKey: ["patients-all"],
-    queryFn: () =>
-      patientsApi.findAll({ size: 1000 }).then((r) => r.data.content),
-  });
-
-  // --- Query : médecins
-  const { data: doctorsData } = useQuery({
-    queryKey: ["doctors-all"],
-    queryFn: () =>
-      doctorsApi.findAll({ size: 1000 }).then((r) => r.data.content),
-  });
+  // Patients et médecins ne sont pas préchargés : leurs selects cherchent
+  // directement en base (voir `RemoteSelectField`).
 
   // --- Query : types de consultation
   const { data: typeConsultationsData } = useQuery<TypeConsultation[]>({
@@ -356,17 +347,21 @@ export default function ConsultationsPage() {
   const consultations = data?.content ?? [];
   const pageCount = data?.totalPages ?? 0;
 
-  const patientOptions =
-    patientsData?.map((p) => ({
-      value: p.id,
-      label: `${p.code} - ${p.firstname} ${p.lastname}`,
-    })) ?? [];
+  // Libellés des valeurs déjà posées à l'ouverture du modal d'édition.
+  const editPatientOption: SelectOption | null = selectedConsultation?.patient
+    ? {
+        value: selectedConsultation.patientId,
+        label: `${selectedConsultation.patient.code} - ${selectedConsultation.patient.firstname} ${selectedConsultation.patient.lastname}`.trim(),
+      }
+    : null;
 
-  const doctorOptions =
-    doctorsData?.map((d) => ({
-      value: d.id,
-      label: d.name,
-    })) ?? [];
+  const editDoctorOption: SelectOption | null =
+    selectedConsultation?.doctorId && selectedConsultation.doctor
+      ? {
+          value: selectedConsultation.doctorId,
+          label: `${selectedConsultation.doctor.firstname} ${selectedConsultation.doctor.lastname}`.trim(),
+        }
+      : null;
 
   const typeOptions =
     typeConsultationsData?.map((t) => ({
@@ -661,12 +656,7 @@ export default function ConsultationsPage() {
         submitLabel="Ajouter une consultation"
         isSubmitting={createMutation.isPending}
       >
-        <ConsultationForm
-          form={createForm}
-          patientOptions={patientOptions}
-          doctorOptions={doctorOptions}
-          typeOptions={typeOptions}
-        />
+        <ConsultationForm form={createForm} typeOptions={typeOptions} />
       </CrudModal>
 
       {/* Modal édition */}
@@ -686,8 +676,8 @@ export default function ConsultationsPage() {
       >
         <ConsultationForm
           form={editForm}
-          patientOptions={patientOptions}
-          doctorOptions={doctorOptions}
+          initialPatientOption={editPatientOption}
+          initialDoctorOption={editDoctorOption}
           typeOptions={typeOptions}
           showFiles
           existingFiles={editFilesData ?? []}

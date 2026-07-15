@@ -1,14 +1,24 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Pencil, Trash2 } from "lucide-react";
+import {
+  Pencil,
+  Trash2,
+  ArrowLeft,
+  FileText,
+  ClipboardList,
+  CalendarDays,
+  Receipt,
+  Tag,
+  Ban,
+  CheckCircle2,
+} from "lucide-react";
 import Link from "next/link";
 import type { AxiosError } from "axios";
 
-import { PageHeader } from "@/components/ui/PageHeader";
 import { NativeSelect } from "@/components/ui/NativeSelect";
 import { CrudModal } from "@/components/common/CrudModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
@@ -53,7 +63,6 @@ export default function ContractDetailPage({
 
   // Formulaire « Ajouter des examens » (inline, comme dans la vue Laravel)
   const [testId, setTestId] = useState("");
-  const [price, setPrice] = useState(0);
   const [remise, setRemise] = useState("");
 
   const [deleteDetail, setDeleteDetail] = useState<ContractDetail | null>(null);
@@ -69,16 +78,15 @@ export default function ContractDetailPage({
 
   const { data: examensData } = useQuery({
     queryKey: ["examens-all"],
-    queryFn: () => labTestsApi.findAll({ size: 200 }).then((r) => r.data),
+    // 279 examens en base : on charge tout (l'API n'expose pas de recherche
+    // serveur ici), sinon les derniers seraient introuvables.
+    queryFn: () => labTestsApi.findAll({ size: 1000 }).then((r) => r.data),
   });
 
   const examens = examensData?.content ?? [];
 
-  // Auto-remplissage du prix quand un examen est sélectionné
-  useEffect(() => {
-    const found = examens.find((e) => e.id === testId);
-    setPrice(found?.price ?? 0);
-  }, [testId, examens]);
+  // Prix dérivé de l'examen sélectionné (auto-remplissage, comme dans Laravel).
+  const price = examens.find((e) => e.id === testId)?.price ?? 0;
 
   const remiseNum = Number(remise) || 0;
   const total = price - remiseNum;
@@ -99,7 +107,6 @@ export default function ContractDetailPage({
       queryClient.invalidateQueries({ queryKey: ["contract", contractId] });
       toast.success("Donnée ajoutée avec succès");
       setTestId("");
-      setPrice(0);
       setRemise("");
     },
     onError: (e: AxiosError<ApiError>) =>
@@ -190,36 +197,85 @@ export default function ContractDetailPage({
   const invoice = contract.invoice ?? null;
   const showInvoiceCard = contract.invoiceUnique === true && invoice != null;
 
+  const totalPrice = details.reduce((s, d) => s + (d.price ?? 0), 0);
+  const totalRemise = details.reduce((s, d) => s + (d.amountRemise ?? 0), 0);
+  const totalAfter = details.reduce((s, d) => s + (d.amountAfterRemise ?? 0), 0);
+
+  const statusMeta = isClose
+    ? {
+        label: "Clôturé",
+        badge: "bg-gray-100 text-gray-700 ring-gray-500/30",
+        dot: "bg-gray-400",
+      }
+    : contract.status === "ACTIF"
+    ? {
+        label: "Actif",
+        badge: "bg-emerald-50 text-emerald-700 ring-emerald-600/30",
+        dot: "bg-emerald-500",
+      }
+    : {
+        label: "Inactif",
+        badge: "bg-amber-50 text-amber-700 ring-amber-600/30",
+        dot: "bg-amber-500",
+      };
+
+  const examensLabel =
+    contract.nbrTests === -1 ? `${used} / Illimité` : `${used} / ${contract.nbrTests}`;
+
   return (
     <div className="space-y-6">
-      <PageHeader
-        title=""
-        action={
-          <Link
-            href="/contracts"
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-          >
-            Retour à la liste des contrats
-          </Link>
-        }
-      />
+      {/* Fil d'Ariane + retour */}
+      <Link
+        href="/contracts"
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-800"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Retour à la liste des contrats
+      </Link>
 
-      {/* ============ Cartes Contrat / Facture ============ */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        {/* --- Carte Contrat --- */}
-        <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
-            <h2 className="text-base font-semibold text-gray-900">
-              Contrat : {contract.name ?? "—"}
-            </h2>
-            <PermissionGate permission={PERMISSIONS.EDIT_CONTRACTS}>
+      {/* ============ En-tête du contrat ============ */}
+      <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 shadow-sm">
+        <div className="flex flex-col gap-4 px-6 py-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-white/15 text-white ring-1 ring-white/20">
+              <FileText className="h-6 w-6" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium uppercase tracking-wide text-blue-100">
+                Contrat
+              </p>
+              <h1 className="truncate text-xl font-bold text-white sm:text-2xl">
+                {contract.name ?? "—"}
+              </h1>
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-blue-100">
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${statusMeta.badge}`}
+                >
+                  <span className={`h-1.5 w-1.5 rounded-full ${statusMeta.dot}`} />
+                  {isClose
+                    ? `Clôturé le ${formatDate(contract.updatedAt)}`
+                    : statusMeta.label}
+                </span>
+                {contract.clientName && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Tag className="h-3.5 w-3.5" />
+                    {contract.clientName}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <PermissionGate permission={PERMISSIONS.EDIT_CONTRACTS}>
+            <div className="flex flex-shrink-0 items-center gap-2">
               {contract.status === "ACTIF" && !isClose && (
                 <button
                   type="button"
                   onClick={() => closeMutation.mutate()}
                   disabled={closeMutation.isPending}
-                  className="inline-flex items-center rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-2 text-sm font-medium text-white ring-1 ring-inset ring-white/25 transition-colors hover:bg-white/25 disabled:opacity-50"
                 >
+                  <Ban className="h-4 w-4" />
                   Clôturer
                 </button>
               )}
@@ -228,80 +284,131 @@ export default function ContractDetailPage({
                   type="button"
                   onClick={() => activateMutation.mutate()}
                   disabled={activateMutation.isPending}
-                  className="inline-flex items-center rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-50 disabled:opacity-50"
                 >
+                  <CheckCircle2 className="h-4 w-4" />
                   Activer
                 </button>
               )}
-            </PermissionGate>
-          </div>
+            </div>
+          </PermissionGate>
+        </div>
+      </div>
 
-          <div className="space-y-2 px-5 py-4 text-sm text-gray-700">
-            <p>
-              <strong className="font-semibold text-gray-900">Date : </strong>
-              {formatDate(contract.createdAt)}
-            </p>
-            <p>
-              <strong className="font-semibold text-gray-900">Type : </strong>
-              {contract.type ?? "—"}
-            </p>
-            <p>
-              <strong className="font-semibold text-gray-900">Status : </strong>
-              {isClose
-                ? `CLÔTURER, le ${formatDate(contract.updatedAt)}`
-                : contract.status}
-            </p>
-            <p>
-              <strong className="font-semibold text-gray-900">
-                Nombre d&apos;examens :{" "}
-              </strong>
-              {contract.nbrTests === -1
-                ? `${used}/Illimité`
-                : `${used}/${contract.nbrTests}`}
-            </p>
-            <p>
-              <strong className="font-semibold text-gray-900">
-                Description :{" "}
-              </strong>
-              {contract.description ?? "—"}
-            </p>
+      {/* ============ Tuiles récapitulatives ============ */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatTile
+          icon={<ClipboardList className="h-5 w-5" />}
+          tint="text-blue-600 bg-blue-50"
+          label="Nombre d'examens"
+          value={examensLabel}
+        />
+        <StatTile
+          icon={<Tag className="h-5 w-5" />}
+          tint="text-violet-600 bg-violet-50"
+          label="Type"
+          value={contract.type ?? "—"}
+        />
+        <StatTile
+          icon={
+            <span className={`h-2.5 w-2.5 rounded-full ${statusMeta.dot}`} />
+          }
+          tint="text-gray-600 bg-gray-100"
+          label="Statut"
+          value={statusMeta.label}
+        />
+        <StatTile
+          icon={<CalendarDays className="h-5 w-5" />}
+          tint="text-emerald-600 bg-emerald-50"
+          label="Date de création"
+          value={formatDate(contract.createdAt)}
+        />
+      </div>
+
+      {/* ============ Détails / Facture ============ */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* --- Informations du contrat --- */}
+        <div className={`rounded-xl border border-gray-200 bg-white shadow-sm ${showInvoiceCard ? "lg:col-span-2" : "lg:col-span-3"}`}>
+          <div className="flex items-center gap-2 border-b border-gray-100 px-5 py-4">
+            <FileText className="h-4 w-4 text-gray-400" />
+            <h2 className="text-sm font-semibold text-gray-900">
+              Informations du contrat
+            </h2>
           </div>
+          <dl className="grid grid-cols-1 gap-x-8 gap-y-4 px-5 py-5 sm:grid-cols-2">
+            <InfoRow label="Nom du contrat" value={contract.name ?? "—"} />
+            <InfoRow label="Type" value={contract.type ?? "—"} />
+            <InfoRow label="Client" value={contract.clientName ?? "—"} />
+            <InfoRow label="Nombre d'examens" value={examensLabel} />
+            <InfoRow label="Date de création" value={formatDate(contract.createdAt)} />
+            <InfoRow
+              label="Statut"
+              value={
+                isClose
+                  ? `Clôturé le ${formatDate(contract.updatedAt)}`
+                  : statusMeta.label
+              }
+            />
+            <div className="sm:col-span-2">
+              <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                Description
+              </dt>
+              <dd className="mt-1 whitespace-pre-wrap text-sm text-gray-700">
+                {contract.description || "—"}
+              </dd>
+            </div>
+          </dl>
         </div>
 
-        {/* --- Carte Facture (uniquement facturation unique + facture existante) --- */}
+        {/* --- Carte Facture (facturation unique + facture existante) --- */}
         {showInvoiceCard && (
-          <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
-              <h2 className="text-base font-semibold text-gray-900">Facture</h2>
-              <Link
-                href={`/invoices/${invoice!.id}`}
-                className="inline-flex items-center rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 transition-colors"
+          <div className="flex flex-col rounded-xl border border-gray-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-5 py-4">
+              <div className="flex items-center gap-2">
+                <Receipt className="h-4 w-4 text-gray-400" />
+                <h2 className="text-sm font-semibold text-gray-900">Facture</h2>
+              </div>
+              <span
+                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                  invoice!.isPaid
+                    ? "bg-emerald-50 text-emerald-700 ring-emerald-600/30"
+                    : "bg-amber-50 text-amber-700 ring-amber-600/30"
+                }`}
               >
-                Voir plus
-              </Link>
+                {invoice!.isPaid ? "Payé" : "Non payé"}
+              </span>
             </div>
 
-            <div className="space-y-2 px-5 py-4 text-sm text-gray-700">
+            <div className="flex-1 space-y-4 px-5 py-5">
               {invoice!.code && (
-                <p>
-                  <strong className="font-semibold text-gray-900">Code : </strong>
-                  {invoice!.code}
-                </p>
+                <InfoRow label="Code" value={invoice!.code} />
               )}
-              <p>
-                <strong className="font-semibold text-gray-900">Client : </strong>
-                {contract.clientName ?? "—"}
-              </p>
-              <p>
-                <strong className="font-semibold text-gray-900">Status : </strong>
-                {invoice!.isPaid
-                  ? `Payé, le ${formatDate(invoice!.paidAt)}`
-                  : "Non payé"}
-              </p>
-              <p>
-                <strong className="font-semibold text-gray-900">Total : </strong>
-                {formatAmount(invoice!.total)}
-              </p>
+              <InfoRow label="Client" value={contract.clientName ?? "—"} />
+              <InfoRow
+                label="Statut de paiement"
+                value={
+                  invoice!.isPaid
+                    ? `Payé le ${formatDate(invoice!.paidAt)}`
+                    : "Non payé"
+                }
+              />
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                  Total
+                </dt>
+                <dd className="mt-1 text-lg font-bold text-gray-900">
+                  {formatAmount(invoice!.total)}
+                </dd>
+              </div>
+            </div>
+
+            <div className="border-t border-gray-100 px-5 py-4">
+              <Link
+                href={`/invoices/${invoice!.id}`}
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800"
+              >
+                Voir la facture
+              </Link>
             </div>
           </div>
         )}
@@ -479,6 +586,17 @@ export default function ContractDetailPage({
                 ))
               )}
             </tbody>
+            {details.length > 0 && (
+              <tfoot className="border-t-2 border-gray-100 bg-gray-50">
+                <tr className="text-sm font-semibold text-gray-900">
+                  <td className="px-4 py-3">Total</td>
+                  <td className="px-4 py-3 text-right">{formatAmount(totalPrice)}</td>
+                  <td className="px-4 py-3 text-right">{formatAmount(totalRemise)}</td>
+                  <td className="px-4 py-3 text-right">{formatAmount(totalAfter)}</td>
+                  <td className="px-4 py-3" />
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
 
@@ -561,6 +679,51 @@ export default function ContractDetailPage({
         confirmVariant="danger"
         isLoading={deleteDetailMutation.isPending}
       />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sous-composants d'affichage
+// ---------------------------------------------------------------------------
+
+function StatTile({
+  icon,
+  tint,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  tint: string;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center gap-3">
+        <span
+          className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg ${tint}`}
+        >
+          {icon}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-xs font-medium uppercase tracking-wide text-gray-400">
+            {label}
+          </p>
+          <p className="truncate text-sm font-semibold text-gray-900">{value}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">
+        {label}
+      </dt>
+      <dd className="mt-1 text-sm font-medium text-gray-900">{value}</dd>
     </div>
   );
 }

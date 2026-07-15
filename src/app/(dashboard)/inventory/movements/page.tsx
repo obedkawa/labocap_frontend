@@ -179,7 +179,7 @@ export default function MovementsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Mouvements de stock"
+        title="Historique des stocks"
         subtitle="Historique des entrées et sorties de stock"
         action={
           can(PERMISSIONS.EDIT_ARTICLES) ? (

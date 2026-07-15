@@ -124,19 +124,6 @@ export const docsApi = {
   /** Documents les plus récents. */
   recent: (limit = 5) =>
     apiClient.get<Doc[]>("/docs/recent", { params: { limit } }),
-
-  /** Documents en corbeille (supprimés). */
-  trash: (params?: Record<string, unknown>) =>
-    apiClient.get<{ content: Doc[]; totalElements: number; totalPages: number }>(
-      "/docs/trash",
-      { params }
-    ),
-
-  /** Restaure un document depuis la corbeille. */
-  restore: (id: string) => apiClient.post<Doc>(`/docs/${id}/restore`),
-
-  /** Supprime définitivement un document. */
-  permanentDelete: (id: string) => apiClient.delete(`/docs/${id}/permanent`),
 };
 
 // ---------------------------------------------------------------------------

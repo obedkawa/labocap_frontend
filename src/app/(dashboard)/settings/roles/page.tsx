@@ -10,7 +10,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { AxiosError } from "axios";
 import type { UseFormReturn } from "react-hook-form";
-import ReactSelect from "react-select";
+import { LimitedSelect as ReactSelect } from "@/components/ui/LimitedSelect";
 
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DataTable } from "@/components/common/DataTable";
@@ -299,6 +299,7 @@ export default function RolesPage() {
         onClose={() => setCreateOpen(false)}
         title="Ajouter un rôle"
         size="xl"
+        contentClassName="min-h-[85vh]"
         onSubmit={createForm.handleSubmit(onCreateSubmit)}
         submitLabel="Ajouter un rôle"
         isSubmitting={createMutation.isPending}
@@ -312,6 +313,7 @@ export default function RolesPage() {
         onClose={() => setEditOpen(false)}
         title="Modifier un rôle"
         size="xl"
+        contentClassName="min-h-[85vh]"
         onSubmit={editForm.handleSubmit(onEditSubmit)}
         submitLabel="Modifier"
         isSubmitting={updateMutation.isPending}
@@ -411,10 +413,15 @@ function RoleForm({ form, permissionOptions }: RoleFormProps) {
                   ...base,
                   borderColor: "#d1d5db",
                   borderRadius: "0.375rem",
-                  minHeight: "38px",
+                  // Zone nettement plus haute : les permissions sélectionnées (souvent
+                  // nombreuses) s'affichent sur beaucoup de lignes, ce qui donne au
+                  // formulaire la hauteur souhaitée.
+                  minHeight: "320px",
+                  alignItems: "flex-start",
                   boxShadow: "none",
                   "&:hover": { borderColor: "#d1d5db" },
                 }),
+                valueContainer: (base) => ({ ...base, alignItems: "flex-start", maxHeight: "380px", overflowY: "auto" }),
                 menu: (base) => ({ ...base, zIndex: 50 }),
               }}
             />

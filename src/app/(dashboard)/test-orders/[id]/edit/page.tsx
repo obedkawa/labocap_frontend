@@ -7,15 +7,19 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import Select from "react-select";
+import { LimitedSelect as Select } from "@/components/ui/LimitedSelect";
+import { RemoteSelectField } from "@/components/ui/RemoteSelectField";
+import type { SelectOption } from "@/components/ui/FormSelect";
+import {
+  loadDoctorOptions,
+  loadHospitalOptions,
+  loadPatientOptions,
+} from "@/lib/api/optionLoaders";
 import type { AxiosError } from "axios";
 
 import { PageHeader } from "@/components/ui/PageHeader";
 import { FormToggle } from "@/components/ui/FormToggle";
 import { testOrdersApi, type TestOrderRequest } from "@/lib/api/testOrders";
-import { patientsApi } from "@/lib/api/patients";
-import { doctorsApi } from "@/lib/api/doctors";
-import { hospitalsApi } from "@/lib/api/hospitals";
 import { typeOrdersApi, type TypeOrder } from "@/lib/api/examens";
 import type { ApiError as ApiErrorType } from "@/types/api";
 import apiClient from "@/lib/api/client";
@@ -104,25 +108,27 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
     });
   }, [order, reset]);
 
+  // --- Options déjà sélectionnées à l'ouverture : les listes (patients,
+  // médecins, hôpitaux) sont trop grandes pour être préchargées, on reconstruit
+  // le libellé depuis la demande elle-même.
+  const initialPatientOption: SelectOption | null = order
+    ? {
+        value: order.patientId,
+        label: `${order.patientFirstname} ${order.patientLastname}`.trim(),
+      }
+    : null;
+
+  const initialDoctorOption: SelectOption | null =
+    order?.doctorId && order.doctorName
+      ? { value: order.doctorId, label: order.doctorName }
+      : null;
+
+  const initialHospitalOption: SelectOption | null =
+    order?.hospitalId && order.hospitalName
+      ? { value: order.hospitalId, label: order.hospitalName }
+      : null;
+
   // --- Queries (référentiels)
-  const { data: patientsData } = useQuery({
-    queryKey: ["patients-all"],
-    queryFn: () =>
-      patientsApi.findAll({ size: 1000 }).then((r) => r.data.content),
-  });
-
-  const { data: doctorsData } = useQuery({
-    queryKey: ["doctors-all"],
-    queryFn: () =>
-      doctorsApi.findAll({ size: 1000 }).then((r) => r.data.content),
-  });
-
-  const { data: hospitalsData } = useQuery({
-    queryKey: ["hospitals-all"],
-    queryFn: () =>
-      hospitalsApi.findAll({ size: 1000 }).then((r) => r.data.content),
-  });
-
   const { data: contractsData } = useQuery<ContractOption[]>({
     queryKey: ["contracts-active"],
     queryFn: async () => {
@@ -155,23 +161,6 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
   });
 
   // Options React Select
-  const patientOptions =
-    patientsData?.map((p) => ({
-      value: p.id,
-      label: `${p.code} - ${p.firstname} ${p.lastname}`,
-    })) ?? [];
-
-  const doctorOptions =
-    doctorsData?.map((d) => ({
-      value: d.id,
-      label: d.name,
-    })) ?? [];
-
-  const hospitalOptions =
-    hospitalsData?.map((h) => ({
-      value: h.id,
-      label: h.name,
-    })) ?? [];
 
   const contractOptions =
     contractsData?.map((c) => ({
@@ -329,19 +318,14 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
                 name="patientId"
                 control={control}
                 render={({ field }) => (
-                  <Select
-                    instanceId="order-patient"
-                    inputId="patientId"
-                    options={patientOptions}
-                    placeholder="Sélectionner un patient..."
-                    value={
-                      patientOptions.find((o) => o.value === field.value) ??
-                      null
-                    }
-                    onChange={(opt) => field.onChange(opt?.value ?? "")}
+                  <RemoteSelectField
+                    id="patientId"
+                    loadOptions={loadPatientOptions}
+                    value={field.value || null}
+                    onChange={(v) => field.onChange(v ?? "")}
+                    selectedOption={initialPatientOption}
+                    placeholder="Rechercher un patient (nom, code, téléphone)..."
                     isClearable
-                    isSearchable
-                    classNamePrefix="react-select"
                   />
                 )}
               />
@@ -361,18 +345,14 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
                 name="doctorId"
                 control={control}
                 render={({ field }) => (
-                  <Select
-                    instanceId="order-doctor"
-                    inputId="doctorId"
-                    options={doctorOptions}
-                    placeholder="Sélectionner un médecin..."
-                    value={
-                      doctorOptions.find((o) => o.value === field.value) ?? null
-                    }
-                    onChange={(opt) => field.onChange(opt?.value ?? "")}
+                  <RemoteSelectField
+                    id="doctorId"
+                    loadOptions={loadDoctorOptions}
+                    value={field.value || null}
+                    onChange={(v) => field.onChange(v ?? "")}
+                    selectedOption={initialDoctorOption}
+                    placeholder="Rechercher un médecin..."
                     isClearable
-                    isSearchable
-                    classNamePrefix="react-select"
                   />
                 )}
               />
@@ -387,19 +367,14 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
                 name="hospitalId"
                 control={control}
                 render={({ field }) => (
-                  <Select
-                    instanceId="order-hospital"
-                    inputId="hospitalId"
-                    options={hospitalOptions}
-                    placeholder="Sélectionner un hôpital..."
-                    value={
-                      hospitalOptions.find((o) => o.value === field.value) ??
-                      null
-                    }
-                    onChange={(opt) => field.onChange(opt?.value ?? "")}
+                  <RemoteSelectField
+                    id="hospitalId"
+                    loadOptions={loadHospitalOptions}
+                    value={field.value || null}
+                    onChange={(v) => field.onChange(v ?? "")}
+                    selectedOption={initialHospitalOption}
+                    placeholder="Rechercher un hôpital..."
                     isClearable
-                    isSearchable
-                    classNamePrefix="react-select"
                   />
                 )}
               />

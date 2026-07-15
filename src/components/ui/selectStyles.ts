@@ -2,8 +2,9 @@ import type { StylesConfig, GroupBase, ClassNamesConfig } from "react-select";
 import type { SelectOption } from "./FormSelect";
 
 /**
- * Classe appliquée au menu déroulant pour obtenir une barre de défilement
- * fine qui n'apparaît qu'au survol (voir `.select-menu-scroll` dans globals.css).
+ * Classe appliquée au menu déroulant (voir `.select-menu-scroll` dans
+ * globals.css). Le menu est borné à 6 options, il n'y a donc normalement rien
+ * à faire défiler.
  */
 export const SELECT_MENU_CLASSNAMES: ClassNamesConfig<
   SelectOption,
@@ -56,9 +57,10 @@ export function buildSelectStyles(
     // Menu rendu via un portail (menuPortal) : doit passer au-dessus des cartes
     // et des conteneurs à `overflow` (ex. tableaux) pour ne pas être rogné.
     menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+    // Pas de `maxHeight` : le menu ne défile jamais, il est borné à 6 options
+    // (voir MAX_VISIBLE_OPTIONS dans LimitedSelect).
     menuList: (base) => ({
       ...base,
-      maxHeight: "240px",
       padding: "6px",
     }),
     option: (base, state) => ({
@@ -66,11 +68,12 @@ export function buildSelectStyles(
       borderRadius: "0.375rem",
       padding: "8px 10px",
       marginBottom: "2px",
+      // Sélection (statique) en BLEU PUR ; curseur (survol/navigation) en BLEU CLAIR.
       backgroundColor: state.isSelected
         ? "#2563eb"
         : state.isFocused
-        ? "#eff6ff"
-        : "white",
+          ? "#eff6ff"
+          : "white",
       color: state.isSelected ? "white" : "#374151",
       fontSize: "0.875rem",
       cursor: "pointer",

@@ -3,7 +3,7 @@
 import { use, useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import Select from "react-select";
+import { LimitedSelect as Select } from "@/components/ui/LimitedSelect";
 import { Pencil, Trash2, ImagePlus, Eye, FileText } from "lucide-react";
 import { toast } from "sonner";
 import type { AxiosError } from "axios";

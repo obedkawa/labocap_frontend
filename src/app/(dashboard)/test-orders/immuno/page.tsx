@@ -241,17 +241,26 @@ export default function TestOrdersImmunoPage() {
     },
   });
 
-  // Utilisateurs ayant le rôle docteur — source cohérente avec attribuateDoctorId
+  // Utilisateurs ayant le rôle « Docteur » — source cohérente avec attribuateDoctorId.
+  // NB : l'API /users ne filtre pas par rôle (paramètre ignoré côté backend) ; on
+  // filtre donc côté client sur le nom de rôle, sinon TOUS les utilisateurs (caissiers,
+  // secrétaires, comptes système…) apparaîtraient dans le sélecteur.
   const { data: doctorsData } = useQuery<DoctorOption[]>({
     queryKey: ["users-doctors"],
     queryFn: () =>
       usersApi
-        .findAll({ size: 500, role: "doctor" })
+        .findAll({ size: 500 })
         .then((r) =>
-          r.data.content.map((u) => ({
-            id: u.id,
-            name: `${u.firstname} ${u.lastname}`.trim(),
-          }))
+          r.data.content
+            .filter((u) =>
+              (u.roles ?? []).some((role) =>
+                (role.name ?? "").toLowerCase().includes("docteur")
+              )
+            )
+            .map((u) => ({
+              id: u.id,
+              name: `${u.firstname} ${u.lastname}`.trim(),
+            }))
         ),
   });
 

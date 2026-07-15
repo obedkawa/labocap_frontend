@@ -8,7 +8,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { Pencil, Trash2, CheckCircle, XCircle, Eye } from "lucide-react";
 import Link from "next/link";
-import Select from "react-select";
+import { LimitedSelect as Select } from "@/components/ui/LimitedSelect";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { AxiosError } from "axios";
 import type { UseFormReturn } from "react-hook-form";
@@ -265,37 +265,34 @@ export default function ContractsPage() {
 
   // ---- Columns -------------------------------------------------------------
 
+  // Colonnes alignées sur la vue Laravel « contrats/index » :
+  // Date, Contrat, Nombre d'examens, Statut, Actions.
   const columns: ColumnDef<Contract>[] = [
     {
-      header: "Nom",
+      header: "Date",
+      accessorKey: "createdAt",
+      cell: ({ row }) =>
+        row.original.createdAt
+          ? new Date(row.original.createdAt).toLocaleDateString("fr-FR")
+          : "—",
+    },
+    {
+      header: "Contrat",
       accessorKey: "name",
-      cell: ({ row }) => row.original.name ?? "—",
+      cell: ({ row }) => (
+        <span className="font-medium text-gray-900">
+          {row.original.name ?? "—"}
+        </span>
+      ),
     },
     {
-      header: "Client",
-      id: "client",
-      cell: ({ row }) => row.original.clientName ?? "—",
-    },
-    {
-      header: "Type",
-      accessorKey: "type",
-      cell: ({ row }) => row.original.type ?? "—",
-    },
-    {
-      header: "Date début",
-      accessorKey: "startDate",
-      cell: ({ row }) =>
-        row.original.startDate
-          ? new Date(row.original.startDate).toLocaleDateString("fr-FR")
-          : "—",
-    },
-    {
-      header: "Date fin",
-      accessorKey: "endDate",
-      cell: ({ row }) =>
-        row.original.endDate
-          ? new Date(row.original.endDate).toLocaleDateString("fr-FR")
-          : "—",
+      header: "Nombre d'examens",
+      id: "usedTestsCount",
+      cell: ({ row }) => (
+        <span className="text-sm text-gray-700">
+          {row.original.usedTestsCount ?? 0}
+        </span>
+      ),
     },
     {
       header: "Statut",

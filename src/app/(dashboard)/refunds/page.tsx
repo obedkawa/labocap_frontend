@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -13,6 +14,8 @@ import type { UseFormReturn } from "react-hook-form";
 
 import { PageHeader } from "@/components/ui/PageHeader";
 import { RHFSelect } from "@/components/ui/RHFSelect";
+import { RemoteSelectField } from "@/components/ui/RemoteSelectField";
+import { MAX_VISIBLE_OPTIONS } from "@/components/ui/LimitedSelect";
 import { NativeSelect } from "@/components/ui/NativeSelect";
 import { DataTable } from "@/components/common/DataTable";
 import { CrudModal } from "@/components/common/CrudModal";
@@ -86,7 +89,9 @@ type RefundFormValues = z.infer<typeof refundSchema>;
 export default function RefundsPage() {
   return (
     <PermissionGate permission={PERMISSIONS.VIEW_REFUNDS}>
-      <RefundsContent />
+      <Suspense fallback={null}>
+        <RefundsContent />
+      </Suspense>
     </PermissionGate>
   );
 }
@@ -94,8 +99,13 @@ export default function RefundsPage() {
 function RefundsContent() {
   const { can } = usePermissions();
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
 
-  const [createOpen, setCreateOpen] = useState(false);
+  // Le sous-menu « Ajouter » (sidebar) pointe vers /refunds?new=1 : on ouvre
+  // alors directement le formulaire de nouvelle demande (état initial dérivé de l'URL).
+  const [createOpen, setCreateOpen] = useState(
+    () => searchParams.get("new") === "1"
+  );
   const [statusFilter, setStatusFilter] = useState("");
 
   // ---- Query ---------------------------------------------------------------
@@ -119,14 +129,7 @@ function RefundsContent() {
 
   const reasons: RefundReason[] = Array.isArray(reasonsData) ? reasonsData : [];
 
-  // ---- Invoices query (sélecteur de facture) ------------------------------
-
-  const { data: invoicesData } = useQuery({
-    queryKey: ["invoices", "refund-select"],
-    queryFn: () => invoicesApi.findAll({ size: 1000 }).then((r) => r.data),
-  });
-
-  const invoices: Invoice[] = invoicesData?.content ?? [];
+  // Le sélecteur de facture cherche directement en base (voir `loadInvoiceOptions`).
 
   function getReasonLabel(refundReasonId?: string): string {
     if (!refundReasonId) return "—";
@@ -349,7 +352,7 @@ function RefundsContent() {
         submitLabel="Soumettre"
         isSubmitting={createMutation.isPending}
       >
-        <RefundForm form={createForm} reasons={reasons} invoices={invoices} />
+        <RefundForm form={createForm} reasons={reasons} />
       </CrudModal>
     </div>
   );
@@ -362,10 +365,25 @@ function RefundsContent() {
 interface RefundFormProps {
   form: UseFormReturn<RefundFormValues>;
   reasons: RefundReason[];
-  invoices: Invoice[];
 }
 
-function RefundForm({ form, reasons, invoices }: RefundFormProps) {
+/**
+ * Recherche serveur des factures (12 000+ en base) : la saisie est envoyée à
+ * l'API, elle ne se limite pas aux 6 options affichées.
+ */
+const loadInvoiceOptions = (input: string) =>
+  invoicesApi
+    .findAll({ size: MAX_VISIBLE_OPTIONS, search: input || undefined })
+    .then((r) =>
+      r.data.content.map((inv: Invoice) => ({
+        value: inv.id,
+        label: `${inv.code} — ${formatAmount(inv.total)}${
+          inv.patientName ? ` (${inv.patientName})` : ""
+        }`,
+      }))
+    );
+
+function RefundForm({ form, reasons }: RefundFormProps) {
   const {
     register,
     control,
@@ -374,19 +392,21 @@ function RefundForm({ form, reasons, invoices }: RefundFormProps) {
 
   return (
     <div className="space-y-4">
-      <RHFSelect
+      <Controller
         control={control}
         name="invoiceId"
-        label="Facture"
-        required
-        options={invoices.map((inv) => ({
-          value: inv.id,
-          label: `${inv.code} — ${formatAmount(inv.total)}${
-            inv.patientName ? ` (${inv.patientName})` : ""
-          }`,
-        }))}
-        placeholder="Sélectionner une facture"
-        error={errors.invoiceId?.message}
+        render={({ field }) => (
+          <RemoteSelectField
+            id="invoiceId"
+            label="Facture"
+            required
+            loadOptions={loadInvoiceOptions}
+            value={field.value || null}
+            onChange={(v) => field.onChange(v ?? "")}
+            placeholder="Rechercher une facture (code, patient)…"
+            error={errors.invoiceId?.message}
+          />
+        )}
       />
 
       <RHFSelect

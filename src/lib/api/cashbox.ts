@@ -49,6 +49,10 @@ export interface CashboxDailyResponseDto {
   totalEcart: number | null;
   branchId: string;
   createdAt: string;
+  /** Date de fermeture (updatedAt) — colonne « Date de fermeture » de Laravel. */
+  updatedAt: string | null;
+  /** Agent ayant ouvert/fermé la session — colonne « Utilisateur » de Laravel. */
+  userName: string | null;
 }
 
 export interface CashboxDailyOpenDto {
@@ -86,6 +90,12 @@ export interface CashboxOperationResponseDto {
   type: string;
   description: string | null;
   operationDate: string;
+  /** Code de la facture liée — colonne « Facture » de Laravel. */
+  invoiceCode: string | null;
+  /** Mode de paiement — colonne « Type de payement » de Laravel. */
+  paymentType: string | null;
+  /** Utilisateur ayant enregistré l'opération — colonne « Utilisateur ». */
+  userName: string | null;
   branchId: string;
   createdAt: string;
 }
@@ -126,6 +136,8 @@ export interface CashboxVoucherResponseDto {
   description: string | null;
   status: string;
   supplierId: string | null;
+  /** Nom du fournisseur — colonne « Fournisseur » de Laravel. */
+  supplierName: string | null;
   expenseCategoryId: string | null;
   ticketFile: string | null;
   details: CashboxVoucherDetail[];

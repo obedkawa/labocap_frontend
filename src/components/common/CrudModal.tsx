@@ -8,7 +8,9 @@ interface CrudModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
-  size?: "sm" | "md" | "lg" | "xl";
+  size?: "sm" | "md" | "lg" | "xl" | "2xl";
+  /** Classe(s) supplémentaire(s) sur la boîte du modal (ex. `min-h-[80vh]` pour l'agrandir en hauteur). */
+  contentClassName?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
   onSubmit?: () => void;
@@ -28,6 +30,7 @@ const sizeClasses: Record<NonNullable<CrudModalProps["size"]>, string> = {
   md: "max-w-md",
   lg: "max-w-2xl",
   xl: "max-w-4xl",
+  "2xl": "max-w-6xl",
 };
 
 export function CrudModal({
@@ -35,6 +38,7 @@ export function CrudModal({
   onClose,
   title,
   size = "md",
+  contentClassName,
   children,
   footer,
   onSubmit,
@@ -88,7 +92,8 @@ export function CrudModal({
       <div
         className={cn(
           "relative w-full rounded-xl bg-white shadow-xl flex flex-col max-h-[90vh]",
-          sizeClasses[size]
+          sizeClasses[size],
+          contentClassName
         )}
         onClick={(e) => e.stopPropagation()}
       >
