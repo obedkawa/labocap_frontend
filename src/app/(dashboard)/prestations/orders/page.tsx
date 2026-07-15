@@ -7,7 +7,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Pencil, Trash2, Plus } from "lucide-react";
-import ReactSelect from "react-select";
+import {
+  LimitedSelect as ReactSelect,
+  MAX_VISIBLE_OPTIONS,
+} from "@/components/ui/LimitedSelect";
 import AsyncSelect from "react-select/async";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { AxiosError } from "axios";
@@ -117,10 +120,12 @@ function OrderForm({
     (o) => o.value === selectedPrestationId,
   );
 
-  // Recherche asynchrone des patients (13k+ enregistrements → pas de préchargement)
+  // Recherche asynchrone des patients (13k+ enregistrements → pas de préchargement).
+  // On n'en affiche que 6, comme les autres selects : au-delà, l'utilisateur
+  // affine sa recherche (qui, ici, porte sur toute la base côté serveur).
   const loadPatients = (input: string) =>
     patientsApi
-      .findAll({ search: input || undefined, size: 20 })
+      .findAll({ search: input || undefined, size: MAX_VISIBLE_OPTIONS })
       .then((r) =>
         r.data.content.map((p) => ({
           value: p.id,

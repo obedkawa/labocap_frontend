@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import Select from "react-select";
+import { LimitedSelect as Select } from "@/components/ui/LimitedSelect";
 import { Eye, Pencil, FileText, Trash2, Plus, Printer, Check, FileDown } from "lucide-react";
 import type { AxiosError } from "axios";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -14,6 +14,7 @@ import { DataTable } from "@/components/common/DataTable";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { NativeSelect } from "@/components/ui/NativeSelect";
+import { FormSelect } from "@/components/ui/FormSelect";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { formatCFA, formatDate } from "@/lib/utils";
@@ -320,17 +321,26 @@ export default function TestOrdersPage() {
     },
   });
 
-  // Utilisateurs ayant le rôle docteur — source cohérente avec attribuateDoctorId
+  // Utilisateurs ayant le rôle « Docteur » — source cohérente avec attribuateDoctorId.
+  // NB : l'API /users ne filtre pas par rôle (paramètre ignoré côté backend) ; on
+  // filtre donc côté client sur le nom de rôle, sinon TOUS les utilisateurs (caissiers,
+  // secrétaires, comptes système…) apparaîtraient dans le sélecteur.
   const { data: doctorsData } = useQuery<DoctorOption[]>({
     queryKey: ["users-doctors"],
     queryFn: () =>
       usersApi
-        .findAll({ size: 500, role: "doctor" })
+        .findAll({ size: 500 })
         .then((r) =>
-          r.data.content.map((u) => ({
-            id: u.id,
-            name: `${u.firstname} ${u.lastname}`.trim(),
-          }))
+          r.data.content
+            .filter((u) =>
+              (u.roles ?? []).some((role) =>
+                (role.name ?? "").toLowerCase().includes("docteur")
+              )
+            )
+            .map((u) => ({
+              id: u.id,
+              name: `${u.firstname} ${u.lastname}`.trim(),
+            }))
         ),
   });
 
@@ -362,6 +372,20 @@ export default function TestOrdersPage() {
   const typeOrders = typeOrdersData ?? [];
   const contracts = contractsData ?? [];
   const doctors = doctorsData ?? [];
+
+  // Options des filtres (react-select cherchable + limité à ~6 via le CSS global).
+  const contratOptions = [
+    { value: "", label: "Tous les contrats" },
+    ...contracts.map((c) => ({ value: c.id, label: c.name })),
+  ];
+  const typeFilterOptions = [
+    { value: "", label: "Tous" },
+    ...typeOrders.map((t) => ({ value: t.id, label: t.title })),
+  ];
+  const docteurOptions = [
+    { value: "", label: "Tous" },
+    ...doctors.map((d) => ({ value: d.id, label: d.name })),
+  ];
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => testOrdersApi.delete(id),
@@ -508,15 +532,12 @@ export default function TestOrdersPage() {
         <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Contrat</label>
-            <NativeSelect
-              value={contratFilter}
-              onChange={(e) => { setContratFilter(e.target.value); setPage(0); }}
-            >
-              <option value="">Tous les contrats</option>
-              {contracts.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </NativeSelect>
+            <FormSelect
+              options={contratOptions}
+              value={contratOptions.find((o) => o.value === contratFilter) ?? contratOptions[0]}
+              onChange={(opt) => { setContratFilter(opt?.value ?? ""); setPage(0); }}
+              placeholder="Tous les contrats"
+            />
           </div>
 
           <div>
@@ -535,15 +556,12 @@ export default function TestOrdersPage() {
 
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Type d&apos;examen</label>
-            <NativeSelect
-              value={typeFilter}
-              onChange={(e) => { setTypeFilter(e.target.value); setPage(0); }}
-            >
-              <option value="">Tous</option>
-              {typeOrders.map((t) => (
-                <option key={t.id} value={t.id}>{t.title}</option>
-              ))}
-            </NativeSelect>
+            <FormSelect
+              options={typeFilterOptions}
+              value={typeFilterOptions.find((o) => o.value === typeFilter) ?? typeFilterOptions[0]}
+              onChange={(opt) => { setTypeFilter(opt?.value ?? ""); setPage(0); }}
+              placeholder="Tous"
+            />
           </div>
 
           <div>
@@ -562,15 +580,12 @@ export default function TestOrdersPage() {
         <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Docteur</label>
-            <NativeSelect
-              value={docteurFilter}
-              onChange={(e) => { setDocteurFilter(e.target.value); setPage(0); }}
-            >
-              <option value="">Tous</option>
-              {doctors.map((d) => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </NativeSelect>
+            <FormSelect
+              options={docteurOptions}
+              value={docteurOptions.find((o) => o.value === docteurFilter) ?? docteurOptions[0]}
+              onChange={(opt) => { setDocteurFilter(opt?.value ?? ""); setPage(0); }}
+              placeholder="Tous"
+            />
           </div>
 
           <div>

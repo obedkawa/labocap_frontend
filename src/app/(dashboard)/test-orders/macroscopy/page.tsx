@@ -9,6 +9,11 @@ import type { AxiosError } from "axios";
 
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SelectField } from "@/components/ui/SelectField";
+import { RemoteSelectField } from "@/components/ui/RemoteSelectField";
+import {
+  loadTestOrderOptions,
+  type TestOrderOption,
+} from "@/lib/api/optionLoaders";
 import { NativeSelect } from "@/components/ui/NativeSelect";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { formatDate } from "@/lib/utils";
@@ -19,8 +24,10 @@ import {
 } from "@/lib/api/macroscopy";
 import { hrApi, type Employee } from "@/lib/api/hr";
 import { typeOrdersApi } from "@/lib/api/examens";
-import { testOrdersApi, type TestOrder } from "@/lib/api/testOrders";
 import type { ApiError } from "@/types/api";
+
+/** Recherche serveur des demandes d'examen pour le filtre. */
+const loadOrderOptions = loadTestOrderOptions();
 
 // ---------------------------------------------------------------------------
 // Styles communs
@@ -300,6 +307,8 @@ export default function MacroscopyGlobalPage() {
 
   // --- Filtres historique ---
   const [filterOrderId, setFilterOrderId] = useState("");
+  const [filterOrderOption, setFilterOrderOption] =
+    useState<TestOrderOption | null>(null);
   const [filterDate, setFilterDate] = useState("");
   const [filterEmployeeId, setFilterEmployeeId] = useState("");
   const [filterSearch, setFilterSearch] = useState("");
@@ -336,12 +345,8 @@ export default function MacroscopyGlobalPage() {
   });
   const employees: Employee[] = employeesData?.content ?? [];
 
-  const { data: ordersData } = useQuery({
-    queryKey: ["test-orders-list"],
-    queryFn: () =>
-      testOrdersApi.findAll({ size: 500 }).then((r) => r.data),
-  });
-  const orders: TestOrder[] = ordersData?.content ?? [];
+  // Le filtre « Demande d'examen » cherche en base (14 000 demandes) au lieu de
+  // précharger une page ; voir `RemoteSelectField`.
 
   const { data: typeOrders = [] } = useQuery({
     queryKey: ["type-orders"],
@@ -486,10 +491,14 @@ export default function MacroscopyGlobalPage() {
               <label className="mb-1 block text-xs font-bold text-gray-800">
                 Demande d&apos;examen
               </label>
-              <SelectField
-                options={orders.map((o) => ({ value: o.id, label: o.code }))}
+              <RemoteSelectField<TestOrderOption>
+                loadOptions={loadOrderOptions}
                 value={filterOrderId || null}
-                onChange={(v) => setFilterOrderId(v ?? "")}
+                onChange={(v, opt) => {
+                  setFilterOrderId(v ?? "");
+                  setFilterOrderOption(opt);
+                }}
+                selectedOption={filterOrderOption}
                 placeholder="Toutes les demandes"
                 isClearable
               />

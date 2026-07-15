@@ -69,7 +69,7 @@ export default function InvoiceBusinessPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Rapports — Factures"
+        title="Factures"
         breadcrumbs={[
           { label: "Accueil", href: "/home" },
           { label: "Factures", href: "/invoices" },
@@ -90,7 +90,7 @@ export default function InvoiceBusinessPage() {
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-gray-800">
-            Synthèse mensuelle
+            Liste des Factures
           </h2>
           <NativeSelect
             value={selectedYear}

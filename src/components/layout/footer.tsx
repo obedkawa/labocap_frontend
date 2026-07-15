@@ -1,7 +1,17 @@
+"use client";
+
+import { useAppSettings } from "@/hooks/useAppSettings";
+
 export function Footer() {
+  const { data } = useAppSettings();
+  const year = new Date().getFullYear();
+  // Fidèle à Laravel : « {année} © {paramètre `footer`} ». Repli sur le nom du
+  // labo si le réglage `footer` n'est pas défini.
+  const footerText =
+    data?.footer?.trim() || data?.app_name?.trim() || "Labo AnaPath";
   return (
-    <footer className="bg-white border-t border-gray-200 px-6 py-3 text-center text-sm text-gray-500">
-      {new Date().getFullYear()} © Labo AnaPath
+    <footer className="shrink-0 border-t border-gray-200 bg-white px-6 py-3 text-center text-sm text-gray-500">
+      {year} © {footerText}
     </footer>
   );
 }

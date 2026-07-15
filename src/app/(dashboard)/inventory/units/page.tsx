@@ -241,7 +241,7 @@ export default function UnitesMesurePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Unités de mesure"
+        title="Unité de mesure"
         action={
           can(PERMISSIONS.CREATE_ARTICLES) ? (
             <button

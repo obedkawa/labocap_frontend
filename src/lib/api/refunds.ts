@@ -33,8 +33,20 @@ export interface RefundCreateRequest {
   note?: string;
 }
 
+export interface RefundReasonRequest {
+  label: string;
+}
+
 export const refundReasonsApi = {
   findAll: () => apiClient.get<RefundReason[]>("/refund-reasons"),
+
+  create: (data: RefundReasonRequest) =>
+    apiClient.post<RefundReason>("/refund-reasons", data),
+
+  update: (id: string, data: RefundReasonRequest) =>
+    apiClient.put<RefundReason>(`/refund-reasons/${id}`, data),
+
+  delete: (id: string) => apiClient.delete(`/refund-reasons/${id}`),
 };
 
 export const refundsApi = {

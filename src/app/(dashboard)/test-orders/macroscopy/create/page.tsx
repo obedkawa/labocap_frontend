@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { AxiosError } from "axios";
-import ReactSelect from "react-select";
+import { LimitedSelect as ReactSelect } from "@/components/ui/LimitedSelect";
 
 import { hrApi } from "@/lib/api/hr";
 import { macroscopyApi } from "@/lib/api/macroscopy";

@@ -10,7 +10,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { AxiosError } from "axios";
 import type { UseFormReturn } from "react-hook-form";
-import ReactSelect from "react-select";
+import { LimitedSelect as ReactSelect } from "@/components/ui/LimitedSelect";
 
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DataTable } from "@/components/common/DataTable";
@@ -422,6 +422,7 @@ export default function UsersPage() {
         onClose={() => setCreateOpen(false)}
         title="Ajouter un utilisateur"
         size="xl"
+        contentClassName="min-h-[600px]"
         onSubmit={createForm.handleSubmit(onCreateSubmit)}
         submitLabel="Ajouter un utilisateur"
         isSubmitting={createMutation.isPending}

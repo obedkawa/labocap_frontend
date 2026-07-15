@@ -2,6 +2,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { Footer } from "@/components/layout/footer";
 import { AuthGuard } from "@/components/common/AuthGuard";
+import { AppSettingsEffects } from "@/components/layout/AppSettingsEffects";
 
 export default function DashboardLayout({
   children,
@@ -10,6 +11,7 @@ export default function DashboardLayout({
 }) {
   return (
     <AuthGuard>
+      <AppSettingsEffects />
       <div className="flex h-screen overflow-hidden bg-[#fafbfe]">
         <Sidebar />
         <div className="flex flex-col flex-1 overflow-hidden">

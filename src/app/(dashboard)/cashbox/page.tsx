@@ -55,6 +55,21 @@ function formatDateTime(value: string): string {
   return d.toLocaleDateString("fr-FR") + " " + d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 }
 
+// Libellés lisibles des modes de paiement (réplique le mapping de la vue Laravel).
+const PAYMENT_TYPE_LABELS: Record<string, string> = {
+  ESPECES: "Espèces",
+  CHEQUES: "Chèque",
+  CHEQUE: "Chèque",
+  MOBILEMONEY: "Mobile Money",
+  VIREMENT: "Virement",
+  CARTEBANCAIRE: "Carte bancaire",
+};
+
+function formatPaymentType(value: string | null): string {
+  if (!value) return "—";
+  return PAYMENT_TYPE_LABELS[value] ?? value;
+}
+
 // ---------------------------------------------------------------------------
 // Page principale — Caisse de vente (réplique Laravel cashbox.vente.index)
 // ---------------------------------------------------------------------------
@@ -71,10 +86,16 @@ export default function CashboxVentePage() {
     queryFn: () => cashboxApi.getCashboxes().then((r) => r.data.content),
   });
 
-  // Sélectionne la première caisse de type "vente"
-  const venteCashbox: CashboxResponseDto | undefined = (cashboxesData ?? []).find(
-    (c) => c.type === "vente",
-  );
+  // Sélectionne la caisse de vente "principale". Des doublons vides peuvent exister
+  // (artefacts de migration : même type, solde 0, aucune opération) ; prendre la
+  // première ferait afficher une caisse vide. On retient donc, parmi les caisses de
+  // type "vente", celle au solde le plus élevé (la caisse réellement active).
+  const venteCashbox: CashboxResponseDto | undefined = (cashboxesData ?? [])
+    .filter((c) => c.type === "vente")
+    .reduce<CashboxResponseDto | undefined>(
+      (best, c) => (!best || Number(c.balance ?? 0) > Number(best.balance ?? 0) ? c : best),
+      undefined,
+    );
 
   // === Opérations de la caisse de vente
   const { data: operationsData, isLoading } = useQuery({
@@ -194,7 +215,8 @@ export default function CashboxVentePage() {
     setDepositOpen(true);
   }
 
-  // ---- Columns
+  // ---- Columns — alignées sur la vue Laravel « Caisse de vente » :
+  // #, Montant, Facture, Type de payement, Date, Utilisateur.
   const columns: ColumnDef<CashboxOperationResponseDto>[] = [
     {
       header: "#",
@@ -216,45 +238,42 @@ export default function CashboxVentePage() {
       ),
     },
     {
-      header: "Type",
-      accessorKey: "type",
-      enableSorting: true,
-      cell: ({ row }) => (
-        <span
-          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-            row.original.type === "CREDIT"
-              ? "bg-green-100 text-green-700"
-              : "bg-red-100 text-red-700"
-          }`}
-        >
-          {row.original.type === "CREDIT" ? "Crédit" : "Débit"}
-        </span>
-      ),
+      header: "Facture",
+      accessorKey: "invoiceCode",
+      cell: ({ row }) =>
+        row.original.invoiceCode ? (
+          <span className="font-mono text-sm text-gray-700">
+            {row.original.invoiceCode}
+          </span>
+        ) : (
+          <span className="text-xs font-medium text-red-500">
+            Sans facture
+          </span>
+        ),
     },
     {
-      header: "Description",
-      accessorKey: "description",
-      enableSorting: true,
+      header: "Type de payement",
+      accessorKey: "paymentType",
       cell: ({ row }) => (
         <span className="text-sm text-gray-700">
-          {row.original.description ?? "—"}
+          {formatPaymentType(row.original.paymentType)}
         </span>
       ),
     },
     {
-      header: "Date opération",
-      accessorKey: "operationDate",
-      enableSorting: true,
-      cell: ({ row }) =>
-        row.original.operationDate
-          ? new Date(row.original.operationDate).toLocaleDateString("fr-FR")
-          : "—",
-    },
-    {
-      header: "Date enreg.",
+      header: "Date",
       accessorKey: "createdAt",
       enableSorting: true,
       cell: ({ row }) => formatDateTime(row.original.createdAt),
+    },
+    {
+      header: "Utilisateur",
+      accessorKey: "userName",
+      cell: ({ row }) => (
+        <span className="text-sm text-gray-700">
+          {row.original.userName ?? "—"}
+        </span>
+      ),
     },
   ];
 

@@ -15,6 +15,17 @@ export interface ContractDetail {
   categoryTestId?: string;
 }
 
+// Facture unique rattachée au contrat — présente uniquement sur la vue détail
+// lorsque le contrat est en facturation unique et qu'une facture existe.
+export interface ContractInvoice {
+  id: string;
+  code?: string;
+  clientName?: string;
+  isPaid?: boolean;
+  paidAt?: string | null;
+  total?: number;
+}
+
 export interface Contract {
   id: string;
   name?: string;
@@ -33,6 +44,10 @@ export interface Contract {
   details?: ContractDetail[];
   branchId?: string;
   createdAt?: string;
+  updatedAt?: string;
+  // Enrichissements de la vue détail (null/absent sur le endpoint liste)
+  usedTestsCount?: number;
+  invoice?: ContractInvoice | null;
 }
 
 export interface ContractRequest {
@@ -65,6 +80,11 @@ export const contractsApi = {
     apiClient.post<ContractDetail>(`/contracts/${id}/details`, data),
   addTestDetail: (id: string, data: { testId: string; amountRemise?: number; amountAfterRemise?: number }) =>
     apiClient.post<ContractDetail>(`/contracts/${id}/details/test`, data),
+  updateTestDetail: (
+    contractId: string,
+    detailId: string,
+    data: { amountRemise: number; amountAfterRemise: number }
+  ) => apiClient.put<ContractDetail>(`/contracts/${contractId}/details/${detailId}`, data),
   deleteDetail: (contractId: string, detailId: string) =>
     apiClient.delete(`/contracts/${contractId}/details/${detailId}`),
 };

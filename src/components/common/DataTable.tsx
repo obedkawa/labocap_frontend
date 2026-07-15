@@ -12,8 +12,9 @@ import {
   PaginationState,
   ColumnFiltersState,
 } from "@tanstack/react-table";
-import { ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, RefreshCw, Minus, Plus, X } from "lucide-react";
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { NativeSelect } from "@/components/ui/NativeSelect";
 
@@ -32,6 +33,13 @@ export interface DataTableProps<T> {
   // Options
   isLoading?: boolean;
   rowClassName?: (row: T) => string;
+  /** Titre affiché dans la barre d'outils du tableau (optionnel). */
+  title?: string;
+  /**
+   * Callback du bouton « Actualiser ». Si absent, on invalide les requêtes
+   * react-query actives (rechargement générique des données).
+   */
+  onRefresh?: () => void;
 }
 
 export function DataTable<T>({
@@ -46,12 +54,31 @@ export function DataTable<T>({
   onSearchChange,
   isLoading = false,
   rowClassName,
+  title,
+  onRefresh,
 }: DataTableProps<T>) {
   const isServerSide = pageCount !== undefined;
+  const queryClient = useQueryClient();
 
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [localSearch, setLocalSearch] = useState("");
+
+  // Barre d'outils du tableau : réduire (masquer le corps) / fermer (masquer la carte).
+  const [collapsed, setCollapsed] = useState(false);
+  const [closed, setClosed] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    if (onRefresh) {
+      onRefresh();
+    } else {
+      queryClient.invalidateQueries();
+    }
+    // Petit retour visuel de rotation, sans bloquer.
+    window.setTimeout(() => setRefreshing(false), 600);
+  };
 
   const [localPagination, setLocalPagination] = useState<PaginationState>({
     pageIndex: 0,
@@ -123,6 +150,12 @@ export function DataTable<T>({
     return pages;
   };
 
+  // Bouton « Fermer » : la carte disparaît (revient au rechargement de la page).
+  if (closed) return null;
+
+  const toolBtn =
+    "flex h-8 w-8 items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200 hover:text-gray-900";
+
   return (
     <div className="w-full space-y-3">
       {/* Barre de recherche */}
@@ -140,6 +173,43 @@ export function DataTable<T>({
 
       {/* Tableau */}
       <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+        {/* Barre d'outils : Actualiser · Réduire · Fermer */}
+        <div className="flex items-center justify-between gap-2 border-b border-gray-200 bg-white px-3 py-2">
+          <span className="truncate text-sm font-semibold text-gray-700">
+            {title ?? ""}
+          </span>
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={handleRefresh}
+              className={toolBtn}
+              title="Actualiser"
+              aria-label="Actualiser"
+            >
+              <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} strokeWidth={2.25} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setCollapsed((c) => !c)}
+              className={toolBtn}
+              title={collapsed ? "Agrandir" : "Réduire"}
+              aria-label={collapsed ? "Agrandir" : "Réduire"}
+            >
+              {collapsed ? <Plus className="h-4 w-4" strokeWidth={2.25} /> : <Minus className="h-4 w-4" strokeWidth={2.25} />}
+            </button>
+            <button
+              type="button"
+              onClick={() => setClosed(true)}
+              className={toolBtn}
+              title="Fermer"
+              aria-label="Fermer"
+            >
+              <X className="h-4 w-4" strokeWidth={2.25} />
+            </button>
+          </div>
+        </div>
+
+        {!collapsed && (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b-2 border-gray-300 bg-gray-200">
@@ -203,7 +273,7 @@ export function DataTable<T>({
                     )}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="border-r border-gray-200 px-4 py-3 text-gray-800 last:border-r-0">
+                      <td key={cell.id} className="border-r border-gray-300 px-4 py-3 text-gray-800 last:border-r-0">
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </td>
                     ))}
@@ -213,9 +283,11 @@ export function DataTable<T>({
             </tbody>
           </table>
         </div>
+        )}
       </div>
 
-      {/* Pagination */}
+      {/* Pagination — masquée quand le tableau est réduit */}
+      {!collapsed && (
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         {/* Sélecteur de taille */}
         <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -287,6 +359,7 @@ export function DataTable<T>({
           Page {currentPageIndex + 1} sur {Math.max(totalPages, 1)}
         </p>
       </div>
+      )}
     </div>
   );
 }

@@ -32,9 +32,13 @@ export function PageHeader({
       className={cn(
         "mb-6",
         sticky &&
-          // z-20 : au-dessus du contenu défilant, mais sous la barre du haut
-          // (z-40) dont le menu profil doit pouvoir recouvrir cette zone.
-          "sticky top-0 z-20 border-b border-gray-200 bg-white/95 py-4 backdrop-blur supports-[backdrop-filter]:bg-white/80",
+          // Le `main` a un padding haut de 24px (p-6). Avec `top-0`, l'en-tête
+          // collant se fixe SOUS ce padding : au scroll, le contenu défile dans
+          // les 24px entre la barre du haut et l'en-tête et reste visible.
+          // `-top-6` (= -1.5rem) le colle exactement sous la barre du haut, et
+          // `-mt-6/-mx-6` + `px-6/pt-6` couvrent le padding haut ET latéral avec un
+          // fond OPAQUE, pour qu'aucun texte ne passe dans cet espace.
+          "sticky -top-6 z-20 -mx-6 -mt-6 border-b border-gray-200 bg-white px-6 pb-4 pt-6",
         className
       )}
     >

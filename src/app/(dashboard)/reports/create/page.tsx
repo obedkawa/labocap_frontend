@@ -7,7 +7,9 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import Select from "react-select";
+import { LimitedSelect as Select } from "@/components/ui/LimitedSelect";
+import { RemoteSelectField } from "@/components/ui/RemoteSelectField";
+import { loadPatientOptions } from "@/lib/api/optionLoaders";
 import type { AxiosError } from "axios";
 
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -15,7 +17,6 @@ import { FormField } from "@/components/ui/FormField";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { reportsApi } from "@/lib/api/reports";
-import { patientsApi, type Patient } from "@/lib/api/patients";
 import { testOrdersApi, type TestOrder } from "@/lib/api/testOrders";
 import { formatDate } from "@/lib/utils";
 import type { ApiError } from "@/types/api";
@@ -53,8 +54,12 @@ export default function ReportCreatePage() {
   const { can } = usePermissions();
 
   // Recherche patient (la requête part dès le 1er caractère, sans debounce)
-  const [patientSearch, setPatientSearch] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState<string>("");
+  // Libellé du patient choisi : la liste n'étant plus préchargée, le select ne
+  // peut pas le retrouver seul après une nouvelle recherche.
+  const [selectedPatient, setSelectedPatient] = useState<SelectOption | null>(
+    null
+  );
 
   const {
     register,
@@ -71,22 +76,7 @@ export default function ReportCreatePage() {
     },
   });
 
-  // --- Query : patients (recherche)
-  const { data: patientsData, isLoading: patientsLoading } = useQuery({
-    queryKey: ["patients-search", patientSearch],
-    queryFn: () =>
-      patientsApi
-        .findAll({ size: 50, search: patientSearch || undefined })
-        .then((r) => r.data.content),
-    placeholderData: (prev) => prev,
-  });
-
-  const patientOptions: SelectOption[] = (patientsData ?? []).map(
-    (p: Patient) => ({
-      value: p.id,
-      label: `${p.code} - ${p.firstname} ${p.lastname}`,
-    })
-  );
+  // Le select patient cherche directement en base (voir `RemoteSelectField`).
 
   // --- Query : demandes liées au patient sélectionné
   const { data: testOrdersData, isLoading: ordersLoading } = useQuery({
@@ -173,32 +163,20 @@ export default function ReportCreatePage() {
                 name="patientId"
                 control={control}
                 render={({ field }) => (
-                  <Select
-                    instanceId="report-patient"
-                    inputId="patientId"
-                    options={patientOptions}
-                    isLoading={patientsLoading}
-                    placeholder="Rechercher un patient…"
-                    noOptionsMessage={() =>
-                      patientSearch.length === 0
-                        ? "Saisissez un nom pour rechercher"
-                        : "Aucun patient trouvé"
-                    }
-                    value={
-                      patientOptions.find((o) => o.value === field.value) ??
-                      null
-                    }
-                    onInputChange={(v) => setPatientSearch(v)}
-                    onChange={(opt) => {
-                      const val = opt?.value ?? "";
-                      field.onChange(val);
-                      setSelectedPatientId(val);
+                  <RemoteSelectField
+                    id="patientId"
+                    loadOptions={loadPatientOptions}
+                    value={field.value || null}
+                    onChange={(v, opt) => {
+                      field.onChange(v ?? "");
+                      setSelectedPatient(opt);
+                      setSelectedPatientId(v ?? "");
                       // Réinitialiser la demande si on change de patient
                       setValue("testOrderId", "");
                     }}
+                    selectedOption={selectedPatient}
+                    placeholder="Rechercher un patient (nom, code, téléphone)…"
                     isClearable
-                    isSearchable
-                    classNamePrefix="react-select"
                   />
                 )}
               />

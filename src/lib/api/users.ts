@@ -115,6 +115,11 @@ export const usersApi = {
     apiClient.put(`/roles/${id}`, data),
   deleteRole: (id: string) => apiClient.delete(`/roles/${id}`),
   getAllPermissions: () => apiClient.get<Permission[]>("/permissions"),
+  createPermission: (data: { name: string; slug: string }) =>
+    apiClient.post<Permission>("/permissions", data),
+  updatePermission: (id: string, data: { name: string; slug: string }) =>
+    apiClient.put<Permission>(`/permissions/${id}`, data),
+  deletePermission: (id: string) => apiClient.delete(`/permissions/${id}`),
 
   // ---- Permissions directes par utilisateur ----
   getUserPermissions: (userId: string) =>

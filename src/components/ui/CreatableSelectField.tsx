@@ -1,10 +1,10 @@
 "use client";
 
 import { useId } from "react";
-import CreatableSelect from "react-select/creatable";
 import type { SingleValue, StylesConfig } from "react-select";
 import { cn } from "@/lib/utils";
 import type { SelectOption } from "./FormSelect";
+import { LimitedCreatableSelect as CreatableSelect } from "./LimitedSelect";
 import { buildSelectStyles, SELECT_MENU_CLASSNAMES } from "./selectStyles";
 
 interface CreatableSelectFieldProps {
@@ -29,7 +29,8 @@ interface CreatableSelectFieldProps {
  * valider sa saisie clavier comme nouvelle valeur.
  *
  * `value`/`onChange` manipulent une simple `string` (l'`id` choisi ou le texte
- * créé). Le menu a une barre de défilement fine visible seulement au survol.
+ * créé). Le menu n'affiche que 6 options, sans défilement : la recherche porte
+ * sur toute la liste.
  */
 export function CreatableSelectField({
   options,
