@@ -19,15 +19,15 @@ import { PermissionGate } from "@/components/common/PermissionGate";
 import { FormField } from "@/components/ui/FormField";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
-import { clientsApi, Client, ClientRequest } from "@/lib/api/clients";
+import { clientsApi, type Client, type ClientRequest } from "@/lib/api/clients";
 
 // ---------------------------------------------------------------------------
-// Zod schema
+// Zod schema — calque `clients/create.blade.php` : seul le nom est requis.
 // ---------------------------------------------------------------------------
 
 const clientSchema = z.object({
   name: z.string().min(1, "Le nom est requis"),
-  address: z.string().optional(),
+  adress: z.string().optional(),
   contact: z.string().optional(),
   ifu: z.string().optional(),
 });
@@ -35,11 +35,14 @@ const clientSchema = z.object({
 type ClientFormValues = z.infer<typeof clientSchema>;
 
 // ---------------------------------------------------------------------------
-// Input style helper
+// Helpers
 // ---------------------------------------------------------------------------
 
 const inputClass =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
+
+const actionBtn =
+  "inline-flex h-8 w-9 items-center justify-center rounded-md text-white transition-colors";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -54,109 +57,94 @@ export default function ClientsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
-  // ---- Pagination
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(20);
-
   // ---- Queries & Mutations ------------------------------------------------
 
   const { data, isLoading } = useQuery({
-    queryKey: ["clients", { page, pageSize }],
-    queryFn: () =>
-      clientsApi.findAll({ page, size: pageSize }).then((r) => r.data),
-    placeholderData: (prev) => prev,
+    queryKey: ["clients"],
+    // Laravel liste tous les clients (`latest()->get()`), recherche et
+    // pagination se faisant côté client.
+    queryFn: () => clientsApi.findAll({ size: 500 }).then((r) => r.data),
   });
 
   const clients: Client[] = data?.content ?? [];
-  const totalPages = data?.totalPages ?? 0;
+
+  function apiError(err: AxiosError) {
+    toast.error(
+      (err.response?.data as { message?: string })?.message ??
+        "Échec de l'enregistrement ! ",
+    );
+  }
+
+  function invalidate() {
+    queryClient.invalidateQueries({ queryKey: ["clients"] });
+  }
 
   const createMutation = useMutation({
     mutationFn: (payload: ClientRequest) => clientsApi.create(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      toast.success("Client créé");
+      invalidate();
+      toast.success("Un client enregistré ! ");
       setCreateOpen(false);
       createForm.reset();
     },
-    onError: (err: AxiosError) => {
-      const msg =
-        (err.response?.data as { message?: string })?.message ??
-        "Une erreur est survenue";
-      toast.error(msg);
-    },
+    onError: apiError,
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: ClientRequest }) =>
       clientsApi.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      toast.success("Client modifié");
+      invalidate();
+      toast.success("Un client a été mis à jour ! ");
       setEditOpen(false);
     },
-    onError: (err: AxiosError) => {
-      const msg =
-        (err.response?.data as { message?: string })?.message ??
-        "Une erreur est survenue";
-      toast.error(msg);
-    },
+    onError: apiError,
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => clientsApi.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      toast.success("Client supprimé");
+      invalidate();
+      toast.success("    Un élement a été supprimé ! ");
       setDeleteOpen(false);
       setSelectedClient(null);
     },
-    onError: (err: AxiosError) => {
-      const msg =
-        (err.response?.data as { message?: string })?.message ??
-        "Une erreur est survenue";
-      toast.error(msg);
-    },
+    onError: apiError,
   });
 
-  // ---- Forms ---------------------------------------------------------------
+  // ---- Forms --------------------------------------------------------------
 
   const createForm = useForm<ClientFormValues>({
     resolver: zodResolver(clientSchema),
-    defaultValues: {
-      name: "",
-      address: "",
-      contact: "",
-      ifu: "",
-    },
+    defaultValues: { name: "", adress: "", contact: "", ifu: "" },
   });
 
   const editForm = useForm<ClientFormValues>({
     resolver: zodResolver(clientSchema),
   });
 
-  // ---- Handlers ------------------------------------------------------------
+  // ---- Handlers -----------------------------------------------------------
 
   function openEdit(client: Client) {
     setSelectedClient(client);
     editForm.reset({
       name: client.name,
-      address: client.address ?? "",
+      adress: client.adress ?? "",
       contact: client.contact ?? "",
       ifu: client.ifu ?? "",
     });
     setEditOpen(true);
   }
 
-  function openDelete(client: Client) {
-    setSelectedClient(client);
-    setDeleteOpen(true);
-  }
-
   function buildPayload(values: ClientFormValues): ClientRequest {
     return {
       name: values.name,
-      address: values.address || undefined,
-      contact: values.contact || undefined,
+      // Chaîne vide plutôt qu'undefined : le mapper Java ignore les null,
+      // un champ vidé par l'utilisateur ne serait donc jamais effacé.
+      adress: values.adress ?? "",
+      contact: values.contact ?? "",
+      // `ifu` reste undefined si vide : la colonne est UNIQUE et plusieurs
+      // chaînes vides entreraient en collision, là où plusieurs NULL sont admis.
       ifu: values.ifu || undefined,
     };
   }
@@ -167,16 +155,20 @@ export default function ClientsPage() {
 
   function onEditSubmit(values: ClientFormValues) {
     if (!selectedClient) return;
-    updateMutation.mutate({ id: selectedClient.id, data: buildPayload(values) });
+    updateMutation.mutate({
+      id: selectedClient.id,
+      data: buildPayload(values),
+    });
   }
 
-  // ---- Columns -------------------------------------------------------------
+  // ---- Columns ------------------------------------------------------------
 
   const columns: ColumnDef<Client>[] = [
     {
       header: "#",
       id: "index",
-      cell: ({ row }) => page * pageSize + row.index + 1,
+      enableSorting: false,
+      cell: ({ row }) => row.index + 1,
     },
     {
       header: "Nom",
@@ -185,41 +177,45 @@ export default function ClientsPage() {
     {
       header: "Téléphone",
       accessorKey: "contact",
-      cell: ({ row }) => row.original.contact ?? "—",
+      cell: ({ row }) => row.original.contact ?? "",
     },
     {
       header: "Adresse",
-      accessorKey: "address",
-      cell: ({ row }) => row.original.address ?? "—",
+      accessorKey: "adress",
+      cell: ({ row }) => row.original.adress ?? "",
     },
     {
       header: "Numéro IFU",
       accessorKey: "ifu",
-      cell: ({ row }) => row.original.ifu ?? "—",
+      cell: ({ row }) => row.original.ifu ?? "",
     },
     {
       header: "Actions",
       id: "actions",
+      enableSorting: false,
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
           <PermissionGate permission={PERMISSIONS.EDIT_CLIENTS}>
             <button
               onClick={() => openEdit(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+              className={`${actionBtn} bg-blue-600 hover:bg-blue-700`}
               aria-label="Modifier"
+              title="Modifier"
             >
-              <Pencil className="h-3.5 w-3.5" />
-              Modifier
+              <Pencil className="h-4 w-4" />
             </button>
           </PermissionGate>
           <PermissionGate permission={PERMISSIONS.DELETE_CLIENTS}>
             <button
-              onClick={() => openDelete(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
+              onClick={() => {
+                setSelectedClient(row.original);
+                setDeleteOpen(true);
+              }}
+              className={`${actionBtn} bg-red-500 hover:bg-red-600`}
               aria-label="Supprimer"
+              title="Supprimer"
             >
-              <Trash2 className="h-3.5 w-3.5" />
-              Supprimer
+              <Trash2 className="h-4 w-4" />
             </button>
           </PermissionGate>
         </div>
@@ -227,139 +223,113 @@ export default function ClientsPage() {
     },
   ];
 
-  // ---- Render --------------------------------------------------------------
+  // ---- Render -------------------------------------------------------------
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Clients Professionnels"
-        action={
-          can(PERMISSIONS.CREATE_CLIENTS) ? (
-            <button
-              onClick={() => {
-                createForm.reset();
-                setCreateOpen(true);
-              }}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-            >
-              Ajouter un client professionnel
-            </button>
-          ) : undefined
-        }
-      />
+    <PermissionGate permission={PERMISSIONS.VIEW_CLIENTS}>
+      <div className="space-y-6">
+        <PageHeader
+          title="Clients"
+          action={
+            can(PERMISSIONS.CREATE_CLIENTS) ? (
+              <button
+                onClick={() => {
+                  createForm.reset();
+                  setCreateOpen(true);
+                }}
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+              >
+                Ajouter un nouveau client
+              </button>
+            ) : undefined
+          }
+        />
 
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5">
         <DataTable
+          title="Liste des clients"
           columns={columns}
           data={clients}
           isLoading={isLoading}
-          pageCount={totalPages}
-          pageIndex={page}
-          pageSize={pageSize}
-          onPageChange={setPage}
-          onPageSizeChange={(size) => {
-            setPageSize(size);
-            setPage(0);
+        />
+
+        {/* ---- Modal création ---- */}
+        <CrudModal
+          isOpen={createOpen}
+          onClose={() => setCreateOpen(false)}
+          title="Ajouter un nouveau client"
+          onSubmit={createForm.handleSubmit(onCreateSubmit)}
+          // Libellé fautif du Blade Laravel (copier-coller du module Médecins),
+          // conservé tel quel : c'est ce que voient les utilisateurs.
+          submitLabel="Ajouter un nouveau médecin"
+          isSubmitting={createMutation.isPending}
+        >
+          <ClientForm form={createForm} />
+        </CrudModal>
+
+        {/* ---- Modal édition ---- */}
+        <CrudModal
+          isOpen={editOpen}
+          onClose={() => setEditOpen(false)}
+          title="Modifier les informations du client"
+          onSubmit={editForm.handleSubmit(onEditSubmit)}
+          submitLabel="Mettre à jour"
+          isSubmitting={updateMutation.isPending}
+        >
+          <ClientForm form={editForm} />
+        </CrudModal>
+
+        {/* ---- Confirmation suppression ---- */}
+        <ConfirmModal
+          isOpen={deleteOpen}
+          onClose={() => {
+            setDeleteOpen(false);
+            setSelectedClient(null);
           }}
+          onConfirm={() => {
+            if (selectedClient) deleteMutation.mutate(selectedClient.id);
+          }}
+          title="Voulez-vous supprimer l'élément ?"
+          message={`Client : ${selectedClient?.name ?? ""}`}
+          confirmLabel="Oui"
+          cancelLabel="Non !"
+          confirmVariant="danger"
+          isLoading={deleteMutation.isPending}
         />
       </div>
-
-      {/* ---- Modal création ---- */}
-      <CrudModal
-        isOpen={createOpen}
-        onClose={() => setCreateOpen(false)}
-        title="Ajouter un client professionnel"
-        size="lg"
-        onSubmit={createForm.handleSubmit(onCreateSubmit)}
-        submitLabel="Ajouter un client professionnel"
-        isSubmitting={createMutation.isPending}
-      >
-        <ClientForm form={createForm} />
-      </CrudModal>
-
-      {/* ---- Modal édition ---- */}
-      <CrudModal
-        isOpen={editOpen}
-        onClose={() => setEditOpen(false)}
-        title="Modifier un client professionnel"
-        size="lg"
-        onSubmit={editForm.handleSubmit(onEditSubmit)}
-        submitLabel="Modifier"
-        isSubmitting={updateMutation.isPending}
-      >
-        <ClientForm form={editForm} />
-      </CrudModal>
-
-      {/* ---- Modal confirmation suppression ---- */}
-      <ConfirmModal
-        isOpen={deleteOpen}
-        onClose={() => {
-          setDeleteOpen(false);
-          setSelectedClient(null);
-        }}
-        onConfirm={() => {
-          if (selectedClient) deleteMutation.mutate(selectedClient.id);
-        }}
-        title="Supprimer ce client"
-        message={`Voulez-vous vraiment supprimer le client "${selectedClient?.name ?? ""}" ? Cette action est irréversible.`}
-        confirmLabel="Supprimer"
-        confirmVariant="danger"
-        isLoading={deleteMutation.isPending}
-      />
-    </div>
+    </PermissionGate>
   );
 }
 
 // ---------------------------------------------------------------------------
-// ClientForm — formulaire partagé création / édition
+// ClientForm
 // ---------------------------------------------------------------------------
 
-interface ClientFormProps {
-  form: UseFormReturn<ClientFormValues>;
-}
-
-function ClientForm({ form }: ClientFormProps) {
+function ClientForm({ form }: { form: UseFormReturn<ClientFormValues> }) {
   const {
     register,
     formState: { errors },
   } = form;
 
   return (
-    <div className="grid grid-cols-1 gap-4">
+    <div className="space-y-4">
+      <p className="text-right text-sm text-gray-600">
+        <span className="text-red-600">*</span>champs obligatoires
+      </p>
+
       <FormField label="Nom" required error={errors.name?.message}>
-        <input
-          type="text"
-          {...register("name")}
-          placeholder="Nom du client"
-          className={inputClass}
-        />
+        <input type="text" {...register("name")} className={inputClass} />
       </FormField>
 
-      <FormField label="Adresse" error={errors.address?.message}>
-        <input
-          type="text"
-          {...register("address")}
-          placeholder="Adresse du client"
-          className={inputClass}
-        />
+      <FormField label="Adresse" error={errors.adress?.message}>
+        <input type="text" {...register("adress")} className={inputClass} />
       </FormField>
 
       <FormField label="Contact" error={errors.contact?.message}>
-        <input
-          type="tel"
-          {...register("contact")}
-          placeholder="97000000"
-          className={inputClass}
-        />
+        <input type="text" {...register("contact")} className={inputClass} />
       </FormField>
 
       <FormField label="Numéro IFU" error={errors.ifu?.message}>
-        <input
-          type="text"
-          {...register("ifu")}
-          placeholder="Numéro IFU"
-          className={inputClass}
-        />
+        <input type="text" {...register("ifu")} className={inputClass} />
       </FormField>
     </div>
   );

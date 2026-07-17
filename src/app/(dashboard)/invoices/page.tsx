@@ -2,30 +2,17 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  Eye,
-  Trash2,
-  Plus,
-  CreditCard,
-  CheckCircle,
-  XCircle,
-  Search,
-  Clock,
-} from "lucide-react";
-import { toast } from "sonner";
-import type { AxiosError } from "axios";
+import { useQuery } from "@tanstack/react-query";
+import { Plus, Printer, Search } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/common/DataTable";
-import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { NativeSelect } from "@/components/ui/NativeSelect";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
-import { formatDate, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { invoicesApi, type Invoice } from "@/lib/api/invoices";
-import type { ApiError } from "@/types/api";
 
 // ---------------------------------------------------------------------------
 // Formatage montant FCFA
@@ -39,67 +26,21 @@ function formatFCFA(amount: number): string {
 // Badge statut paiement (Payé vert / En attente orange)
 // ---------------------------------------------------------------------------
 
+// Pastilles Bootstrap pleines, sans icône : `badge bg-success` / `badge bg-warning`
+// (bg-warning est ambre #ffc107, pas orange).
 function PaidBadge({ paid }: { paid: boolean }) {
   if (paid) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
-        <CheckCircle className="h-3 w-3" />
+      <span className="inline-flex items-center rounded-full bg-green-600 px-2 py-0.5 text-xs font-medium text-white">
         Payé
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700">
-      <Clock className="h-3 w-3" />
+    <span className="inline-flex items-center rounded-full bg-amber-400 px-2 py-0.5 text-xs font-medium text-gray-900">
       En attente
     </span>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Badge MECeF
-// ---------------------------------------------------------------------------
-
-function MecefBadge({ code }: { code?: string }) {
-  if (code) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
-        <CheckCircle className="h-3 w-3" />
-        {code}
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
-      <XCircle className="h-3 w-3" />
-      Non sync
-    </span>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Libellé méthode de paiement
-// ---------------------------------------------------------------------------
-
-function paymentLabel(payment?: string): string {
-  switch (payment) {
-    case "ESPECES":
-      return "Espèces";
-    case "MOBILEMONEY":
-      return "Mobile Money";
-    case "CARTEBANCAIRE":
-      return "Carte bancaire";
-    case "CHEQUES":
-      return "Chèque";
-    case "VIREMENT":
-      return "Virement";
-    case "CREDIT":
-      return "Crédit";
-    case "AUTRE":
-      return "Autre";
-    default:
-      return "—";
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -125,51 +66,19 @@ const MONTHS_FR: { value: number; label: string }[] = [
 // Boutons d'action ligne
 // ---------------------------------------------------------------------------
 
-function ActionButtons({
-  invoice,
-  onDelete,
-  onPay,
-  canManage,
-  canDelete,
-}: {
-  invoice: Invoice;
-  onDelete: (invoice: Invoice) => void;
-  onPay: (invoice: Invoice) => void;
-  canManage: boolean;
-  canDelete: boolean;
-}) {
+// La liste Laravel n'expose qu'une seule action, sans aucun gate de permission :
+// un bouton vert vers la facture (InvoiceController::getInvoiceIndexforDatable).
+// L'encaissement se fait depuis la page de détail, pas depuis la liste.
+function ActionButtons({ invoice }: { invoice: Invoice }) {
   return (
     <div className="flex items-center gap-1">
       <Link
         href={`/invoices/${invoice.id}`}
-        className="inline-flex items-center justify-center rounded p-1.5 text-white bg-blue-600 hover:bg-blue-700 transition-colors"
-        title="Voir la facture"
+        className="inline-flex items-center justify-center rounded p-1.5 text-white bg-green-600 hover:bg-green-700 transition-colors"
+        title="Facture"
       >
-        <Eye className="h-4 w-4" />
+        <Printer className="h-4 w-4" />
       </Link>
-
-      {canManage && !invoice.paid && (
-        <button
-          type="button"
-          onClick={() => onPay(invoice)}
-          className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-          title="Payer"
-        >
-          <CreditCard className="h-3.5 w-3.5" />
-          Payer
-        </button>
-      )}
-
-      {canDelete && (
-        <button
-          type="button"
-          onClick={() => onDelete(invoice)}
-          className="inline-flex items-center justify-center rounded p-1.5 text-white bg-red-600 hover:bg-red-700 transition-colors"
-          title="Supprimer"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
-      )}
     </div>
   );
 }
@@ -182,7 +91,6 @@ type TabKey = "list" | "reports";
 
 export default function InvoicesPage() {
   const { can } = usePermissions();
-  const queryClient = useQueryClient();
 
   // Onglet actif
   const [activeTab, setActiveTab] = useState<TabKey>("list");
@@ -206,9 +114,6 @@ export default function InvoicesPage() {
   // Année/mois appliqués (déclenchés par "Filtrer")
   const [appliedYear, setAppliedYear] = useState<number>(currentYear);
   const [appliedMonth, setAppliedMonth] = useState<number>(currentMonth);
-
-  // Suppression
-  const [deleteTarget, setDeleteTarget] = useState<Invoice | null>(null);
 
   // --- Query : liste des factures
   const { data, isLoading } = useQuery({
@@ -264,32 +169,6 @@ export default function InvoicesPage() {
   const invoices = data?.content ?? [];
   const pageCount = data?.totalPages ?? 0;
 
-  // --- Mutation suppression
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => invoicesApi.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["invoices"] });
-      toast.success("Facture supprimée avec succès");
-      setDeleteTarget(null);
-    },
-    onError: (err: AxiosError<ApiError>) => {
-      toast.error(err.response?.data?.message ?? "Erreur lors de la suppression");
-    },
-  });
-
-  // --- Mutation paiement rapide (espèces par défaut)
-  const payMutation = useMutation({
-    mutationFn: (id: string) =>
-      invoicesApi.markAsPaid(id, { payment: "ESPECES" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["invoices"] });
-      toast.success("Facture marquée comme payée");
-    },
-    onError: (err: AxiosError<ApiError>) => {
-      toast.error(err.response?.data?.message ?? "Erreur lors du paiement");
-    },
-  });
-
   if (!can(PERMISSIONS.VIEW_INVOICES)) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -303,85 +182,76 @@ export default function InvoicesPage() {
   // dans la vue Laravel `invoices/index.blade.php` (conformité).
   const columns: ColumnDef<Invoice>[] = [
     {
+      // Laravel lit la colonne `date` (saisie à la création), pas `created_at`.
       header: "Date",
-      accessorKey: "createdAt",
-      enableSorting: true,
-      cell: ({ getValue }) => (
-        <span className="text-xs text-gray-500">{formatDate(getValue<string>())}</span>
+      accessorKey: "date",
+      cell: ({ row }) => (
+        <span className="text-xs text-gray-500">{row.original.date ?? ""}</span>
       ),
     },
     {
       header: "Demande",
-      id: "testOrder",
-      accessorFn: (row) => row.testOrderCode ?? "",
-      enableSorting: true,
-      cell: ({ row }) =>
-        row.original.testOrderCode ? (
-          <span className="font-mono text-xs text-gray-600">
-            {row.original.testOrderCode}
-          </span>
-        ) : (
-          <span className="text-gray-400 text-xs">—</span>
-        ),
+      id: "demande",
+      // Repli sur le code facture quand aucun bon d'examen n'est rattaché.
+      accessorFn: (row) => row.testOrderCode || row.code || "",
+      cell: ({ row }) => (
+        <span className="font-mono text-xs text-gray-600">
+          {row.original.testOrderCode || row.original.code || ""}
+        </span>
+      ),
     },
     {
       header: "Patient",
       id: "patient",
-      accessorFn: (row) => row.patientName ?? "",
-      enableSorting: true,
-      cell: ({ row }) => {
-        const name = row.original.patientName;
-        if (!name) return <span className="text-gray-400 text-xs">—</span>;
-        return <span className="text-sm font-medium text-gray-800">{name}</span>;
-      },
+      // Nom du patient du bon d'examen, sinon nom du client saisi sur la facture.
+      accessorFn: (row) =>
+        (row.testOrderId ? row.patientName : row.clientName) ?? "",
+      cell: ({ row }) => (
+        <span className="text-sm font-medium text-gray-800">
+          {(row.original.testOrderId
+            ? row.original.patientName
+            : row.original.clientName) ?? ""}
+        </span>
+      ),
     },
     {
       header: "Total",
       accessorKey: "total",
-      enableSorting: true,
       cell: ({ row }) => (
         <span className="text-sm font-medium text-gray-800">
-          {formatFCFA(row.original.total)}
+          {row.original.total}
         </span>
       ),
     },
     {
       header: "Code normalisé",
-      id: "mecef",
-      accessorFn: (row) => row.codeMecef ?? "",
-      enableSorting: true,
-      cell: ({ row }) => <MecefBadge code={row.original.codeMecef} />,
+      id: "code",
+      // codeMecef (retour DGI) sinon codeNormalise (saisi par le caissier).
+      accessorFn: (row) => row.codeMecef || row.codeNormalise || "",
+      cell: ({ row }) => (
+        <span className="font-mono text-xs text-gray-600">
+          {row.original.codeMecef || row.original.codeNormalise || ""}
+        </span>
+      ),
     },
     {
       header: "Type de paiement",
       accessorKey: "payment",
-      enableSorting: true,
       cell: ({ row }) => (
-        <span className="text-sm text-gray-600">
-          {paymentLabel(row.original.payment)}
-        </span>
+        <span className="text-sm text-gray-600">{row.original.payment ?? ""}</span>
       ),
     },
     {
       header: "Statut",
       id: "paid",
       accessorFn: (row) => (row.paid ? "Payé" : "En attente"),
-      enableSorting: true,
       cell: ({ row }) => <PaidBadge paid={row.original.paid} />,
     },
     {
       header: "Actions",
       id: "actions",
       enableSorting: false,
-      cell: ({ row }) => (
-        <ActionButtons
-          invoice={row.original}
-          onDelete={setDeleteTarget}
-          onPay={(inv) => payMutation.mutate(inv.id)}
-          canManage={can(PERMISSIONS.MANAGE_FINANCE)}
-          canDelete={can(PERMISSIONS.DELETE_INVOICES)}
-        />
-      ),
+      cell: ({ row }) => <ActionButtons invoice={row.original} />,
     },
   ];
 
@@ -399,17 +269,16 @@ export default function InvoicesPage() {
         action={
           <div className="flex items-center gap-3">
             <span className="inline-flex items-center rounded-full bg-green-100 px-3 py-1.5 text-sm font-semibold text-green-700">
-              Total encaissé : {formatFCFA(todayStats?.totalToday ?? 0)}
+              Total encaissé : {todayStats?.totalToday ?? 0}
             </span>
-            {can(PERMISSIONS.CREATE_INVOICES) && (
-              <Link
-                href="/invoices/create"
-                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
-              >
-                <Plus className="h-4 w-4" />
-                Ajouter une nouvelle facture
-              </Link>
-            )}
+            {/* Laravel n'applique aucun gate à ce bouton (index.blade.php:21-22). */}
+            <Link
+              href="/invoices/create"
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+            >
+              <Plus className="h-4 w-4" />
+              Ajouter une nouvelle facture
+            </Link>
           </div>
         }
       />
@@ -702,19 +571,6 @@ export default function InvoicesPage() {
         </div>
       )}
 
-      {/* Modal confirmation suppression */}
-      <ConfirmModal
-        isOpen={deleteTarget !== null}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={() => {
-          if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
-        }}
-        title="Supprimer cette facture"
-        message="La suppression est irréversible. Voulez-vous vraiment supprimer cette facture ?"
-        confirmLabel="Supprimer"
-        confirmVariant="danger"
-        isLoading={deleteMutation.isPending}
-      />
     </div>
   );
 }

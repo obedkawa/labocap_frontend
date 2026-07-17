@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ConfirmModalProps {
@@ -11,6 +11,7 @@ interface ConfirmModalProps {
   title: string;
   message: string;
   confirmLabel?: string;
+  cancelLabel?: string;
   confirmVariant?: "danger" | "primary";
   isLoading?: boolean;
 }
@@ -22,6 +23,7 @@ export function ConfirmModal({
   title,
   message,
   confirmLabel = "Confirmer",
+  cancelLabel = "Annuler",
   confirmVariant = "danger",
   isLoading = false,
 }: ConfirmModalProps) {
@@ -105,7 +107,7 @@ export function ConfirmModal({
             disabled={isLoading}
             className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
           >
-            Annuler
+            {cancelLabel}
           </button>
           <button
             type="button"
@@ -116,27 +118,7 @@ export function ConfirmModal({
               confirmButtonClass
             )}
           >
-            {isLoading && (
-              <svg
-                className="h-4 w-4 animate-spin"
-                viewBox="0 0 24 24"
-                fill="none"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8v8H4z"
-                />
-              </svg>
-            )}
+            {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
             {confirmLabel}
           </button>
         </div>

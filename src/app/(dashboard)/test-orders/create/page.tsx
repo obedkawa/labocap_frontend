@@ -21,7 +21,7 @@ import {
 import type { AxiosError } from "axios";
 import { useState } from "react";
 
-import { UserPlus } from "lucide-react";
+import { UserPlus, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { AlertBox } from "@/components/ui/AlertBox";
 import { FormToggle } from "@/components/ui/FormToggle";
@@ -137,6 +137,9 @@ export default function TestOrderCreatePage() {
   const [referenceOrderOption, setReferenceOrderOption] =
     useState<TestOrderOption | null>(null);
 
+  // Pièce jointe (équivalent examen_file de Laravel) : téléversée après création.
+  const [examenFile, setExamenFile] = useState<File | null>(null);
+
   // Main form
   const {
     register,
@@ -231,7 +234,16 @@ export default function TestOrderCreatePage() {
   // --- Mutation création commande
   const createMutation = useMutation({
     mutationFn: (data: TestOrderRequest) => testOrdersApi.create(data),
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
+      // Téléverser la pièce jointe si un fichier a été choisi (le bon doit
+      // exister pour recevoir son archive).
+      if (examenFile) {
+        try {
+          await testOrdersApi.uploadArchive(res.data.id, examenFile);
+        } catch {
+          toast.error("Demande créée, mais échec de l'envoi de la pièce jointe");
+        }
+      }
       toast.success("Demande d'examen créée avec succès");
       router.push(`/test-orders/${res.data.id}/details`);
     },
@@ -301,10 +313,13 @@ export default function TestOrderCreatePage() {
 
     if (data.referenceHopital) payload.referenceHopital = data.referenceHopital;
     if (data.option !== undefined) payload.option = data.option;
+    // Examen de référence → colonne test_affiliate côté backend. Externe : texte
+    // libre. Interne : code de la demande référencée (comme Laravel).
     if (isImmunoExterne && data.examenReferenceInput)
-      payload.examenReferenceInput = data.examenReferenceInput;
-    if (isImmunoInterne && data.examenReferenceOrderId)
-      payload.examenReferenceInput = data.examenReferenceOrderId;
+      payload.testAffiliate = data.examenReferenceInput;
+    if (isImmunoInterne)
+      payload.testAffiliate =
+        referenceOrderOption?.order.code ?? referenceOrderOption?.label ?? "";
 
     createMutation.mutate(payload);
   };
@@ -352,7 +367,9 @@ export default function TestOrderCreatePage() {
 
       <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          <div className="grid grid-cols-1 gap-6">
+          {/* Disposition alignée sur Laravel : 2 colonnes en grand écran (md+),
+              empilé en petit écran. */}
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             {/* 1. Type d'examen */}
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-700">
@@ -384,7 +401,7 @@ export default function TestOrderCreatePage() {
               )}
             </div>
 
-            {/* 2. Contrat */}
+            {/* 2. Contrat — colonne droite de la 1re ligne (comme Laravel) */}
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-700">
                 Contrat <span className="text-red-500">*</span>
@@ -414,6 +431,62 @@ export default function TestOrderCreatePage() {
                 </p>
               )}
             </div>
+
+            {/* Examen de référence (conditionnel Immuno) — pleine largeur sous la
+                ligne Type/Contrat, exactement comme Laravel (col-md-12). */}
+            {isImmunoExterne && (
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 md:col-span-2">
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-medium text-gray-700">
+                    Examen de Référence
+                  </label>
+                  <input
+                    type="text"
+                    {...register("examenReferenceInput")}
+                    placeholder="Référence de l'examen externe..."
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  {errors.examenReferenceInput && (
+                    <p className="text-xs text-red-500">
+                      {errors.examenReferenceInput.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {isImmunoInterne && (
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 md:col-span-2">
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-medium text-gray-700">
+                    Demande d&apos;examen de référence
+                  </label>
+                  <Controller
+                    name="examenReferenceOrderId"
+                    control={control}
+                    render={({ field }) => (
+                      <RemoteSelectField
+                        id="examenReferenceOrderId"
+                        loadOptions={loadTestOrderReferences}
+                        value={field.value || null}
+                        onChange={(v, opt) => {
+                          field.onChange(v ?? "");
+                          setReferenceOrderOption(opt);
+                        }}
+                        selectedOption={referenceOrderOption}
+                        placeholder="Rechercher une demande de référence (code, patient)..."
+                        isClearable
+                      />
+                    )}
+                  />
+                  {errors.examenReferenceOrderId && (
+                    <p className="text-xs text-red-500">
+                      {errors.examenReferenceOrderId.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* 3. Patient */}
             <div className="flex flex-col gap-1">
@@ -544,8 +617,22 @@ export default function TestOrderCreatePage() {
               )}
             </div>
 
-            {/* 8. Cas urgent */}
-            <div className="flex flex-col gap-2">
+            {/* Pièce jointe — colonne droite de « Date prélèvement », comme Laravel. */}
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700">
+                Pièce jointe
+              </label>
+              <input
+                type="file"
+                onChange={(e) => setExamenFile(e.target.files?.[0] ?? null)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* 8. Cas urgent — ligne dédiée, colonne gauche (comme Laravel ;
+                l'emplacement de « Pièce jointe » reste vide, ce champ n'existant
+                pas dans ce formulaire). */}
+            <div className="flex flex-col gap-2 md:col-start-1">
               <label className="text-sm font-medium text-gray-700">
                 Cas urgent
               </label>
@@ -564,61 +651,6 @@ export default function TestOrderCreatePage() {
             </div>
           </div>
 
-          {/* Champs conditionnels Immuno */}
-          {isImmunoExterne && (
-            <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
-              <div className="flex flex-col gap-1">
-                <label className="text-sm font-medium text-gray-700">
-                  Examen de Référence
-                </label>
-                <input
-                  type="text"
-                  {...register("examenReferenceInput")}
-                  placeholder="Référence de l'examen externe..."
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-                {errors.examenReferenceInput && (
-                  <p className="text-xs text-red-500">
-                    {errors.examenReferenceInput.message}
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {isImmunoInterne && (
-            <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
-              <div className="flex flex-col gap-1">
-                <label className="text-sm font-medium text-gray-700">
-                  Demande d&apos;examen de référence
-                </label>
-                <Controller
-                  name="examenReferenceOrderId"
-                  control={control}
-                  render={({ field }) => (
-                    <RemoteSelectField
-                      id="examenReferenceOrderId"
-                      loadOptions={loadTestOrderReferences}
-                      value={field.value || null}
-                      onChange={(v, opt) => {
-                        field.onChange(v ?? "");
-                        setReferenceOrderOption(opt);
-                      }}
-                      selectedOption={referenceOrderOption}
-                      placeholder="Rechercher une demande de référence (code, patient)..."
-                      isClearable
-                    />
-                  )}
-                />
-                {errors.examenReferenceOrderId && (
-                  <p className="text-xs text-red-500">
-                    {errors.examenReferenceOrderId.message}
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
           {/* Boutons */}
           <div className="flex items-center justify-end gap-3 border-t border-gray-200 pt-4">
             <button
@@ -633,27 +665,7 @@ export default function TestOrderCreatePage() {
               disabled={createMutation.isPending}
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {createMutation.isPending && (
-                <svg
-                  className="h-4 w-4 animate-spin"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8v8H4z"
-                  />
-                </svg>
-              )}
+              {createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               Ajouter une nouvelle demande d&apos;examen
             </button>
           </div>

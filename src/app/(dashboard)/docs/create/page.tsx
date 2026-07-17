@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import type { AxiosError } from "axios";
 
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -147,6 +147,7 @@ export default function DocCreatePage() {
               disabled={createMutation.isPending}
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
             >
+              {createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               {createMutation.isPending ? "Enregistrement..." : "Créer le document"}
             </button>
           </div>

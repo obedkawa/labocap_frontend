@@ -58,7 +58,7 @@ const inputClass =
 type FieldDef = {
   key: string;
   label: string;
-  type?: "text" | "email" | "textarea" | "password" | "number" | "select";
+  type?: "text" | "email" | "textarea" | "password" | "number" | "select" | "image";
   full?: boolean;
   placeholder?: string;
   options?: { value: string; label: string }[];
@@ -117,30 +117,32 @@ const EMAIL_SERVICES = [
 const SMS_FIELDS: FieldDef[] = [
   { key: "api_sms", label: "Clé API SMS", placeholder: "clé API du fournisseur SMS" },
   { key: "link_api_sms", label: "Lien API SMS", placeholder: "https://…" },
-  { key: "api_key_ourvoice", label: "Clé OurVoice", type: "password", placeholder: "clé API OurVoice" },
+  { key: "key_ourvoice", label: "Clé OurVoice", type: "password", placeholder: "clé API OurVoice" },
   { key: "link_ourvoice_call", label: "Lien appel OurVoice", placeholder: "https://api.getourvoice.com/v1/calls" },
   { key: "link_ourvoice_sms", label: "Lien SMS OurVoice", placeholder: "https://api.getourvoice.com/v1/messages" },
 ];
 
-// Onglet Compte rendu → sous-onglet « Général »
+// Onglet Compte rendu → sous-onglet « Général » (réplique exacte du formulaire
+// Laravel settings/app/setting #general3 : footer, revue, entête (fichier),
+// préfixe, afficher la signature).
 const REPORT_FIELDS: FieldDef[] = [
-  { key: "report_footer", label: "Pied de page du compte rendu", type: "textarea", full: true },
-  { key: "report_review_title", label: "Titre de relecture", placeholder: "Ex : Relu par" },
+  { key: "report_footer", label: "Pied de page du rapport", type: "textarea", full: true, placeholder: "Pied de page du rapport" },
+  { key: "report_review_title", label: "Revue du rapport", placeholder: "Revue du rapport" },
+  { key: "entete", label: "Entete", type: "image", full: true },
   {
     key: "prefixe_code_demande_examen",
-    label: "Préfixe code demande d'examen",
-    placeholder: "Ex : DEM-",
+    label: "Prefixe code demande d'examen",
+    placeholder: "Prefixe code demande d'examen",
   },
   {
     key: "show_signator_invoice",
-    label: "Afficher le signataire sur la facture",
+    label: "Afficher la signature *",
     type: "select",
     options: [
-      { value: "OUI", label: "Oui" },
-      { value: "NON", label: "Non" },
+      { value: "OUI", label: "OUI" },
+      { value: "NON", label: "NON" },
     ],
   },
-  { key: "entete", label: "En-tête (texte)", type: "textarea", full: true },
 ];
 
 // Toutes les clés « texte » gérées par la page (pour le chargement initial)
@@ -408,7 +410,7 @@ export default function SettingsPage() {
               </Card>
             )}
 
-            {/* ---- Compte rendu ---- */}
+            {/* ---- Compte rendu (onglets Laravel : Général + Titre) ---- */}
             {tab === "report" && (
               <Card
                 title="Compte rendu"
@@ -569,7 +571,17 @@ function FieldsGrid({
 }) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      {fields.map((f) => (
+      {fields.map((f) =>
+        f.type === "image" ? (
+          <div key={f.key} className={f.full ? "sm:col-span-2" : ""}>
+            <ImageField
+              label={f.label}
+              value={values[f.key] ?? ""}
+              onChange={(v) => onChange(f.key, v)}
+              disabled={disabled}
+            />
+          </div>
+        ) : (
         <div
           key={f.key}
           className={`flex flex-col gap-1 ${f.full ? "sm:col-span-2" : ""}`}
@@ -607,7 +619,8 @@ function FieldsGrid({
             />
           )}
         </div>
-      ))}
+        )
+      )}
     </div>
   );
 }
@@ -1024,19 +1037,23 @@ function TitleReportsSection({ canManage }: { canManage: boolean }) {
         </label>
         <input
           value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
-          className={inputClass}
+          onChange={(e) => setForm({ ...form, name: e.target.value.toUpperCase() })}
+          className={`${inputClass} uppercase`}
+          required
         />
       </div>
-      <label className="flex items-center gap-2 text-sm text-gray-700">
-        <input
-          type="checkbox"
-          checked={!!form.isDefault}
-          onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
-          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-        />
-        Titre par défaut
-      </label>
+      <div className="flex flex-col gap-1">
+        <label className="text-sm font-medium text-gray-700">Par défaut</label>
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            checked={!!form.isDefault}
+            onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
+            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          {form.isDefault ? "oui" : "non"}
+        </label>
+      </div>
     </div>
   );
 
@@ -1050,7 +1067,7 @@ function TitleReportsSection({ canManage }: { canManage: boolean }) {
             className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition-all hover:bg-blue-700 hover:shadow-md"
           >
             <Plus className="h-4 w-4" />
-            Ajouter un titre
+            Ajouter un nouveau titre
           </button>
         </div>
       )}
@@ -1122,11 +1139,14 @@ function TitleReportsSection({ canManage }: { canManage: boolean }) {
       <CrudModal
         isOpen={createOpen}
         onClose={() => setCreateOpen(false)}
-        title="Ajouter un titre"
+        title="Ajouter un nouveau titre"
         onSubmit={() => createMut.mutate(form)}
-        submitLabel="Ajouter"
+        submitLabel="Ajouter un nouveau titre"
         isSubmitting={createMut.isPending}
       >
+        <div className="mb-3 text-right text-xs text-gray-500">
+          <span className="text-red-500">*</span> champs obligatoires
+        </div>
         {titleForm}
       </CrudModal>
 
@@ -1135,7 +1155,7 @@ function TitleReportsSection({ canManage }: { canManage: boolean }) {
         onClose={() => setEditing(null)}
         title="Modifier le titre"
         onSubmit={() => editing && updateMut.mutate({ id: editing.id, d: form })}
-        submitLabel="Enregistrer"
+        submitLabel="Mettre à jour"
         isSubmitting={updateMut.isPending}
       >
         {titleForm}

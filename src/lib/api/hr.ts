@@ -1,3 +1,5 @@
+import { toast } from "sonner";
+
 import apiClient from "./client";
 import type { PageResponse } from "@/types/api";
 
@@ -17,6 +19,13 @@ export interface Employee {
   userId?: string;
   branchId?: string;
   createdAt?: string;
+  // Champs profil affichés par la fiche Laravel (Adresse, naissance, CNSS).
+  // Absents de la base migrée / du DTO backend → rendus « Non renseigné ».
+  address?: string;
+  dateOfBirth?: string;
+  placeOfBirth?: string;
+  cnssNumber?: string;
+  photoUrl?: string;
 }
 
 export interface EmployeeRequest {
@@ -186,5 +195,23 @@ export const hrApi = {
     apiClient.put<EmployeeDocument>(`/employee-documents/${id}`, data),
   deleteDocument: (id: string) =>
     apiClient.delete(`/employee-documents/${id}`),
-  downloadDocumentUrl: (id: string) => `/employee-documents/${id}/download`,
+
+  /** Télécharge le fichier d'un document employé (endpoint authentifié → blob). */
+  downloadDocument: async (id: string, filename?: string): Promise<void> => {
+    try {
+      const res = await apiClient.get(`/employee-documents/${id}/download`, {
+        responseType: "blob",
+      });
+      const url = window.URL.createObjectURL(res.data as Blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename || "document";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Échec du téléchargement du fichier");
+    }
+  },
 };

@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Eye, Pencil, FileText, Trash2, Plus, Printer } from "lucide-react";
+import { Eye, Pencil, FileText, Trash2, Plus, Printer, Loader2 } from "lucide-react";
 import type { AxiosError } from "axios";
 import type { ColumnDef } from "@tanstack/react-table";
 
@@ -165,7 +165,7 @@ function ActionButtons({
           className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
           title="Créer la facture"
         >
-          <Printer className="h-3.5 w-3.5" />
+          {creatingInvoice ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Printer className="h-3.5 w-3.5" />}
         </button>
       ) : null}
 
@@ -401,7 +401,7 @@ export default function TestOrdersImmunoPage() {
       id: "urgent",
       cell: ({ row }) =>
         row.original.isUrgent ? (
-          <span className="inline-flex items-center rounded-full bg-red-600 px-2 py-0.5 text-xs font-medium text-white">
+          <span className="inline-flex items-center rounded-full bg-red-700 px-2 py-0.5 text-xs font-medium text-white">
             Urgent
           </span>
         ) : (

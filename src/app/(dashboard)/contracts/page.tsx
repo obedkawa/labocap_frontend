@@ -6,9 +6,10 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Pencil, Trash2, CheckCircle, XCircle, Eye } from "lucide-react";
+import { Pencil, Trash2, CheckCircle, XCircle, Eye, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { LimitedSelect as Select } from "@/components/ui/LimitedSelect";
+import { translateApiError } from "@/lib/api/errorMessages";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { AxiosError } from "axios";
 import type { UseFormReturn } from "react-hook-form";
@@ -37,34 +38,47 @@ import { clientsApi } from "@/lib/api/clients";
 // Constantes
 // ---------------------------------------------------------------------------
 
+// Statuts proposés au filtre de la liste (calque Laravel : Tous / ACTIF / INACTIF / CLÔTURER).
 const CONTRACT_STATUSES: { value: ContractStatus; label: string }[] = [
   { value: "ACTIF", label: "Actif" },
   { value: "INACTIF", label: "Inactif" },
   { value: "CLOTURE", label: "Clôturé" },
 ];
 
+// Statuts modifiables depuis le formulaire d'édition (calque Laravel : Actif / Inactif).
+const EDIT_STATUSES = [
+  { value: "ACTIF", label: "Actif" },
+  { value: "INACTIF", label: "Inactif" },
+];
+
+// Types de contrat — valeurs identiques à l'app Laravel (contrats/create.blade.php).
 const CONTRACT_TYPES = [
-  { value: "HOSPITAL", label: "Hôpital" },
-  { value: "CLINIQUE", label: "Clinique" },
-  { value: "ENTREPRISE", label: "Entreprise" },
-  { value: "AUTRE", label: "Autre" },
+  { value: "ORDINAIRE", label: "Ordinaire" },
+  { value: "ASSURANCE", label: "Assurance" },
+  { value: "CAMPAGNE", label: "Campagne" },
 ];
 
 // ---------------------------------------------------------------------------
-// Zod schema — aligné sur ContratRequestDto
+// Zod schema — calque le formulaire Laravel (contrats/create.blade.php) :
+// name, type, nbr_examen et description obligatoires ; le client n'est requis
+// que lorsque la facturation groupée est activée (la facture unique s'appuie
+// sur le client du contrat).
 // ---------------------------------------------------------------------------
 
-const contractSchema = z.object({
-  name: z.string().optional(),
-  type: z.string().optional(),
-  description: z.string().optional(),
-  clientId: z.string().optional(),
-  startDate: z.string().min(1, { message: "La date de début est requise" }),
-  endDate: z.string().optional(),
-  nbrTests: z.string().optional(),
-  status: z.enum(["ACTIF", "INACTIF", "CLOTURE"] as const).optional(),
-  invoiceUnique: z.boolean().optional(),
-});
+const contractSchema = z
+  .object({
+    name: z.string().min(1, { message: "Le nom du contrat est requis" }),
+    type: z.string().min(1, { message: "Le type est requis" }),
+    description: z.string().min(1, { message: "La description est requise" }),
+    clientId: z.string().optional(),
+    nbrTests: z.string().min(1, { message: "Le nombre d'examens est requis" }),
+    status: z.enum(["ACTIF", "INACTIF", "CLOTURE"] as const).optional(),
+    invoiceUnique: z.boolean().optional(),
+  })
+  .refine((v) => !v.invoiceUnique || !!v.clientId, {
+    message: "Sélectionnez le client du contrat pour la facturation groupée",
+    path: ["clientId"],
+  });
 
 type ContractFormValues = z.infer<typeof contractSchema>;
 
@@ -75,14 +89,20 @@ type ContractFormValues = z.infer<typeof contractSchema>;
 const inputClass =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
 
-function buildPayload(values: ContractFormValues): ContractRequest {
+// La `startDate` n'existe pas dans le formulaire Laravel : on la renseigne
+// automatiquement (date du jour à la création, valeur existante à l'édition)
+// pour satisfaire le contrat de l'API sans l'exposer à l'utilisateur.
+// Le client n'est transmis que si la facturation groupée est active.
+function buildPayload(
+  values: ContractFormValues,
+  startDate: string
+): ContractRequest {
   return {
-    name: values.name || undefined,
-    type: values.type || undefined,
-    description: values.description || undefined,
-    clientId: values.clientId || undefined,
-    startDate: values.startDate,
-    endDate: values.endDate || undefined,
+    name: values.name,
+    type: values.type,
+    description: values.description,
+    clientId: values.invoiceUnique ? values.clientId || undefined : undefined,
+    startDate,
     nbrTests:
       values.nbrTests === "" || values.nbrTests === undefined
         ? undefined
@@ -90,6 +110,11 @@ function buildPayload(values: ContractFormValues): ContractRequest {
     status: values.status,
     invoiceUnique: values.invoiceUnique,
   };
+}
+
+// Date du jour au format ISO (YYYY-MM-DD) pour la `startDate` implicite.
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 // ---------------------------------------------------------------------------
@@ -154,7 +179,7 @@ export default function ContractsPage() {
     },
     onError: (err: AxiosError) => {
       const msg =
-        (err.response?.data as { message?: string })?.message ??
+        translateApiError((err.response?.data as { message?: string })?.message) ??
         "Une erreur est survenue";
       toast.error(msg);
     },
@@ -170,7 +195,7 @@ export default function ContractsPage() {
     },
     onError: (err: AxiosError) => {
       const msg =
-        (err.response?.data as { message?: string })?.message ??
+        translateApiError((err.response?.data as { message?: string })?.message) ??
         "Une erreur est survenue";
       toast.error(msg);
     },
@@ -186,7 +211,7 @@ export default function ContractsPage() {
     },
     onError: (err: AxiosError) => {
       const msg =
-        (err.response?.data as { message?: string })?.message ??
+        translateApiError((err.response?.data as { message?: string })?.message) ??
         "Une erreur est survenue";
       toast.error(msg);
     },
@@ -198,7 +223,11 @@ export default function ContractsPage() {
       toast.success("Contrat activé");
       queryClient.invalidateQueries({ queryKey: ["contracts"] });
     },
-    onError: () => toast.error("Erreur lors de l'activation"),
+    onError: (err: AxiosError) =>
+      toast.error(
+        translateApiError((err.response?.data as { message?: string })?.message) ??
+          "Erreur lors de l'activation"
+      ),
   });
 
   const closeMutation = useMutation({
@@ -207,7 +236,11 @@ export default function ContractsPage() {
       toast.success("Contrat clôturé");
       queryClient.invalidateQueries({ queryKey: ["contracts"] });
     },
-    onError: () => toast.error("Erreur lors de la clôture"),
+    onError: (err: AxiosError) =>
+      toast.error(
+        translateApiError((err.response?.data as { message?: string })?.message) ??
+          "Erreur lors de la clôture"
+      ),
   });
 
   // ---- Forms ---------------------------------------------------------------
@@ -219,11 +252,9 @@ export default function ContractsPage() {
       type: "",
       description: "",
       clientId: "",
-      startDate: "",
-      endDate: "",
-      nbrTests: "",
+      nbrTests: "-1",
       status: "INACTIF",
-      invoiceUnique: true,
+      invoiceUnique: false,
     },
   });
 
@@ -240,11 +271,9 @@ export default function ContractsPage() {
       type: contract.type ?? "",
       description: contract.description ?? "",
       clientId: contract.clientId ?? "",
-      startDate: contract.startDate,
-      endDate: contract.endDate ?? "",
-      nbrTests: contract.nbrTests != null ? String(contract.nbrTests) : "",
+      nbrTests: contract.nbrTests != null ? String(contract.nbrTests) : "-1",
       status: contract.status,
-      invoiceUnique: contract.invoiceUnique ?? true,
+      invoiceUnique: contract.invoiceUnique ?? false,
     });
     setEditOpen(true);
   }
@@ -255,12 +284,15 @@ export default function ContractsPage() {
   }
 
   function onCreateSubmit(values: ContractFormValues) {
-    createMutation.mutate(buildPayload(values));
+    createMutation.mutate(buildPayload(values, today()));
   }
 
   function onEditSubmit(values: ContractFormValues) {
     if (!selected) return;
-    updateMutation.mutate({ id: selected.id, data: buildPayload(values) });
+    updateMutation.mutate({
+      id: selected.id,
+      data: buildPayload(values, selected.startDate ?? today()),
+    });
   }
 
   // ---- Columns -------------------------------------------------------------
@@ -331,7 +363,7 @@ export default function ContractsPage() {
                 className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
                 aria-label="Activer"
               >
-                <CheckCircle className="h-3.5 w-3.5" />
+                {activateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />}
                 Activer
               </button>
             )}
@@ -342,7 +374,7 @@ export default function ContractsPage() {
                 className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-gray-600 text-white hover:bg-gray-700 transition-colors disabled:opacity-50"
                 aria-label="Clôturer"
               >
-                <XCircle className="h-3.5 w-3.5" />
+                {closeMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
                 Clôturer
               </button>
             )}
@@ -387,7 +419,7 @@ export default function ContractsPage() {
               }}
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
             >
-              Ajouter un contrat
+              Ajouter un nouveau contrat
             </button>
           ) : undefined
         }
@@ -449,7 +481,7 @@ export default function ContractsPage() {
         title="Ajouter un nouveau contrat"
         size="lg"
         onSubmit={createForm.handleSubmit(onCreateSubmit)}
-        submitLabel="Ajouter un contrat"
+        submitLabel="Ajouter un nouveau contrat"
         isSubmitting={createMutation.isPending}
       >
         <ContractForm
@@ -463,16 +495,17 @@ export default function ContractsPage() {
       <CrudModal
         isOpen={editOpen}
         onClose={() => setEditOpen(false)}
-        title="Modifier le contrat"
+        title="Modifier les informations du contrat"
         size="lg"
         onSubmit={editForm.handleSubmit(onEditSubmit)}
-        submitLabel="Modifier"
+        submitLabel="Mettre à jour"
         isSubmitting={updateMutation.isPending}
       >
         <ContractForm
           form={editForm}
           clientOptions={clientOptions}
           onClientInputChange={setClientInputValue}
+          isEdit
         />
       </CrudModal>
 
@@ -509,12 +542,18 @@ interface ContractFormProps {
   form: UseFormReturn<ContractFormValues>;
   clientOptions: SelectOption[];
   onClientInputChange: (value: string) => void;
+  /** Le formulaire d'édition ajoute le champ Statut (calque Laravel edit.blade). */
+  isEdit?: boolean;
 }
 
+// Formulaire calqué sur l'app Laravel (contrats/create.blade.php & edit.blade.php) :
+// Nom*, Type*, [Statut* en édition], Nombre d'examens*, Facturation groupée
+// (révèle le Client), Description*.
 function ContractForm({
   form,
   clientOptions,
   onClientInputChange,
+  isEdit = false,
 }: ContractFormProps) {
   const {
     register,
@@ -528,7 +567,11 @@ function ContractForm({
 
   return (
     <div className="grid grid-cols-1 gap-4">
-      <FormField label="Nom du contrat" error={errors.name?.message} className="sm:col-span-2">
+      <p className="text-right text-xs text-gray-500">
+        <span className="text-red-500">*</span> champs obligatoires
+      </p>
+
+      <FormField label="Nom du contrat" required error={errors.name?.message}>
         <input
           type="text"
           {...register("name")}
@@ -537,139 +580,120 @@ function ContractForm({
         />
       </FormField>
 
-      <FormField label="Client" error={errors.clientId?.message} className="sm:col-span-2">
-        <Controller
-          name="clientId"
-          control={control}
-          render={({ field }) => (
-            <Select<SelectOption>
-              instanceId="contract-client"
-              inputId="clientId"
-              options={clientOptions}
-              value={
-                clientOptions.find((o) => o.value === field.value) ?? null
-              }
-              onChange={(option: SingleValue<SelectOption>) =>
-                field.onChange(option?.value ?? "")
-              }
-              onInputChange={onClientInputChange}
-              placeholder="Rechercher un client..."
-              isClearable
-              noOptionsMessage={() => "Aucun client trouvé"}
-              classNamePrefix="react-select"
-              styles={{
-                control: (base, state) => ({
-                  ...base,
-                  minHeight: "38px",
-                  borderRadius: "0.375rem",
-                  borderColor: errors.clientId
-                    ? "#fca5a5"
-                    : state.isFocused
-                    ? "#3b82f6"
-                    : "#d1d5db",
-                  boxShadow: state.isFocused
-                    ? "0 0 0 1px #3b82f6"
-                    : "none",
-                  fontSize: "0.875rem",
-                }),
-                option: (base, state) => ({
-                  ...base,
-                  fontSize: "0.875rem",
-                  backgroundColor: state.isSelected
-                    ? "#2563eb"
-                    : state.isFocused
-                    ? "#eff6ff"
-                    : "white",
-                  color: state.isSelected ? "white" : "#374151",
-                }),
-                placeholder: (base) => ({
-                  ...base,
-                  color: "#9ca3af",
-                  fontSize: "0.875rem",
-                }),
-                singleValue: (base) => ({
-                  ...base,
-                  fontSize: "0.875rem",
-                }),
-                menu: (base) => ({
-                  ...base,
-                  zIndex: 50,
-                }),
-              }}
-            />
-          )}
-        />
-      </FormField>
-
       <RHFSelect
         control={control}
         name="type"
         label="Type"
+        required
         options={CONTRACT_TYPES}
-        placeholder="Sélectionner un type..."
+        placeholder="Sélectionner le type de contrat"
         error={errors.type?.message}
-        isClearable
       />
 
-      <FormField label="Nombre de tests" error={errors.nbrTests?.message}>
+      {isEdit && (
+        <RHFSelect
+          control={control}
+          name="status"
+          label="Statut"
+          required
+          options={EDIT_STATUSES}
+          placeholder="Sélectionner le statut"
+          error={errors.status?.message}
+        />
+      )}
+
+      <FormField
+        label="Nombre d'examens"
+        required
+        error={errors.nbrTests?.message}
+        hint="-1 pour un nombre illimité"
+      >
         <input
           type="number"
           {...register("nbrTests")}
-          placeholder="0"
-          min={0}
+          min={-1}
           className={inputClass}
         />
       </FormField>
 
-      <FormField
-        label="Date de début"
-        required
-        error={errors.startDate?.message}
-      >
-        <input
-          type="date"
-          {...register("startDate")}
-          className={inputClass}
-        />
-      </FormField>
-
-      <FormField label="Date de fin" error={errors.endDate?.message}>
-        <input type="date" {...register("endDate")} className={inputClass} />
-      </FormField>
-
-      <RHFSelect
-        control={control}
-        name="status"
-        label="Statut"
-        options={CONTRACT_STATUSES}
-        placeholder="Sélectionner un statut..."
-        error={errors.status?.message}
-      />
-
-      <FormField label="Facturation unique" error={errors.invoiceUnique?.message}>
-        <button
-          type="button"
-          onClick={() => setValue("invoiceUnique", !invoiceUnique)}
-          className={`inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-medium border transition-colors ${
-            invoiceUnique
-              ? "bg-blue-50 text-blue-700 border-blue-300"
-              : "bg-gray-50 text-gray-600 border-gray-300"
-          }`}
+      <FormField label="Facturation groupée" error={errors.invoiceUnique?.message}>
+        <NativeSelect
+          value={invoiceUnique ? "oui" : "non"}
+          onChange={(e) => setValue("invoiceUnique", e.target.value === "oui")}
         >
-          {invoiceUnique ? "Oui" : "Non"}
-        </button>
+          <option value="non">Non</option>
+          <option value="oui">Oui</option>
+        </NativeSelect>
       </FormField>
 
-      <div className="sm:col-span-2">
-        <FormField label="Description" error={errors.description?.message}>
-          <textarea
-            {...register("description")}
-            placeholder="Description du contrat..."
-            rows={3}
-            className={inputClass}
+      {/* Le client n'apparaît que lorsque la facturation groupée est active
+          (calque Laravel : le bloc #show-client est masqué par défaut). */}
+      {invoiceUnique && (
+        <FormField label="Client" required error={errors.clientId?.message}>
+          <Controller
+            name="clientId"
+            control={control}
+            render={({ field }) => (
+              <Select<SelectOption>
+                instanceId="contract-client"
+                inputId="clientId"
+                options={clientOptions}
+                value={
+                  clientOptions.find((o) => o.value === field.value) ?? null
+                }
+                onChange={(option: SingleValue<SelectOption>) =>
+                  field.onChange(option?.value ?? "")
+                }
+                onInputChange={onClientInputChange}
+                placeholder="Sélectionner le client du contrat"
+                isClearable
+                noOptionsMessage={() => "Aucun client trouvé"}
+                classNamePrefix="react-select"
+                styles={{
+                  control: (base, state) => ({
+                    ...base,
+                    minHeight: "38px",
+                    borderRadius: "0.375rem",
+                    borderColor: errors.clientId
+                      ? "#fca5a5"
+                      : state.isFocused
+                      ? "#3b82f6"
+                      : "#d1d5db",
+                    boxShadow: state.isFocused ? "0 0 0 1px #3b82f6" : "none",
+                    fontSize: "0.875rem",
+                  }),
+                  option: (base, state) => ({
+                    ...base,
+                    fontSize: "0.875rem",
+                    backgroundColor: state.isSelected
+                      ? "#2563eb"
+                      : state.isFocused
+                      ? "#eff6ff"
+                      : "white",
+                    color: state.isSelected ? "white" : "#374151",
+                  }),
+                  placeholder: (base) => ({
+                    ...base,
+                    color: "#9ca3af",
+                    fontSize: "0.875rem",
+                  }),
+                  singleValue: (base) => ({ ...base, fontSize: "0.875rem" }),
+                  menu: (base) => ({ ...base, zIndex: 50 }),
+                }}
+              />
+            )}
           />
         </FormField>
-      </div>
+      )}
+
+      <FormField label="Description" required error={errors.description?.message}>
+        <textarea
+          {...register("description")}
+          placeholder="Brève description du contrat"
+          rows={3}
+          className={inputClass}
+        />
+      </FormField>
     </div>
   );
 }

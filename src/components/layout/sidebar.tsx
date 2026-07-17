@@ -37,6 +37,8 @@ import { useHydrated } from "@/hooks/useHydrated";
 import { useAuthStore } from "@/stores/auth.store";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { testOrdersApi } from "@/lib/api/testOrders";
+import { inventoryApi } from "@/lib/api/inventory";
+import { refundsApi } from "@/lib/api/refunds";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -243,6 +245,22 @@ export function Sidebar() {
     refetchOnWindowFocus: false,
   });
 
+  // Badge « Stocks » : articles ayant atteint le stock minimum (getnbrStockMinim).
+  const { data: stockMinimumCount } = useQuery({
+    queryKey: ["stock-minimum-count"],
+    queryFn: () => inventoryApi.countStockMinimum().then((r) => r.data.count),
+    enabled: can(PERMISSIONS.VIEW_ARTICLES),
+    refetchOnWindowFocus: false,
+  });
+
+  // Badge « Remboursements » : demandes en attente (getnbrRefundRequestPending).
+  const { data: refundPendingCount } = useQuery({
+    queryKey: ["refund-pending-count"],
+    queryFn: () => refundsApi.countPending().then((r) => r.data.count),
+    enabled: can(PERMISSIONS.VIEW_REFUNDS),
+    refetchOnWindowFocus: false,
+  });
+
   const collapsed = sidebarCollapsed;
 
   // Logo + nom du labo depuis les paramètres (repli sur le défaut si absent).
@@ -368,20 +386,21 @@ export function Sidebar() {
         {can(PERMISSIONS.VIEW_INVOICES) && (
           <CollapseItem icon={<Receipt className="w-5 h-5" />} label="Factures" collapsed={collapsed}>
             <SubItem href="/invoices" label="Toutes les Factures" />
-            {can(PERMISSIONS.CREATE_INVOICES) && <SubItem href="/invoices/create" label="Créer" />}
-            {/* "Rapports" et "Paramètre" : permission view-setting-invoice (cohérent avec Laravel) */}
-            {can(PERMISSIONS.VIEW_SETTING_INVOICE) && <SubItem href="/invoices/business" label="Rapports" />}
-            {can(PERMISSIONS.VIEW_SETTING_INVOICE) && <SubItem href="/invoices/settings" label="Paramètre" />}
+            <SubItem href="/invoices/create" label="Créer" />
+            {/* NB : « Rapports » et « Paramètre » sont volontairement absents, à la
+                demande du métier — écart assumé vis-à-vis de Laravel (app2.blade.php),
+                qui les expose sous permission view-setting-invoice. Les routes
+                /invoices/business et /invoices/settings restent accessibles par URL. */}
           </CollapseItem>
         )}
 
         {/* Caisses */}
         {can(PERMISSIONS.VIEW_CASHBOXES) && (
           <CollapseItem icon={<DollarSign className="w-5 h-5" />} label="Caisses" collapsed={collapsed}>
-            <SubItem href="/cashbox" label="Caisse de vente" />
+            <SubItem href="/cashbox/vente" label="Caisse de vente" />
             <SubItem href="/cashbox/depense" label="Caisse de dépense" />
-            <SubItem href="/cashbox/tickets" label="Bon de caisse" />
-            <SubItem href="/cashbox/sessions" label="Ouverture et fermeture" />
+            <SubItem href="/cashbox/ticket" label="Bon de caisse" />
+            <SubItem href="/cashbox/cashbox-daily" label="Ouverture et fermeture" />
           </CollapseItem>
         )}
 
@@ -402,8 +421,15 @@ export function Sidebar() {
 
         {/* Stocks */}
         {can(PERMISSIONS.VIEW_ARTICLES) && (
-          <CollapseItem icon={<Package className="w-5 h-5" />} label="Stocks" collapsed={collapsed}>
-            <SubItem href="/inventory/movements" label="Historique des stocks" />
+          <CollapseItem
+            icon={<Package className="w-5 h-5" />}
+            label="Stocks"
+            collapsed={collapsed}
+            badge={stockMinimumCount ?? 0}
+          >
+            {can(PERMISSIONS.VIEW_MOVEMENTS) && (
+              <SubItem href="/inventory/movements" label="Historique des stocks" />
+            )}
             <SubItem href="/inventory/articles" label="Tous les articles" />
             <SubItem href="/inventory/units" label="Unité de mesure" />
           </CollapseItem>
@@ -413,22 +439,21 @@ export function Sidebar() {
         {can(PERMISSIONS.VIEW_SUPPLIERS) && (
           <CollapseItem icon={<Truck className="w-5 h-5" />} label="Fournisseurs" collapsed={collapsed}>
             <SubItem href="/suppliers" label="Tous les fournisseurs" />
-            {can(PERMISSIONS.MANAGE_SETTINGS) && (
-              <SubItem href="/suppliers/categories" label="Catégories" />
-            )}
+            <SubItem href="/suppliers/categories" label="Catégories" />
           </CollapseItem>
         )}
 
         {/* Remboursements */}
         {can(PERMISSIONS.VIEW_REFUNDS) && (
-          <CollapseItem icon={<RefreshCw className="w-5 h-5" />} label="Remboursements" collapsed={collapsed}>
+          <CollapseItem
+            icon={<RefreshCw className="w-5 h-5" />}
+            label="Remboursements"
+            collapsed={collapsed}
+            badge={refundPendingCount ?? 0}
+          >
             <SubItem href="/refunds" label="Historiques" />
-            {can(PERMISSIONS.MANAGE_REFUNDS) && (
-              <SubItem href="/refunds?new=1" label="Ajouter" />
-            )}
-            {can(PERMISSIONS.MANAGE_REFUNDS) && (
-              <SubItem href="/refunds/settings" label="Paramètres" />
-            )}
+            <SubItem href="/refunds/create" label="Ajouter" />
+            <SubItem href="/refunds/settings" label="Paramètres" />
           </CollapseItem>
         )}
 
@@ -465,9 +490,12 @@ export function Sidebar() {
 
         {can(PERMISSIONS.VIEW_EMPLOYEES) && (
           <CollapseItem icon={<Users2 className="w-5 h-5" />} label="Equipes" collapsed={collapsed}>
+            {/* Noms calqués sur le menu Laravel (layouts/app2 : EQUIPES) :
+                Tous les employés / Demande de congé / Toutes les demandes.
+                Laravel n'a aucune entrée « Paie » (la paie vit dans la fiche employé). */}
             <SubItem href="/hr/employees" label="Tous les employés" />
-            {can(PERMISSIONS.MANAGE_TIMEOFF) && <SubItem href="/hr/timeoff" label="Congés" />}
-            {can(PERMISSIONS.MANAGE_PAYROLL) && <SubItem href="/hr/payroll" label="Paie" />}
+            {can(PERMISSIONS.MANAGE_TIMEOFF) && <SubItem href="/hr/timeoff/nouvelle" label="Demande de congé" />}
+            {can(PERMISSIONS.MANAGE_TIMEOFF) && <SubItem href="/hr/timeoff" label="Toutes les demandes" />}
           </CollapseItem>
         )}
 

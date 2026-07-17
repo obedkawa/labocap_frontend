@@ -12,7 +12,7 @@ import type { AxiosError } from "axios";
 import type { UseFormReturn } from "react-hook-form";
 
 import { PageHeader } from "@/components/ui/PageHeader";
-import { RHFSelect } from "@/components/ui/RHFSelect";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 import { DataTable } from "@/components/common/DataTable";
 import { CrudModal } from "@/components/common/CrudModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
@@ -22,41 +22,46 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import {
   suppliersApi,
+  supplierCategoriesApi,
   type Supplier,
+  type SupplierCategory,
   type SupplierRequest,
 } from "@/lib/api/suppliers";
-import apiClient from "@/lib/api/client";
 
 // ---------------------------------------------------------------------------
-// Zod schema
+// Zod schema — calque `suppliers/create.blade.php` : Nom, Téléphone et
+// Catégorie fournisseur sont obligatoires ; Email, Addresse et Note libres.
 // ---------------------------------------------------------------------------
 
 const supplierSchema = z.object({
   name: z.string().min(1, "Le nom est requis"),
-  phone: z.string().optional(),
+  phone: z.string().min(1, "Le téléphone est requis"),
   email: z.string().email("Email invalide").optional().or(z.literal("")),
   address: z.string().optional(),
+  categoryId: z.string().min(1, "La catégorie fournisseur est requise"),
   information: z.string().optional(),
-  categoryId: z.string().optional(),
 });
 
 type SupplierFormValues = z.infer<typeof supplierSchema>;
 
 // ---------------------------------------------------------------------------
-// Helper
+// Helpers
 // ---------------------------------------------------------------------------
 
 const inputClass =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
 
+const actionBtn =
+  "inline-flex h-8 w-9 items-center justify-center rounded-md text-white transition-colors";
+
 function buildPayload(values: SupplierFormValues): SupplierRequest {
   return {
     name: values.name,
-    phone: values.phone || undefined,
+    phone: values.phone,
     email: values.email || undefined,
     address: values.address || undefined,
     information: values.information || undefined,
-    categoryId: values.categoryId || undefined,
+    categoryId: values.categoryId,
   };
 }
 
@@ -71,79 +76,74 @@ export default function SuppliersPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(
-    null
-  );
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
 
   // ---- Queries & Mutations --------------------------------------------
 
   const { data, isLoading } = useQuery({
     queryKey: ["suppliers"],
-    queryFn: () => suppliersApi.findAll().then((r) => r.data),
+    // Laravel affiche la liste complète (latest()->get()) : sans `size`, l'API
+    // plafonne à 20 et la pagination cliente masquerait le reste.
+    queryFn: () => suppliersApi.findAll({ size: 200 }).then((r) => r.data),
   });
 
-  const { data: categories } = useQuery({
+  const { data: categories = [] } = useQuery<SupplierCategory[]>({
     queryKey: ["supplier-categories"],
-    queryFn: () =>
-      apiClient
-        .get<Array<{ id: string; name: string }>>("/supplier-categories")
-        .then((r) => r.data),
+    queryFn: () => supplierCategoriesApi.findAll().then((r) => r.data),
   });
 
   const suppliers: Supplier[] = data?.content ?? [];
 
+  function apiError(err: AxiosError) {
+    toast.error(
+      (err.response?.data as { message?: string })?.message ??
+        "Échec de l'enregistrement ! ",
+    );
+  }
+
+  function invalidate() {
+    queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+  }
+
   const createMutation = useMutation({
     mutationFn: (payload: SupplierRequest) => suppliersApi.create(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
-      queryClient.invalidateQueries({ queryKey: ["suppliers-list"] });
-      toast.success("Fournisseur créé");
+      invalidate();
+      toast.success("Un Fournisseur enregistré ! ");
       setCreateOpen(false);
       createForm.reset();
     },
-    onError: (err: AxiosError) => {
-      const msg =
-        (err.response?.data as { message?: string })?.message ??
-        "Une erreur est survenue";
-      toast.error(msg);
-    },
+    onError: apiError,
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: SupplierRequest }) =>
       suppliersApi.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
-      queryClient.invalidateQueries({ queryKey: ["suppliers-list"] });
-      toast.success("Fournisseur modifié");
+      invalidate();
+      toast.success("Les information d'un fournisseur ont été mis à jour ! ");
       setEditOpen(false);
     },
-    onError: (err: AxiosError) => {
-      const msg =
-        (err.response?.data as { message?: string })?.message ??
-        "Une erreur est survenue";
-      toast.error(msg);
-    },
+    onError: apiError,
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => suppliersApi.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
-      queryClient.invalidateQueries({ queryKey: ["suppliers-list"] });
-      toast.success("Fournisseur supprimé");
+      invalidate();
+      toast.success("    Un élement a été supprimé ! ");
       setDeleteOpen(false);
       setSelectedSupplier(null);
     },
     onError: (err: AxiosError) => {
-      const msg =
+      toast.error(
         (err.response?.data as { message?: string })?.message ??
-        "Une erreur est survenue";
-      toast.error(msg);
+          "Impossible de supprimer cet élément !  Celui-ci est lié à d'autres éléments. Pour effectuer cette suppression, vous devez d'abord supprimer ou mettre à jour les éléments liés dans d'autres tables.",
+      );
     },
   });
 
-  // ---- Forms ---------------------------------------------------------
+  // ---- Forms --------------------------------------------------------
 
   const createForm = useForm<SupplierFormValues>({
     resolver: zodResolver(supplierSchema),
@@ -152,16 +152,14 @@ export default function SuppliersPage() {
       phone: "",
       email: "",
       address: "",
-      information: "",
       categoryId: "",
+      information: "",
     },
   });
 
   const editForm = useForm<SupplierFormValues>({
     resolver: zodResolver(supplierSchema),
   });
-
-  // ---- Handlers ------------------------------------------------------
 
   function openEdit(supplier: Supplier) {
     setSelectedSupplier(supplier);
@@ -170,15 +168,10 @@ export default function SuppliersPage() {
       phone: supplier.phone ?? "",
       email: supplier.email ?? "",
       address: supplier.address ?? "",
-      information: supplier.information ?? "",
       categoryId: supplier.categoryId ?? "",
+      information: supplier.information ?? "",
     });
     setEditOpen(true);
-  }
-
-  function openDelete(supplier: Supplier) {
-    setSelectedSupplier(supplier);
-    setDeleteOpen(true);
   }
 
   function onCreateSubmit(values: SupplierFormValues) {
@@ -187,7 +180,10 @@ export default function SuppliersPage() {
 
   function onEditSubmit(values: SupplierFormValues) {
     if (!selectedSupplier) return;
-    updateMutation.mutate({ id: selectedSupplier.id, data: buildPayload(values) });
+    updateMutation.mutate({
+      id: selectedSupplier.id,
+      data: buildPayload(values),
+    });
   }
 
   // ---- Columns -------------------------------------------------------
@@ -198,43 +194,42 @@ export default function SuppliersPage() {
       accessorKey: "name",
     },
     {
-      header: "Téléphone",
-      accessorKey: "phone",
-      cell: ({ row }) => row.original.phone ?? "—",
-    },
-    {
       header: "Email",
       accessorKey: "email",
-      cell: ({ row }) => row.original.email ?? "—",
+      cell: ({ row }) => row.original.email ?? "",
     },
     {
-      header: "Adresse",
-      accessorKey: "address",
-      cell: ({ row }) => row.original.address ?? "—",
+      header: "Catégorie fournisseur",
+      id: "category",
+      cell: ({ row }) => row.original.categoryName ?? "",
     },
     {
       header: "Actions",
       id: "actions",
+      enableSorting: false,
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
           <PermissionGate permission={PERMISSIONS.EDIT_SUPPLIERS}>
             <button
               onClick={() => openEdit(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+              className={`${actionBtn} bg-blue-600 hover:bg-blue-700`}
               aria-label="Modifier"
+              title="Modifier"
             >
-              <Pencil className="h-3.5 w-3.5" />
-              Modifier
+              <Pencil className="h-4 w-4" />
             </button>
           </PermissionGate>
           <PermissionGate permission={PERMISSIONS.DELETE_SUPPLIERS}>
             <button
-              onClick={() => openDelete(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
+              onClick={() => {
+                setSelectedSupplier(row.original);
+                setDeleteOpen(true);
+              }}
+              className={`${actionBtn} bg-red-500 hover:bg-red-600`}
               aria-label="Supprimer"
+              title="Supprimer"
             >
-              <Trash2 className="h-3.5 w-3.5" />
-              Supprimer
+              <Trash2 className="h-4 w-4" />
             </button>
           </PermissionGate>
         </div>
@@ -257,43 +252,44 @@ export default function SuppliersPage() {
               }}
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
             >
-              Ajouter un fournisseur
+              Ajouter un nouveau fournisseur
             </button>
           ) : undefined
         }
       />
 
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5">
-        <DataTable columns={columns} data={suppliers} isLoading={isLoading} />
-      </div>
+      <DataTable
+        title="Liste des fournisseurs"
+        columns={columns}
+        data={suppliers}
+        isLoading={isLoading}
+      />
 
       {/* ---- Modal création ---- */}
       <CrudModal
         isOpen={createOpen}
         onClose={() => setCreateOpen(false)}
-        title="Ajouter un fournisseur"
-        size="lg"
+        title="Ajouter un nouveau fournisseur"
         onSubmit={createForm.handleSubmit(onCreateSubmit)}
-        submitLabel="Ajouter un fournisseur"
+        submitLabel="Ajouter un nouveau fournisseur"
         isSubmitting={createMutation.isPending}
       >
-        <SupplierForm form={createForm} categories={categories ?? []} />
+        <SupplierForm form={createForm} categories={categories} />
       </CrudModal>
 
       {/* ---- Modal édition ---- */}
       <CrudModal
         isOpen={editOpen}
         onClose={() => setEditOpen(false)}
-        title="Modifier un fournisseur"
-        size="lg"
+        title="Modifier les informations du fournisseur"
         onSubmit={editForm.handleSubmit(onEditSubmit)}
-        submitLabel="Modifier"
+        submitLabel="Mettre à jour"
         isSubmitting={updateMutation.isPending}
       >
-        <SupplierForm form={editForm} categories={categories ?? []} />
+        <SupplierForm form={editForm} categories={categories} isEdit />
       </CrudModal>
 
-      {/* ---- Modal confirmation suppression ---- */}
+      {/* ---- Confirmation suppression ---- */}
       <ConfirmModal
         isOpen={deleteOpen}
         onClose={() => {
@@ -303,9 +299,10 @@ export default function SuppliersPage() {
         onConfirm={() => {
           if (selectedSupplier) deleteMutation.mutate(selectedSupplier.id);
         }}
-        title="Supprimer ce fournisseur"
-        message={`Voulez-vous vraiment supprimer le fournisseur "${selectedSupplier?.name ?? ""}" ? Cette action est irréversible.`}
-        confirmLabel="Supprimer"
+        title="Voulez-vous supprimer l'élément ?"
+        message={`Fournisseur : ${selectedSupplier?.name ?? ""}`}
+        confirmLabel="Oui"
+        cancelLabel="Non !"
         confirmVariant="danger"
         isLoading={deleteMutation.isPending}
       />
@@ -317,81 +314,64 @@ export default function SuppliersPage() {
 // SupplierForm
 // ---------------------------------------------------------------------------
 
-interface SupplierCategory {
-  id: string;
-  name: string;
-}
-
 interface SupplierFormProps {
   form: UseFormReturn<SupplierFormValues>;
   categories: SupplierCategory[];
+  isEdit?: boolean;
 }
 
-function SupplierForm({ form, categories }: SupplierFormProps) {
+function SupplierForm({ form, categories, isEdit = false }: SupplierFormProps) {
   const {
     register,
-    control,
     formState: { errors },
   } = form;
 
   return (
-    <div className="grid grid-cols-1 gap-4">
-      <FormField label="Nom" required error={errors.name?.message}>
-        <input
-          type="text"
-          {...register("name")}
-          placeholder="Nom du fournisseur"
-          className={inputClass}
-        />
+    <div className="space-y-4">
+      <p className="text-right text-sm text-gray-600">
+        <span className="text-red-600">*</span>champs obligatoires
+      </p>
+
+      {/* Laravel intitule ce champ « Nom & Prénom » en édition seulement. */}
+      <FormField
+        label={isEdit ? "Nom & Prénom" : "Nom"}
+        required
+        error={errors.name?.message}
+      >
+        <input type="text" {...register("name")} className={inputClass} />
       </FormField>
 
-      <RHFSelect
-        control={control}
-        name="categoryId"
-        label="Catégorie"
-        options={categories.map((cat) => ({ value: cat.id, label: cat.name }))}
-        placeholder="Rechercher une catégorie..."
-        error={errors.categoryId?.message}
-        isClearable
-      />
-
-      <FormField label="Téléphone" error={errors.phone?.message}>
-        <input
-          type="tel"
-          {...register("phone")}
-          placeholder="97000000"
-          className={inputClass}
-        />
+      <FormField label="Téléphone" required error={errors.phone?.message}>
+        <input type="tel" {...register("phone")} className={inputClass} />
       </FormField>
 
       <FormField label="Email" error={errors.email?.message}>
-        <input
-          type="email"
-          {...register("email")}
-          placeholder="exemple@domaine.com"
-          className={inputClass}
-        />
+        <input type="email" {...register("email")} className={inputClass} />
       </FormField>
 
-      <FormField label="Adresse" error={errors.address?.message}>
-        <input
-          type="text"
-          {...register("address")}
-          placeholder="Adresse du fournisseur"
-          className={inputClass}
-        />
+      {/* « Addresse » : orthographe du Blade Laravel, conservée telle quelle. */}
+      <FormField label="Addresse" error={errors.address?.message}>
+        <input type="text" {...register("address")} className={inputClass} />
       </FormField>
 
-      <div className="sm:col-span-2">
-        <FormField label="Informations" error={errors.information?.message}>
-          <textarea
-            {...register("information")}
-            rows={4}
-            placeholder="Informations complémentaires…"
-            className={inputClass}
-          />
-        </FormField>
-      </div>
+      <FormField
+        label="Catégorie fournisseur"
+        required
+        error={errors.categoryId?.message}
+      >
+        <NativeSelect {...register("categoryId")}>
+          <option value="">Sélectionner une catégorie</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </NativeSelect>
+      </FormField>
+
+      <FormField label="Note" error={errors.information?.message}>
+        <textarea {...register("information")} rows={5} className={inputClass} />
+      </FormField>
     </div>
   );
 }

@@ -13,6 +13,7 @@ import {
   Minus,
   Plus,
   X,
+  Loader2,
 } from "lucide-react";
 import type { AxiosError } from "axios";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -69,6 +70,7 @@ function ActionButtons({
       queryClient.invalidateQueries({ queryKey: ["myspace-pending"] });
       queryClient.invalidateQueries({ queryKey: ["myspace-done"] });
       queryClient.invalidateQueries({ queryKey: ["myspace-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["test-order"] });
       toast.success("Demande marquée comme retirée");
     },
     onError: (err: AxiosError<ApiError>) =>
@@ -122,7 +124,7 @@ function ActionButtons({
       {/* Marquer comme retiré — VERT (si validé mais pas encore livré) */}
       {order.reportStatus === "VALIDATED" &&
         !order.reportIsDelivered &&
-        can(PERMISSIONS.DELIVER_REPORTS) && (
+        can(PERMISSIONS.EDIT_REPORTS) && (
           <button
             type="button"
             onClick={() => deliverMutation.mutate()}
@@ -130,7 +132,7 @@ function ActionButtons({
             className="inline-flex items-center rounded px-2 py-1 text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
             title="Marquer comme retiré"
           >
-            <Check className="h-3.5 w-3.5" />
+            {deliverMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
           </button>
         )}
 
@@ -143,7 +145,7 @@ function ActionButtons({
           className="inline-flex items-center rounded px-2 py-1 text-xs font-medium bg-gray-600 text-white hover:bg-gray-700 transition-colors disabled:opacity-50"
           title="Imprimer le compte rendu"
         >
-          <Printer className="h-3.5 w-3.5" />
+          {downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Printer className="h-3.5 w-3.5" />}
         </button>
       )}
 
@@ -440,7 +442,7 @@ export default function MySpacePage() {
       id: "urgent",
       cell: ({ row }) =>
         row.original.isUrgent ? (
-          <span className="inline-flex items-center rounded-full bg-red-600 px-2 py-0.5 text-xs font-medium text-white">
+          <span className="inline-flex items-center rounded-full bg-red-700 px-2 py-0.5 text-xs font-medium text-white">
             Oui
           </span>
         ) : (
@@ -541,6 +543,7 @@ export default function MySpacePage() {
           columns={pendingColumns}
           data={pendingOrders}
           isLoading={pendingLoading}
+          hideToolbar
           pageCount={pendingData?.totalPages ?? 0}
           pageIndex={pendingPage}
           pageSize={pendingPageSize}
@@ -635,6 +638,7 @@ export default function MySpacePage() {
           columns={doneColumns}
           data={doneOrders}
           isLoading={doneLoading}
+          hideToolbar
           pageCount={doneData?.totalPages ?? 0}
           pageIndex={donePage}
           pageSize={donePageSize}

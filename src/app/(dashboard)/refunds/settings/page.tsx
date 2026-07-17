@@ -18,10 +18,7 @@ import { PermissionGate } from "@/components/common/PermissionGate";
 import { FormField } from "@/components/ui/FormField";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
-import {
-  refundReasonsApi,
-  type RefundReason,
-} from "@/lib/api/refunds";
+import { refundReasonsApi, type RefundReason } from "@/lib/api/refunds";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -30,8 +27,12 @@ import {
 const inputClass =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
+const actionBtn =
+  "inline-flex h-8 w-9 items-center justify-center rounded-md text-white transition-colors";
+
+// Laravel n'impose rien sur ce champ (textarea sans `required`).
 const reasonSchema = z.object({
-  label: z.string().min(1, { message: "Le libellé est requis" }),
+  label: z.string(),
 });
 
 type ReasonFormValues = z.infer<typeof reasonSchema>;
@@ -53,10 +54,9 @@ function RefundReasonsContent() {
   const queryClient = useQueryClient();
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [editReason, setEditReason] = useState<RefundReason | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [selected, setSelected] = useState<RefundReason | null>(null);
   const [deleteReason, setDeleteReason] = useState<RefundReason | null>(null);
-
-  // ---- Query ---------------------------------------------------------------
 
   const { data, isLoading } = useQuery({
     queryKey: ["refund-reasons"],
@@ -64,8 +64,6 @@ function RefundReasonsContent() {
   });
 
   const reasons: RefundReason[] = Array.isArray(data) ? data : [];
-
-  // ---- Forms ---------------------------------------------------------------
 
   const createForm = useForm<ReasonFormValues>({
     resolver: zodResolver(reasonSchema),
@@ -76,116 +74,105 @@ function RefundReasonsContent() {
     resolver: zodResolver(reasonSchema),
   });
 
-  // ---- Mutations -----------------------------------------------------------
+  function apiError(err: AxiosError) {
+    toast.error(
+      (err.response?.data as { message?: string })?.message ??
+        "Erreur d'enrégistrement",
+    );
+  }
+
+  function invalidate() {
+    queryClient.invalidateQueries({ queryKey: ["refund-reasons"] });
+  }
 
   const createMutation = useMutation({
     mutationFn: (values: ReasonFormValues) => refundReasonsApi.create(values),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["refund-reasons"] });
-      toast.success("Motif créé");
+      invalidate();
+      toast.success("Raison enregistrée avec success");
       setCreateOpen(false);
       createForm.reset();
     },
-    onError: (err: AxiosError) => {
-      const msg =
-        (err.response?.data as { message?: string })?.message ??
-        "Une erreur est survenue";
-      toast.error(msg);
-    },
+    onError: apiError,
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, values }: { id: string; values: ReasonFormValues }) =>
       refundReasonsApi.update(id, values),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["refund-reasons"] });
-      toast.success("Motif mis à jour");
-      setEditReason(null);
+      invalidate();
+      toast.success("Mis à jour éffectué avec success");
+      setEditOpen(false);
+      setSelected(null);
     },
-    onError: (err: AxiosError) => {
-      const msg =
-        (err.response?.data as { message?: string })?.message ??
-        "Une erreur est survenue";
-      toast.error(msg);
-    },
+    onError: apiError,
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => refundReasonsApi.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["refund-reasons"] });
-      toast.success("Motif supprimé");
+      invalidate();
+      toast.success("Suppression éffectuée avec success");
       setDeleteReason(null);
     },
-    onError: (err: AxiosError) => {
-      const msg =
-        (err.response?.data as { message?: string })?.message ??
-        "Une erreur est survenue";
-      toast.error(msg);
-    },
+    onError: apiError,
   });
 
-  // ---- Handlers ------------------------------------------------------------
-
   function openEdit(reason: RefundReason) {
-    setEditReason(reason);
+    setSelected(reason);
     editForm.reset({ label: reason.label });
+    setEditOpen(true);
   }
-
-  // ---- Columns -------------------------------------------------------------
 
   const columns: ColumnDef<RefundReason>[] = [
     {
       header: "#",
-      id: "rownum",
-      cell: ({ row }) => (
-        <span className="text-sm text-gray-500">{row.index + 1}</span>
-      ),
+      id: "index",
+      enableSorting: false,
+      cell: ({ row }) => row.index + 1,
     },
     {
-      header: "Motif",
+      // La colonne du Blade s'intitule « Description » (champ `label` en base).
+      header: "Description",
       accessorKey: "label",
-      cell: ({ row }) => (
-        <span className="font-medium text-gray-900">{row.original.label}</span>
-      ),
     },
     {
       header: "Actions",
       id: "actions",
+      enableSorting: false,
       cell: ({ row }) => (
-        <PermissionGate permission={PERMISSIONS.MANAGE_REFUNDS}>
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
+          <PermissionGate permission={PERMISSIONS.EDIT_REFUND_REASONS}>
             <button
               onClick={() => openEdit(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+              className={`${actionBtn} bg-blue-600 hover:bg-blue-700`}
               aria-label="Modifier"
+              title="Modifier"
             >
-              <Pencil className="h-3.5 w-3.5" />
-              Modifier
+              <Pencil className="h-4 w-4" />
             </button>
+          </PermissionGate>
+          <PermissionGate permission={PERMISSIONS.DELETE_REFUND_REASONS}>
             <button
               onClick={() => setDeleteReason(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
+              className={`${actionBtn} bg-red-500 hover:bg-red-600`}
               aria-label="Supprimer"
+              title="Supprimer"
             >
-              <Trash2 className="h-3.5 w-3.5" />
-              Supprimer
+              <Trash2 className="h-4 w-4" />
             </button>
-          </div>
-        </PermissionGate>
+          </PermissionGate>
+        </div>
       ),
     },
   ];
 
-  // ---- Render --------------------------------------------------------------
-
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Motifs de remboursement"
-        subtitle="Paramètres des motifs utilisés pour les demandes de remboursement"
+        title="Paramètre de remboursement"
         action={
-          can(PERMISSIONS.MANAGE_REFUNDS) ? (
+          can(PERMISSIONS.CREATE_REFUND_REASONS) ? (
             <button
               onClick={() => {
                 createForm.reset();
@@ -193,61 +180,46 @@ function RefundReasonsContent() {
               }}
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
             >
-              Ajouter un motif
+              Ajouter une nouvelle raison
             </button>
           ) : undefined
         }
       />
 
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5">
-        <DataTable columns={columns} data={reasons} isLoading={isLoading} />
-      </div>
+      <DataTable
+        title="Liste des raisons"
+        columns={columns}
+        data={reasons}
+        isLoading={isLoading}
+      />
 
       {/* Modal création */}
       <CrudModal
         isOpen={createOpen}
         onClose={() => setCreateOpen(false)}
-        title="Ajouter un motif"
+        title="Ajouter une nouvelle raison"
         onSubmit={createForm.handleSubmit((v) => createMutation.mutate(v))}
-        submitLabel="Ajouter"
+        submitLabel="Ajouter une nouvelle raison"
         isSubmitting={createMutation.isPending}
       >
-        <FormField
-          label="Libellé du motif"
-          required
-          error={createForm.formState.errors.label?.message}
-        >
-          <input
-            type="text"
-            {...createForm.register("label")}
-            placeholder="Ex : Erreur de facturation"
-            className={inputClass}
-          />
-        </FormField>
+        <ReasonForm form={createForm} />
       </CrudModal>
 
       {/* Modal édition */}
       <CrudModal
-        isOpen={editReason !== null}
-        onClose={() => setEditReason(null)}
-        title="Modifier le motif"
+        isOpen={editOpen}
+        onClose={() => {
+          setEditOpen(false);
+          setSelected(null);
+        }}
+        title="Modifier la raison"
         onSubmit={editForm.handleSubmit((v) => {
-          if (editReason) updateMutation.mutate({ id: editReason.id, values: v });
+          if (selected) updateMutation.mutate({ id: selected.id, values: v });
         })}
-        submitLabel="Enregistrer"
+        submitLabel="Mettre à jour"
         isSubmitting={updateMutation.isPending}
       >
-        <FormField
-          label="Libellé du motif"
-          required
-          error={editForm.formState.errors.label?.message}
-        >
-          <input
-            type="text"
-            {...editForm.register("label")}
-            className={inputClass}
-          />
-        </FormField>
+        <ReasonForm form={editForm} />
       </CrudModal>
 
       {/* Confirmation suppression */}
@@ -257,12 +229,35 @@ function RefundReasonsContent() {
         onConfirm={() => {
           if (deleteReason) deleteMutation.mutate(deleteReason.id);
         }}
-        title="Supprimer ce motif"
-        message={`Voulez-vous vraiment supprimer le motif « ${deleteReason?.label ?? ""} » ?`}
-        confirmLabel="Supprimer"
+        title="Voulez-vous supprimer l'élément ?"
+        message={`Raison : ${deleteReason?.label ?? ""}`}
+        confirmLabel="Oui"
+        cancelLabel="Non !"
         confirmVariant="danger"
         isLoading={deleteMutation.isPending}
       />
+    </div>
+  );
+}
+
+function ReasonForm({
+  form,
+}: {
+  form: ReturnType<typeof useForm<ReasonFormValues>>;
+}) {
+  const {
+    register,
+    formState: { errors },
+  } = form;
+
+  return (
+    <div className="space-y-4">
+      <p className="text-right text-sm text-gray-600">
+        <span className="text-red-600">*</span>champs obligatoires
+      </p>
+      <FormField label="Description de la raison" error={errors.label?.message}>
+        <textarea {...register("label")} rows={5} className={inputClass} />
+      </FormField>
     </div>
   );
 }

@@ -44,14 +44,20 @@ export const useAuthStore = create<AuthStore>()(
 
         let roles = user.roles ?? [];
 
-        // Fusion défensive : certaines réponses (ex. PUT /users/{id}) renvoient un
-        // `user` partiel sans `roles` NI `permissions`. Dans ce cas, ne JAMAIS
-        // écraser les permissions/rôles déjà chargés du même utilisateur connecté —
-        // sinon la sidebar et les PermissionGate se vident à tort.
+        // Fusion défensive : certaines réponses renvoient un `user` partiel —
+        //  - PUT /users/{id} : sans `roles` NI `permissions` ;
+        //  - GET /auth/me au montage / mise à jour de profil : avec des `roles`
+        //    mais dont les `permissions` ne sont pas (re)chargées.
+        // Dans tous ces cas, ne JAMAIS écraser par du vide les permissions/rôles
+        // déjà chargés du même utilisateur connecté — sinon la sidebar et les
+        // PermissionGate se vident à tort. On préserve chaque liste INDÉPENDAMMENT
+        // (une réponse peut ramener des rôles sans leurs permissions).
         const existing = get().user;
-        if (permissions.length === 0 && roles.length === 0 && existing) {
-          if (!existing.id || existing.id === user.id) {
+        if (existing && (!existing.id || !user.id || existing.id === user.id)) {
+          if (permissions.length === 0 && (existing.permissions?.length ?? 0) > 0) {
             permissions = existing.permissions ?? [];
+          }
+          if (roles.length === 0 && (existing.roles?.length ?? 0) > 0) {
             roles = existing.roles ?? [];
           }
         }

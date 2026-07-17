@@ -1,86 +1,63 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { toast } from "sonner";
-import { Check, X } from "lucide-react";
+import { Check, Eye, Loader2, X } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { AxiosError } from "axios";
-import type { UseFormReturn } from "react-hook-form";
 
 import { PageHeader } from "@/components/ui/PageHeader";
-import { RHFSelect } from "@/components/ui/RHFSelect";
-import { RemoteSelectField } from "@/components/ui/RemoteSelectField";
-import { MAX_VISIBLE_OPTIONS } from "@/components/ui/LimitedSelect";
-import { NativeSelect } from "@/components/ui/NativeSelect";
 import { DataTable } from "@/components/common/DataTable";
-import { CrudModal } from "@/components/common/CrudModal";
 import { PermissionGate } from "@/components/common/PermissionGate";
-import { FormField } from "@/components/ui/FormField";
 import { Badge } from "@/components/ui/Badge";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import {
   refundsApi,
-  refundReasonsApi,
-  RefundRequest,
-  RefundReason,
+  type RefundRequest,
+  type RefundRequestLog,
 } from "@/lib/api/refunds";
-import { invoicesApi, type Invoice } from "@/lib/api/invoices";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50";
+const actionBtn =
+  "inline-flex h-8 w-9 items-center justify-center rounded-md text-white transition-colors disabled:opacity-50";
 
-function formatAmount(amount: number): string {
-  return new Intl.NumberFormat("fr-FR").format(amount) + " FCFA";
+/** Date au format Laravel de l'écran : jj/mm/aa hh:mm:ss. */
+function formatDateTime(value?: string): string {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }
 
-function formatDate(dateStr: string): string {
-  try {
-    return new Date(dateStr).toLocaleDateString("fr-FR");
-  } catch {
-    return dateStr;
-  }
+/** Laravel tronque l'objet à 50 caractères (helper `tronquerChaine`). */
+function tronquerChaine(value?: string): string {
+  if (!value) return "";
+  return value.length > 50 ? value.slice(0, 50) + "…" : value;
 }
 
+/**
+ * Libellés de statut de l'écran Laravel : la valeur en base (`Aprouvé`, avec un
+ * seul « p ») diffère du libellé affiché (« Acceptée »).
+ */
 function statusBadge(status: string) {
-  if (status === "En attente")
-    return <Badge variant="warning">En attente</Badge>;
-  if (status === "Aprouvé")
-    return <Badge variant="success">Approuvé</Badge>;
-  if (status === "Clôturé")
-    return <Badge variant="info">Clôturé</Badge>;
-  // Valeur posée par reject() (cf. refundsApi.reject → status: "Rejeté")
-  if (status === "Rejeté")
-    return <Badge variant="danger">Rejeté</Badge>;
-  return <Badge variant="danger">{status}</Badge>;
+  if (status === "En attente") return <Badge variant="warning">En attente</Badge>;
+  if (status === "Aprouvé") return <Badge variant="success">Acceptée</Badge>;
+  if (status === "Rejeté") return <Badge variant="danger">Refusée</Badge>;
+  return <Badge variant="secondary">Clôturée</Badge>;
 }
-
-// ---------------------------------------------------------------------------
-// Zod schema
-// ---------------------------------------------------------------------------
-
-const refundSchema = z.object({
-  invoiceId: z.string().min(1, { message: "La facture est requise" }),
-  refundReasonId: z.string().min(1, { message: "Le motif est requis" }),
-  montant: z
-    .string()
-    .min(1, { message: "Le montant est requis" })
-    .refine((v) => !isNaN(Number(v)) && Number(v) > 0, {
-      message: "Montant invalide",
-    }),
-  note: z.string().optional(),
-});
-
-type RefundFormValues = z.infer<typeof refundSchema>;
 
 // ---------------------------------------------------------------------------
 // Page
@@ -89,358 +66,314 @@ type RefundFormValues = z.infer<typeof refundSchema>;
 export default function RefundsPage() {
   return (
     <PermissionGate permission={PERMISSIONS.VIEW_REFUNDS}>
-      <Suspense fallback={null}>
-        <RefundsContent />
-      </Suspense>
+      <RefundsContent />
     </PermissionGate>
   );
 }
 
 function RefundsContent() {
   const { can } = usePermissions();
+  const router = useRouter();
   const queryClient = useQueryClient();
-  const searchParams = useSearchParams();
 
-  // Le sous-menu « Ajouter » (sidebar) pointe vers /refunds?new=1 : on ouvre
-  // alors directement le formulaire de nouvelle demande (état initial dérivé de l'URL).
-  const [createOpen, setCreateOpen] = useState(
-    () => searchParams.get("new") === "1"
-  );
-  const [statusFilter, setStatusFilter] = useState("");
+  const [detail, setDetail] = useState<RefundRequest | null>(null);
 
-  // ---- Query ---------------------------------------------------------------
-
-  const params: Record<string, unknown> = { size: 1000 };
-  if (statusFilter) params.status = statusFilter;
-
+  // Laravel affiche la liste entière, sans filtre ni pagination serveur.
   const { data, isLoading } = useQuery({
-    queryKey: ["refunds", params],
-    queryFn: () => refundsApi.findAll(params).then((r) => r.data),
+    queryKey: ["refunds"],
+    queryFn: () => refundsApi.findAll({ size: 1000 }).then((r) => r.data),
   });
 
-  const refunds: RefundRequest[] = data?.content ?? [];
+  const refunds: RefundRequest[] = useMemo(() => data?.content ?? [], [data]);
 
-  // ---- Refund reasons query ------------------------------------------------
+  /** Second tableau : tous les logs, demande confondue, du plus récent au plus ancien. */
+  const allLogs = useMemo(
+    () =>
+      refunds
+        .flatMap((r) =>
+          (r.logs ?? []).map((l) => ({ ...l, refundCode: r.code ?? "" })),
+        )
+        .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")),
+    [refunds],
+  );
 
-  const { data: reasonsData } = useQuery({
-    queryKey: ["refund-reasons"],
-    queryFn: () => refundReasonsApi.findAll().then((r) => r.data),
-  });
-
-  const reasons: RefundReason[] = Array.isArray(reasonsData) ? reasonsData : [];
-
-  // Le sélecteur de facture cherche directement en base (voir `loadInvoiceOptions`).
-
-  function getReasonLabel(refundReasonId?: string): string {
-    if (!refundReasonId) return "—";
-    const found = reasons.find((r) => r.id === refundReasonId);
-    return found ? found.label : "—";
+  function invalidate() {
+    queryClient.invalidateQueries({ queryKey: ["refunds"] });
+    queryClient.invalidateQueries({ queryKey: ["refund-pending-count"] });
   }
 
-  // ---- Mutations -----------------------------------------------------------
-
-  const createMutation = useMutation({
-    mutationFn: (payload: {
-      invoiceId: string;
-      refundReasonId: string;
-      montant: number;
-      note?: string;
-    }) => refundsApi.create(payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["refunds"] });
-      toast.success("Demande de remboursement créée");
-      setCreateOpen(false);
-      createForm.reset();
-    },
-    onError: (err: AxiosError) => {
-      const msg =
-        (err.response?.data as { message?: string })?.message ??
-        "Une erreur est survenue";
-      toast.error(msg);
-    },
-  });
+  function apiError(err: AxiosError) {
+    toast.error(
+      (err.response?.data as { message?: string })?.message ??
+        "Un problème est suvenu lors de l'enrégistrement",
+    );
+  }
 
   const approveMutation = useMutation({
     mutationFn: (id: string) => refundsApi.approve(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["refunds"] });
-      toast.success("Remboursement approuvé");
+    onSuccess: (res) => {
+      invalidate();
+      // Laravel redirige vers l'avoir généré, à encaisser ensuite.
+      const invoiceId = (res.data as { id?: string | null })?.id;
+      if (invoiceId) {
+        router.push(`/invoices/${invoiceId}`);
+        return;
+      }
+      toast.success("Mis à jour éffectué avec success");
     },
-    onError: (err: AxiosError) => {
-      const msg =
-        (err.response?.data as { message?: string })?.message ??
-        "Une erreur est survenue";
-      toast.error(msg);
-    },
+    onError: apiError,
   });
 
   const rejectMutation = useMutation({
     mutationFn: (id: string) => refundsApi.reject(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["refunds"] });
-      toast.success("Remboursement rejeté");
+      invalidate();
+      toast.success("La demande est rejeté");
     },
-    onError: (err: AxiosError) => {
-      const msg =
-        (err.response?.data as { message?: string })?.message ??
-        "Une erreur est survenue";
-      toast.error(msg);
-    },
+    onError: apiError,
   });
 
-  // ---- Form ----------------------------------------------------------------
+  const pending = approveMutation.isPending || rejectMutation.isPending;
 
-  const createForm = useForm<RefundFormValues>({
-    resolver: zodResolver(refundSchema),
-    defaultValues: { invoiceId: "", refundReasonId: "", montant: "", note: "" },
-  });
-
-  function onCreateSubmit(values: RefundFormValues) {
-    createMutation.mutate({
-      invoiceId: values.invoiceId,
-      refundReasonId: values.refundReasonId,
-      montant: Number(values.montant),
-      note: values.note,
-    });
-  }
-
-  // ---- Columns -------------------------------------------------------------
+  // ---- Colonnes : # · Code · Objet · Montant · Dernière actualisation · Statut · Action
 
   const columns: ColumnDef<RefundRequest>[] = [
     {
+      header: "#",
+      id: "index",
+      enableSorting: false,
+      cell: ({ row }) => row.index + 1,
+    },
+    {
       header: "Code",
       accessorKey: "code",
-      cell: ({ row }) => (
-        <span className="font-mono text-sm text-gray-700">
-          {row.original.code ?? "—"}
-        </span>
-      ),
+      cell: ({ row }) => row.original.code ?? "",
     },
     {
-      header: "Référence facture",
-      accessorKey: "invoiceId",
-      cell: ({ row }) => (
-        <span className="font-mono text-sm text-gray-700">
-          {row.original.invoiceId}
-        </span>
-      ),
+      header: "Objet",
+      id: "objet",
+      cell: ({ row }) => tronquerChaine(row.original.refundReasonLabel),
     },
     {
-      header: "Montant demandé",
+      header: "Montant",
       accessorKey: "montant",
-      cell: ({ row }) => (
-        <span className="font-medium text-gray-900">
-          {formatAmount(row.original.montant)}
-        </span>
-      ),
     },
     {
-      header: "Motif",
-      accessorKey: "refundReasonId",
-      cell: ({ row }) => (
-        <span className="text-sm text-gray-700">
-          {getReasonLabel(row.original.refundReasonId)}
-        </span>
-      ),
-    },
-    {
-      header: "Note",
-      accessorKey: "note",
-      cell: ({ row }) => (
-        <span className="text-sm text-gray-500 line-clamp-2">
-          {row.original.note ?? "—"}
-        </span>
-      ),
+      header: "Dernière actualisation",
+      id: "updatedAt",
+      cell: ({ row }) => formatDateTime(row.original.updatedAt ?? row.original.createdAt),
     },
     {
       header: "Statut",
-      accessorKey: "status",
+      id: "status",
       cell: ({ row }) => statusBadge(row.original.status),
     },
     {
-      header: "Date",
-      accessorKey: "createdAt",
-      cell: ({ row }) => formatDate(row.original.createdAt),
-    },
-    {
-      header: "Actions",
+      header: "Action",
       id: "actions",
+      enableSorting: false,
       cell: ({ row }) => {
         const refund = row.original;
-        if (refund.status !== "En attente") return null;
-
         return (
-          <PermissionGate permission={PERMISSIONS.MANAGE_REFUNDS}>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => approveMutation.mutate(refund.id)}
-                disabled={
-                  approveMutation.isPending || rejectMutation.isPending
-                }
-                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 transition-colors disabled:opacity-50"
-                aria-label="Approuver"
-              >
-                <Check className="h-3.5 w-3.5" />
-                Approuver
-              </button>
-              <button
-                onClick={() => rejectMutation.mutate(refund.id)}
-                disabled={
-                  approveMutation.isPending || rejectMutation.isPending
-                }
-                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-50 text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50"
-                aria-label="Rejeter"
-              >
-                <X className="h-3.5 w-3.5" />
-                Rejeter
-              </button>
-            </div>
-          </PermissionGate>
+          <div className="flex items-center gap-2">
+            {/* Laravel n'offre le changement de statut que sur ces trois états. */}
+            {["En attente", "Aprouvé", "Rejeté"].includes(refund.status) && (
+              <PermissionGate permission={PERMISSIONS.PROCESS_REFUNDS}>
+                <button
+                  onClick={() => approveMutation.mutate(refund.id)}
+                  disabled={pending}
+                  className={`${actionBtn} bg-green-600 hover:bg-green-700`}
+                  aria-label="Accepter"
+                  title="Accepter"
+                >
+                  {approveMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4" />
+                  )}
+                </button>
+                <button
+                  onClick={() => rejectMutation.mutate(refund.id)}
+                  disabled={pending}
+                  className={`${actionBtn} bg-red-500 hover:bg-red-600`}
+                  aria-label="Refuser"
+                  title="Refuser"
+                >
+                  {rejectMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <X className="h-4 w-4" />
+                  )}
+                </button>
+              </PermissionGate>
+            )}
+            <button
+              onClick={() => setDetail(refund)}
+              className={`${actionBtn} bg-blue-600 hover:bg-blue-700`}
+              aria-label="Détail"
+              title="Détail"
+            >
+              <Eye className="h-4 w-4" />
+            </button>
+          </div>
         );
       },
     },
   ];
 
-  // ---- Render --------------------------------------------------------------
+  // ---- Colonnes du second tableau
+
+  type LogRow = RefundRequestLog & { refundCode: string };
+
+  const logColumns: ColumnDef<LogRow>[] = [
+    {
+      header: "#",
+      id: "index",
+      enableSorting: false,
+      cell: ({ row }) => row.index + 1,
+    },
+    {
+      // Faute présente dans le Blade Laravel, conservée telle quelle.
+      header: "Demande de rembousement",
+      id: "refundCode",
+      cell: ({ row }) => row.original.refundCode,
+    },
+    {
+      header: "Utilisateur",
+      id: "user",
+      cell: ({ row }) => row.original.userFullName ?? "",
+    },
+    {
+      header: "Operation",
+      accessorKey: "operation",
+    },
+    {
+      header: "Dernière mis à jour",
+      id: "createdAt",
+      cell: ({ row }) => formatDateTime(row.original.createdAt),
+    },
+  ];
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Remboursements"
+        title="Demandes de remboursements"
         action={
-          can(PERMISSIONS.MANAGE_REFUNDS) ? (
+          can(PERMISSIONS.CREATE_REFUNDS) ? (
             <button
-              onClick={() => {
-                createForm.reset();
-                setCreateOpen(true);
-              }}
+              onClick={() => router.push("/refunds/create")}
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
             >
-              Nouvelle demande
+              Ajouter une nouvelle demande
             </button>
           ) : undefined
         }
       />
 
-      {/* Filtre statut */}
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <NativeSelect
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="">Tous les statuts</option>
-            <option value="En attente">En attente</option>
-            <option value="Aprouvé">Approuvé</option>
-            <option value="Clôturé">Clôturé</option>
-            <option value="Rejeté">Rejeté</option>
-          </NativeSelect>
+      <DataTable
+        title="Liste des demandes de remboursements"
+        columns={columns}
+        data={refunds}
+        isLoading={isLoading}
+      />
+
+      <DataTable
+        title="Historique des demandes de remboursements"
+        columns={logColumns}
+        data={allLogs}
+        isLoading={isLoading}
+      />
+
+      {/* ---- Modal détail ---- */}
+      {detail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-3xl rounded-xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <h2 className="text-base font-semibold text-gray-900">
+                Demande {detail.code ?? ""}{" "}
+                <span className="font-normal text-gray-500">
+                  [{statusLabel(detail.status)}]
+                </span>
+              </h2>
+              <button
+                onClick={() => setDetail(null)}
+                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                aria-label="Fermer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="max-h-96 space-y-2 overflow-y-auto p-6 text-sm">
+              <p>
+                <span className="font-medium">Description :</span> {detail.note ?? ""}
+              </p>
+              <p>
+                <span className="font-medium">Raison :</span>{" "}
+                {detail.refundReasonLabel ?? ""}
+              </p>
+              <p>
+                <span className="font-medium">Montant :</span> {detail.montant}
+              </p>
+              <p>
+                <span className="font-medium">Facture référence :</span>{" "}
+                {detail.invoiceCode ?? ""}
+              </p>
+              <p>
+                <span className="font-medium">Pièce jointe :</span>{" "}
+                {detail.attachment ? (
+                  <a
+                    href={`/api/v1/files/${detail.attachment}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-blue-600 hover:underline"
+                  >
+                    Voir
+                  </a>
+                ) : (
+                  ""
+                )}
+              </p>
+
+              <h3 className="pt-4 text-sm font-semibold text-gray-900">
+                Historique des mises à jour
+              </h3>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 text-left text-xs font-medium uppercase text-gray-500">
+                    <th className="pb-2 pr-4">#</th>
+                    <th className="pb-2 pr-4">Demande de rembousement</th>
+                    <th className="pb-2 pr-4">Utilisateur</th>
+                    <th className="pb-2 pr-4">Operation</th>
+                    <th className="pb-2">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {(detail.logs ?? []).map((l, i) => (
+                    <tr key={l.id ?? i}>
+                      <td className="py-2 pr-4">{i + 1}</td>
+                      <td className="py-2 pr-4">{detail.code ?? ""}</td>
+                      <td className="py-2 pr-4">{l.userFullName ?? ""}</td>
+                      <td className="py-2 pr-4">{l.operation}</td>
+                      <td className="py-2 text-gray-500">
+                        {formatDateTime(l.createdAt)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
-      </div>
-
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5">
-        <DataTable columns={columns} data={refunds} isLoading={isLoading} />
-      </div>
-
-      {/* Modal création */}
-      <CrudModal
-        isOpen={createOpen}
-        onClose={() => setCreateOpen(false)}
-        title="Nouvelle demande de remboursement"
-        size="lg"
-        onSubmit={createForm.handleSubmit(onCreateSubmit)}
-        submitLabel="Soumettre"
-        isSubmitting={createMutation.isPending}
-      >
-        <RefundForm form={createForm} reasons={reasons} />
-      </CrudModal>
+      )}
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// RefundForm
-// ---------------------------------------------------------------------------
-
-interface RefundFormProps {
-  form: UseFormReturn<RefundFormValues>;
-  reasons: RefundReason[];
-}
-
-/**
- * Recherche serveur des factures (12 000+ en base) : la saisie est envoyée à
- * l'API, elle ne se limite pas aux 6 options affichées.
- */
-const loadInvoiceOptions = (input: string) =>
-  invoicesApi
-    .findAll({ size: MAX_VISIBLE_OPTIONS, search: input || undefined })
-    .then((r) =>
-      r.data.content.map((inv: Invoice) => ({
-        value: inv.id,
-        label: `${inv.code} — ${formatAmount(inv.total)}${
-          inv.patientName ? ` (${inv.patientName})` : ""
-        }`,
-      }))
-    );
-
-function RefundForm({ form, reasons }: RefundFormProps) {
-  const {
-    register,
-    control,
-    formState: { errors },
-  } = form;
-
-  return (
-    <div className="space-y-4">
-      <Controller
-        control={control}
-        name="invoiceId"
-        render={({ field }) => (
-          <RemoteSelectField
-            id="invoiceId"
-            label="Facture"
-            required
-            loadOptions={loadInvoiceOptions}
-            value={field.value || null}
-            onChange={(v) => field.onChange(v ?? "")}
-            placeholder="Rechercher une facture (code, patient)…"
-            error={errors.invoiceId?.message}
-          />
-        )}
-      />
-
-      <RHFSelect
-        control={control}
-        name="refundReasonId"
-        label="Motif de remboursement"
-        required
-        options={reasons.map((r) => ({ value: r.id, label: r.label }))}
-        placeholder="Sélectionner un motif"
-        error={errors.refundReasonId?.message}
-      />
-
-      <FormField
-        label="Montant (FCFA)"
-        required
-        error={errors.montant?.message}
-      >
-        <input
-          type="number"
-          {...register("montant")}
-          placeholder="0"
-          min={0}
-          className={inputClass}
-        />
-      </FormField>
-
-      <FormField label="Note" error={errors.note?.message}>
-        <textarea
-          {...register("note")}
-          rows={3}
-          placeholder="Note optionnelle"
-          className={inputClass}
-        />
-      </FormField>
-    </div>
-  );
+/** Mention colorée du titre de la modale détail. */
+function statusLabel(status: string): string {
+  if (status === "En attente") return "En attente";
+  if (status === "Aprouvé") return "Aprouvée";
+  if (status === "Rejeté") return "Rejetée";
+  return "Clôturée";
 }

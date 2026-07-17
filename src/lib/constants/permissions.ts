@@ -29,7 +29,6 @@ export const PERMISSIONS = {
   REVIEW_REPORTS: "review-reports",
   VALIDATE_REPORTS: "validate-reports",
   SIGN_REPORTS: "sign-reports",
-  DELIVER_REPORTS: "deliver-reports",
 
   // Macroscopy
   VIEW_MACRO: "view-macro",
@@ -42,6 +41,8 @@ export const PERMISSIONS = {
   EDIT_INVOICES: "edit-invoices",
   DELETE_INVOICES: "delete-invoices",
   MANAGE_FINANCE: "view-dashbord-finance",
+  /** Encaissement : seule permission que Laravel vérifie sur la page facture (show.blade.php). */
+  VIEW_CASHIER: "view-cashier",
 
   // Cashbox (granular — from Laravel @can slugs)
   VIEW_CASHBOX: "view-cashbox",
@@ -53,6 +54,12 @@ export const PERMISSIONS = {
   CREATE_CASHBOX_DAILIES: "create-cashbox-dailies",
   EDIT_CASHBOX_DAILIES: "edit-cashbox-dailies",
   CREATE_CASHBOX_TICKETS: "create-cashbox-tickets",
+  EDIT_CASHBOX_TICKETS: "edit-cashbox-tickets",
+  DELETE_CASHBOX_TICKETS: "delete-cashbox-tickets",
+  CREATE_CASHBOX_TICKET_DETAILS: "create-cashbox-ticket-details",
+  DELETE_CASHBOX_TICKET_DETAILS: "delete-cashbox-ticket-details",
+  // Bouton « Approvisionner la caisse » de la caisse de dépense (slug Laravel).
+  VIEW_ADD_CASHBOX_EXPENSE: "view-add-cashbox-expense",
 
   // Banks
   VIEW_BANKS: "view-banks",
@@ -90,6 +97,13 @@ export const PERMISSIONS = {
   CREATE_EXPENSES: "create-expenses",
   EDIT_EXPENSES: "edit-expenses",
   DELETE_EXPENSES: "delete-expenses",
+  VIEW_EXPENCE_DETAILS: "view-expence-details",
+  CREATE_EXPENCE_DETAILS: "create-expence-details",
+  DELETE_EXPENCE_DETAILS: "delete-expence-details",
+  // Autorise le changement de statut depuis la colonne « Traitement » de la liste.
+  VIEW_PROCESS_CASHBOX_TICKETS: "view-process-cashbox-tickets",
+  // Lève les verrouillages de la page détail quand la dépense est déjà payée.
+  VIEW_SUPER_DEPENSES: "view-super-depenses",
 
   // Inventory
   VIEW_ARTICLES: "view-articles",
@@ -102,6 +116,10 @@ export const PERMISSIONS = {
   CREATE_SUPPLIERS: "create-suppliers",
   EDIT_SUPPLIERS: "edit-suppliers",
   DELETE_SUPPLIERS: "delete-suppliers",
+  VIEW_SUPPLIER_CATEGORIES: "view-supplier-categories",
+  CREATE_SUPPLIER_CATEGORIES: "create-supplier-categories",
+  EDIT_SUPPLIER_CATEGORIES: "edit-supplier-categories",
+  DELETE_SUPPLIER_CATEGORIES: "delete-supplier-categories",
 
   // HR — slugs réels du backend Spring Boot
   VIEW_HR: "view-hr",
@@ -111,6 +129,7 @@ export const PERMISSIONS = {
   EDIT_EMPLOYEES: "manage-employees",
   DELETE_EMPLOYEES: "manage-employees",
   MANAGE_PAYROLL: "view-employee-payrolls",
+  CREATE_PAYROLL: "create-employee-payrolls",
   MANAGE_TIMEOFF: "view-employee-timeoffs",
 
   // Dashboard (rôle-based views)
@@ -123,6 +142,7 @@ export const PERMISSIONS = {
   VIEW_SETTING_INVOICE: "view-setting-invoice",
   VIEW_SETTING_REPORT_TEMPLATES: "view-setting-report-templates",
   VIEW_MOVEMENTS: "view-movements",
+  CREATE_MOVEMENTS: "create-movements",
   VIEW_REFUND_REQUESTS: "view-refund-requests",
   VIEW_PERMISSIONS: "view-permissions",
   CREATE_PERMISSIONS: "create-permissions",
@@ -176,7 +196,15 @@ export const PERMISSIONS = {
 
   // Refunds
   VIEW_REFUNDS: "view-refund-requests",
-  MANAGE_REFUNDS: "manage-refunds",
+  CREATE_REFUNDS: "create-refund-requests",
+  EDIT_REFUNDS: "edit-refund-requests",
+  DELETE_REFUNDS: "delete-refund-requests",
+  /** Autorise le changement de statut d'une demande (select Laravel). */
+  PROCESS_REFUNDS: "view-process-refund-request",
+  VIEW_REFUND_REASONS: "view-refund-reasons",
+  CREATE_REFUND_REASONS: "create-refund-reasons",
+  EDIT_REFUND_REASONS: "edit-refund-reasons",
+  DELETE_REFUND_REASONS: "delete-refund-reasons",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

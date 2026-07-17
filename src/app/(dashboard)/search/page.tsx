@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Download } from "lucide-react";
+import { Download, Loader2 } from "lucide-react";
 import { LimitedSelect as ReactSelect } from "@/components/ui/LimitedSelect";
 import { toast } from "sonner";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -261,7 +261,7 @@ export default function SearchPage() {
       id: "urgent",
       cell: ({ row }) =>
         row.original.isUrgent ? (
-          <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+          <span className="inline-flex items-center rounded-full bg-red-700 px-2 py-0.5 text-xs font-medium text-white">
             Oui
           </span>
         ) : (
@@ -608,7 +608,11 @@ export default function SearchPage() {
             disabled={isExporting}
             className="inline-flex items-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50"
           >
-            <Download className="h-4 w-4" />
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
             {isExporting ? "Export en cours…" : "Exporter Excel"}
           </button>
         </div>

@@ -4,7 +4,8 @@ import type { PageResponse } from "@/types/api";
 export interface Client {
   id: string;
   name: string;
-  address?: string;
+  /** Orthographe volontaire : la colonne SQL et l'API Java exposent `adress`. */
+  adress?: string;
   contact?: string;
   ifu?: string;
   branchId: string;
@@ -12,7 +13,7 @@ export interface Client {
 
 export interface ClientRequest {
   name: string;
-  address?: string;
+  adress?: string;
   contact?: string;
   ifu?: string;
 }

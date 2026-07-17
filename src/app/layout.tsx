@@ -15,6 +15,8 @@ const nunito = Nunito({
 export const metadata: Metadata = {
   title: "Labo AnaPath",
   description: "Laboratoire d'Anatomie Pathologique",
+  // Renforce l'anti-traduction (Chrome honore ce meta) — voir translate="no".
+  other: { google: "notranslate" },
 };
 
 export default function RootLayout({
@@ -23,7 +25,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr" className={`h-full ${nunito.variable}`}>
+    // translate="no" (+ classe notranslate) : empêche la traduction automatique
+    // du navigateur. Sur une appli React en français, la traduction réécrit les
+    // nœuds texte et provoque « Cannot read properties of null (reading
+    // 'removeChild') ». Standard W3C respecté par Chrome.
+    <html
+      lang="fr"
+      translate="no"
+      className={`h-full notranslate ${nunito.variable}`}
+    >
       <body className="h-full bg-[#fafbfe] antialiased font-sans">
         <Providers>{children}</Providers>
       </body>

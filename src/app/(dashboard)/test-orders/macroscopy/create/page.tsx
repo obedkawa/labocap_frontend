@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { AxiosError } from "axios";
+import { Loader2 } from "lucide-react";
 import { LimitedSelect as ReactSelect } from "@/components/ui/LimitedSelect";
 
 import { hrApi } from "@/lib/api/hr";
@@ -176,7 +177,7 @@ export default function AddMacroscopyPage() {
                           </span>
                         )}
                         {option.isUrgent && (
-                          <span className="ml-auto text-xs bg-red-600 text-white px-1.5 py-0.5 rounded">
+                          <span className="ml-auto text-xs bg-red-700 text-white px-1.5 py-0.5 rounded">
                             Urgent
                           </span>
                         )}
@@ -214,8 +215,9 @@ export default function AddMacroscopyPage() {
             type="button"
             onClick={() => mutation.mutate()}
             disabled={mutation.isPending}
-            className="inline-flex items-center rounded px-4 py-2 text-sm font-medium bg-yellow-500 text-white hover:bg-yellow-600 transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded px-4 py-2 text-sm font-medium bg-yellow-500 text-white hover:bg-yellow-600 transition-colors disabled:opacity-50"
           >
+            {mutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
             {mutation.isPending ? "Enregistrement..." : "Ajouter"}
           </button>
         </div>

@@ -40,6 +40,18 @@ export interface DataTableProps<T> {
    * react-query actives (rechargement générique des données).
    */
   onRefresh?: () => void;
+  /**
+   * Masque le champ de recherche intégré à la barre d'outils. À utiliser quand
+   * la page fournit sa propre recherche (ex. `SearchInput` dans le slot filtres),
+   * pour éviter d'afficher deux champs de recherche.
+   */
+  hideToolbarSearch?: boolean;
+  /**
+   * Masque la barre d'outils du tableau (Actualiser · Réduire · Fermer). À utiliser
+   * quand la page englobe déjà le tableau dans une carte qui fournit ces actions
+   * (ex. `WidgetCard` de « Mon espace »), pour éviter des boutons en double.
+   */
+  hideToolbar?: boolean;
 }
 
 export function DataTable<T>({
@@ -56,6 +68,8 @@ export function DataTable<T>({
   rowClassName,
   title,
   onRefresh,
+  hideToolbarSearch = false,
+  hideToolbar = false,
 }: DataTableProps<T>) {
   const isServerSide = pageCount !== undefined;
   const queryClient = useQueryClient();
@@ -159,7 +173,7 @@ export function DataTable<T>({
   return (
     <div className="w-full space-y-3">
       {/* Barre de recherche */}
-      {(onSearchChange !== undefined || !isServerSide) && (
+      {!hideToolbarSearch && (onSearchChange !== undefined || !isServerSide) && (
         <div className="flex items-center justify-between gap-4">
           <input
             type="text"
@@ -174,6 +188,7 @@ export function DataTable<T>({
       {/* Tableau */}
       <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
         {/* Barre d'outils : Actualiser · Réduire · Fermer */}
+        {!hideToolbar && (
         <div className="flex items-center justify-between gap-2 border-b border-gray-200 bg-white px-3 py-2">
           <span className="truncate text-sm font-semibold text-gray-700">
             {title ?? ""}
@@ -208,6 +223,7 @@ export function DataTable<T>({
             </button>
           </div>
         </div>
+        )}
 
         {!collapsed && (
         <div className="overflow-x-auto">
@@ -264,21 +280,27 @@ export function DataTable<T>({
                   </td>
                 </tr>
               ) : (
-                table.getRowModel().rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className={cn(
-                      "even:bg-gray-50 hover:bg-blue-50 transition-colors",
-                      rowClassName?.(row.original)
-                    )}
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="border-r border-gray-300 px-4 py-3 text-gray-800 last:border-r-0">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    ))}
-                  </tr>
-                ))
+                table.getRowModel().rows.map((row) => {
+                  const custom = rowClassName?.(row.original);
+                  return (
+                    <tr
+                      key={row.id}
+                      className={cn(
+                        "hover:bg-blue-50 transition-colors",
+                        // `even:` l'emporterait sur la couleur fournie par la page
+                        // (classe + pseudo-classe) : on ne raye que les lignes sans couleur propre.
+                        !custom && "even:bg-gray-50",
+                        custom
+                      )}
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <td key={cell.id} className="border-r border-gray-300 px-4 py-3 text-gray-800 last:border-r-0">
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

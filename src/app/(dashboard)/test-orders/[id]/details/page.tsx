@@ -4,7 +4,7 @@ import { use, useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LimitedSelect as Select } from "@/components/ui/LimitedSelect";
-import { Pencil, Trash2, ImagePlus, Eye, FileText } from "lucide-react";
+import { Pencil, Trash2, ImagePlus, Eye, FileText, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { AxiosError } from "axios";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -14,7 +14,6 @@ import { CrudModal } from "@/components/common/CrudModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Badge } from "@/components/ui/Badge";
-import { StatusBadge } from "@/components/ui/StatusBadge";
 import { formatCFA, formatDate } from "@/lib/utils";
 import {
   testOrdersApi,
@@ -25,6 +24,8 @@ import {
 } from "@/lib/api/testOrders";
 import { labTestsApi, type LabTest } from "@/lib/api/examens";
 import type { ApiError } from "@/types/api";
+import { getApiErrorMessage } from "@/lib/api/errorMessages";
+import { openDocFile } from "@/lib/api/docs";
 
 // ---------------------------------------------------------------------------
 // Types locaux
@@ -168,7 +169,7 @@ export default function TestOrderDetailsPage({ params }: Props) {
       setFiles(null);
     },
     onError: (err: AxiosError<ApiError>) => {
-      toast.error(err.response?.data?.message ?? "Erreur lors de l'upload");
+      toast.error(getApiErrorMessage(err, "Erreur lors de l'upload"));
     },
   });
 
@@ -182,7 +183,7 @@ export default function TestOrderDetailsPage({ params }: Props) {
       setDeleteImageIndex(null);
     },
     onError: (err: AxiosError<ApiError>) => {
-      toast.error(err.response?.data?.message ?? "Erreur lors de la suppression");
+      toast.error(getApiErrorMessage(err, "Erreur lors de la suppression"));
     },
   });
 
@@ -225,7 +226,7 @@ export default function TestOrderDetailsPage({ params }: Props) {
       setExamDiscount(0);
     },
     onError: (err: AxiosError<ApiError>) => {
-      toast.error(err.response?.data?.message ?? "Erreur lors de l'ajout");
+      toast.error(getApiErrorMessage(err, "Erreur lors de l'ajout"));
     },
   });
 
@@ -265,7 +266,7 @@ export default function TestOrderDetailsPage({ params }: Props) {
       setEditExam(null);
     },
     onError: (err: AxiosError<ApiError>) => {
-      toast.error(err.response?.data?.message ?? "Erreur lors de la modification");
+      toast.error(getApiErrorMessage(err, "Erreur lors de la modification"));
     },
   });
 
@@ -296,19 +297,21 @@ export default function TestOrderDetailsPage({ params }: Props) {
       setDeleteDetailId(null);
     },
     onError: (err: AxiosError<ApiError>) => {
-      toast.error(err.response?.data?.message ?? "Erreur lors de la suppression");
+      toast.error(getApiErrorMessage(err, "Erreur lors de la suppression"));
     },
   });
 
-  // Statut — finalisation (passage en PENDING via query param)
+  // Statut — finalisation : passage en VALIDATED. C'est ce statut (et lui seul)
+  // qui déclenche côté backend la génération du code de la demande, du rapport
+  // (« CO » + code) et de la facture — équivalent de updateStatus() dans Laravel.
   const updateStatusMutation = useMutation({
-    mutationFn: () => testOrdersApi.updateStatus(orderId, "PENDING"),
+    mutationFn: () => testOrdersApi.updateStatus(orderId, "VALIDATED"),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["test-order", orderId] });
-      toast.success("Demande enregistrée");
+      toast.success("Demande validée");
     },
     onError: (err: AxiosError<ApiError>) => {
-      toast.error(err.response?.data?.message ?? "Erreur lors de l'enregistrement");
+      toast.error(getApiErrorMessage(err, "Erreur lors de la validation"));
     },
   });
 
@@ -352,6 +355,9 @@ export default function TestOrderDetailsPage({ params }: Props) {
   };
 
   const handleUpdateStatus = () => {
+    // Garde anti double-soumission : empêche deux validations concurrentes
+    // (double-clic) qui provoquaient un conflit de génération de code.
+    if (updateStatusMutation.isPending) return;
     updateStatusMutation.mutate();
   };
 
@@ -360,6 +366,14 @@ export default function TestOrderDetailsPage({ params }: Props) {
   // ---------------------------------------------------------------------------
 
   const canEditDetails = order?.status !== "VALIDATED";
+
+  // « Examen de référence » ne concerne que les Immuno (interne/externe) — même
+  // condition que l'apparition du champ dans les formulaires d'ajout/modif.
+  const isImmuno = (order?.typeOrderTitle ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .includes("immuno");
 
   const detailsTotal = (order?.details ?? []).reduce(
     (sum, d) => sum + (d.total ?? 0),
@@ -458,9 +472,9 @@ export default function TestOrderDetailsPage({ params }: Props) {
       {/* ===================================================================
           Section 1 — CTA compte rendu
       =================================================================== */}
-      {order.status === "VALIDATED" && (
+      {order.reportId && (
         <Link
-          href={`/test-orders/${orderId}/macroscopy`}
+          href={`/reports/${order.reportId}`}
           className="w-full block text-center bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors"
         >
           CONSULTEZ LE COMPTE RENDU
@@ -513,6 +527,14 @@ export default function TestOrderDetailsPage({ params }: Props) {
             </dt>
             <dd className="text-gray-800">{order.referenceHopital ?? "—"}</dd>
           </div>
+          {isImmuno && (
+            <div className="flex items-start gap-2">
+              <dt className="font-medium text-gray-500 w-40 flex-shrink-0">
+                Examen de référence :
+              </dt>
+              <dd className="text-gray-800">{order.testAffiliate || "—"}</dd>
+            </div>
+          )}
           <div className="flex items-start gap-2">
             <dt className="font-medium text-gray-500 w-40 flex-shrink-0">
               Date prélèvement :
@@ -529,16 +551,31 @@ export default function TestOrderDetailsPage({ params }: Props) {
             <dt className="font-medium text-gray-500 w-40 flex-shrink-0">Cas urgent :</dt>
             <dd>
               {order.isUrgent ? (
-                <Badge variant="success">Urgent</Badge>
+                <Badge variant="danger" className="bg-red-700 text-white">
+                  Urgent
+                </Badge>
               ) : (
                 <Badge variant="secondary">Normal</Badge>
               )}
             </dd>
           </div>
           <div className="flex items-start gap-2">
-            <dt className="font-medium text-gray-500 w-40 flex-shrink-0">Statut :</dt>
-            <dd>
-              <StatusBadge status={order.status} domain="testOrder" />
+            <dt className="font-medium text-gray-500 w-40 flex-shrink-0">
+              Pièce jointe :
+            </dt>
+            <dd className="text-gray-800">
+              {order.archive ? (
+                <button
+                  type="button"
+                  onClick={() => openDocFile(order.archive!)}
+                  className="inline-flex items-center gap-1 font-medium text-blue-600 hover:underline"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Ouvrir / télécharger
+                </button>
+              ) : (
+                "Aucun fichier"
+              )}
             </dd>
           </div>
         </dl>
@@ -567,6 +604,7 @@ export default function TestOrderDetailsPage({ params }: Props) {
             disabled={!files || files.length === 0 || uploadMutation.isPending}
             className="inline-flex items-center gap-1.5 rounded bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
           >
+            {uploadMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
             {uploadMutation.isPending ? "Upload..." : "Ajouter"}
           </button>
         </form>
@@ -584,15 +622,14 @@ export default function TestOrderDetailsPage({ params }: Props) {
                 <span className="text-sm text-gray-700 font-medium w-20 flex-shrink-0">
                   Image {img.index + 1}
                 </span>
-                <a
-                  href={img.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  type="button"
+                  onClick={() => openDocFile(img.filename)}
                   className="inline-flex items-center gap-1 text-blue-600 text-sm hover:underline"
                 >
                   <Eye className="h-3.5 w-3.5" />
                   Voir
-                </a>
+                </button>
                 <button
                   type="button"
                   onClick={() => setDeleteImageIndex(img.index)}
@@ -677,8 +714,9 @@ export default function TestOrderDetailsPage({ params }: Props) {
               type="button"
               onClick={handleAddDetail}
               disabled={!selectedExam || addDetailMutation.isPending}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
             >
+              {addDetailMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               {addDetailMutation.isPending ? "Ajout..." : "Ajouter"}
             </button>
           </div>
@@ -710,12 +748,13 @@ export default function TestOrderDetailsPage({ params }: Props) {
               disabled={
                 !order.details?.length || updateStatusMutation.isPending
               }
-              className={`w-full py-3 rounded-lg font-semibold transition-colors ${
+              className={`inline-flex w-full items-center justify-center gap-2 py-3 rounded-lg font-semibold transition-colors ${
                 order.details?.length
                   ? "bg-cyan-600 text-white hover:bg-cyan-700"
                   : "bg-gray-300 text-gray-500 cursor-not-allowed"
               }`}
             >
+              {updateStatusMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               {updateStatusMutation.isPending ? "Enregistrement..." : "ENREGISTRER"}
             </button>
           </div>

@@ -1,7 +1,25 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080/api/v1";
+
+/**
+ * Origine du backend (sans le suffixe `/api/v1`), pour construire les URL
+ * absolues de fichiers servis par le backend (ex. galerie d'images). Un chemin
+ * relatif `/api/v1/files/...` viserait sinon le serveur Next (port du front) → 404.
+ */
+export const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
+
+/**
+ * URL absolue d'un fichier stocké, servi par le backend (`/api/v1/files/...`).
+ * Ouvrable directement dans un onglet (l'auth par cookie est envoyée car
+ * front et back sont same-site). Équivalent de `Storage::url()` de Laravel.
+ */
+export const fileUrl = (path: string) =>
+  `${API_ORIGIN}/api/v1/files/${path.replace(/^\/+/, "")}`;
+
 const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080/api/v1",
+  baseURL: API_BASE_URL,
   withCredentials: true,
   headers: {
     "Content-Type": "application/json",
