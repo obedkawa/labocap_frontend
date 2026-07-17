@@ -101,6 +101,47 @@ const STATE_COMMANDS = [
 
 type ActiveState = Record<string, boolean>;
 
+const SELECT_CLASS =
+  "mr-1 rounded border border-gray-200 bg-white px-1.5 py-1 text-xs text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-500";
+
+// Séparateur vertical de la barre d'outils.
+function Sep() {
+  return <span className="mx-1 h-5 w-px bg-gray-200" />;
+}
+
+// Bouton icône de la barre d'outils — surligné quand la commande est active.
+function ToolBtn({
+  title,
+  onRun,
+  isActive = false,
+  children,
+}: {
+  title: string;
+  onRun: () => void;
+  isActive?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-pressed={isActive}
+      onMouseDown={(e) => {
+        // onMouseDown pour préserver la sélection avant l'exécution
+        e.preventDefault();
+        onRun();
+      }}
+      className={`rounded p-1.5 transition-colors ${
+        isActive
+          ? "bg-blue-100 text-blue-700 ring-1 ring-inset ring-blue-300"
+          : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function RichTextEditor({
   value,
   onChange,
@@ -110,6 +151,15 @@ export function RichTextEditor({
 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const [isEmpty, setIsEmpty] = useState(!value);
+
+  // Recalcule `isEmpty` quand la valeur externe change, pendant le rendu plutôt
+  // que dans un effet (évite un rendu en cascade). Pattern React « ajuster l'état
+  // lorsqu'une prop change » : https://react.dev/learn/you-might-not-need-an-effect
+  const [prevValue, setPrevValue] = useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
+    setIsEmpty(!value || value === "<br>" || value.trim() === "");
+  }
 
   // État de la sélection courante (pour surligner les options actives).
   const [active, setActive] = useState<ActiveState>({});
@@ -124,7 +174,6 @@ export function RichTextEditor({
     if (el && el.innerHTML !== (value ?? "")) {
       el.innerHTML = value ?? "";
     }
-    setIsEmpty(!value || value === "<br>" || value.trim() === "");
   }, [value]);
 
   // Recalcule l'état actif des commandes selon la sélection.
@@ -216,41 +265,6 @@ export function RichTextEditor({
     handleInput();
   };
 
-  // Bouton icône de la barre d'outils — surligné quand la commande est active.
-  const ToolBtn = ({
-    title,
-    onRun,
-    isActive = false,
-    children,
-  }: {
-    title: string;
-    onRun: () => void;
-    isActive?: boolean;
-    children: React.ReactNode;
-  }) => (
-    <button
-      type="button"
-      title={title}
-      aria-pressed={isActive}
-      onMouseDown={(e) => {
-        // onMouseDown pour préserver la sélection avant l'exécution
-        e.preventDefault();
-        onRun();
-      }}
-      className={`rounded p-1.5 transition-colors ${
-        isActive
-          ? "bg-blue-100 text-blue-700 ring-1 ring-inset ring-blue-300"
-          : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-      }`}
-    >
-      {children}
-    </button>
-  );
-
-  const Sep = () => <span className="mx-1 h-5 w-px bg-gray-200" />;
-  const selectClass =
-    "mr-1 rounded border border-gray-200 bg-white px-1.5 py-1 text-xs text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-500";
-
   // Valeur affichée dans le select police (vide si la police courante n'est pas listée).
   const fontSelectValue = FONT_OPTIONS.find(
     (f) => f.toLowerCase() === fontName.toLowerCase()
@@ -273,7 +287,7 @@ export function RichTextEditor({
             value={blockFormat}
             onMouseDown={(e) => e.stopPropagation()}
             onChange={(e) => applyHeading(e.target.value)}
-            className={selectClass}
+            className={SELECT_CLASS}
           >
             {HEADING_OPTIONS.map((h) => (
               <option key={h.value} value={h.value}>
@@ -287,7 +301,7 @@ export function RichTextEditor({
             title="Police"
             value={fontSelectValue}
             onChange={(e) => applyFont(e.target.value)}
-            className={selectClass}
+            className={SELECT_CLASS}
           >
             <option value="">Police</option>
             {FONT_OPTIONS.map((f) => (
@@ -302,7 +316,7 @@ export function RichTextEditor({
             title="Taille du texte"
             value={SIZE_OPTIONS.some((s) => s.value === fontSize) ? fontSize : ""}
             onChange={(e) => applyFontSize(e.target.value)}
-            className={selectClass}
+            className={SELECT_CLASS}
           >
             <option value="">Taille</option>
             {SIZE_OPTIONS.map((s) => (
