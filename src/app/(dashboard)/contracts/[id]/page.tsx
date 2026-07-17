@@ -15,6 +15,7 @@ import {
   Tag,
   Ban,
   CheckCircle2,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
 import type { AxiosError } from "axios";
@@ -28,6 +29,7 @@ import { PERMISSIONS } from "@/lib/constants/permissions";
 import { contractsApi, type ContractDetail } from "@/lib/api/contracts";
 import { labTestsApi } from "@/lib/api/examens";
 import type { ApiError } from "@/types/api";
+import { getApiErrorMessage } from "@/lib/api/errorMessages";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -110,7 +112,7 @@ export default function ContractDetailPage({
       setRemise("");
     },
     onError: (e: AxiosError<ApiError>) =>
-      toast.error(e.response?.data?.message ?? "Erreur"),
+      toast.error(getApiErrorMessage(e, "Erreur")),
   });
 
   const updateDetailMutation = useMutation({
@@ -125,7 +127,7 @@ export default function ContractDetailPage({
       setEditDetail(null);
     },
     onError: (e: AxiosError<ApiError>) =>
-      toast.error(e.response?.data?.message ?? "Erreur"),
+      toast.error(getApiErrorMessage(e, "Erreur")),
   });
 
   const deleteDetailMutation = useMutation({
@@ -137,7 +139,7 @@ export default function ContractDetailPage({
       setDeleteDetail(null);
     },
     onError: (e: AxiosError<ApiError>) =>
-      toast.error(e.response?.data?.message ?? "Erreur"),
+      toast.error(getApiErrorMessage(e, "Erreur")),
   });
 
   const activateMutation = useMutation({
@@ -147,7 +149,7 @@ export default function ContractDetailPage({
       toast.success("Contrat activé");
     },
     onError: (e: AxiosError<ApiError>) =>
-      toast.error(e.response?.data?.message ?? "Erreur"),
+      toast.error(getApiErrorMessage(e, "Erreur")),
   });
 
   const closeMutation = useMutation({
@@ -157,7 +159,7 @@ export default function ContractDetailPage({
       toast.success("Contrat clôturé");
     },
     onError: (e: AxiosError<ApiError>) =>
-      toast.error(e.response?.data?.message ?? "Erreur"),
+      toast.error(getApiErrorMessage(e, "Erreur")),
   });
 
   // « Sauvegarder » = mise à jour du statut à ACTIF puis retour à la liste
@@ -170,7 +172,7 @@ export default function ContractDetailPage({
       router.push("/contracts");
     },
     onError: (e: AxiosError<ApiError>) =>
-      toast.error(e.response?.data?.message ?? "Erreur"),
+      toast.error(getApiErrorMessage(e, "Erreur")),
   });
 
   // ---- Render --------------------------------------------------------------
@@ -275,7 +277,7 @@ export default function ContractDetailPage({
                   disabled={closeMutation.isPending}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-2 text-sm font-medium text-white ring-1 ring-inset ring-white/25 transition-colors hover:bg-white/25 disabled:opacity-50"
                 >
-                  <Ban className="h-4 w-4" />
+                  {closeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
                   Clôturer
                 </button>
               )}
@@ -286,7 +288,7 @@ export default function ContractDetailPage({
                   disabled={activateMutation.isPending}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-50 disabled:opacity-50"
                 >
-                  <CheckCircle2 className="h-4 w-4" />
+                  {activateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                   Activer
                 </button>
               )}
@@ -495,6 +497,7 @@ export default function ContractDetailPage({
                   disabled={addTestMutation.isPending}
                   className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
+                  {addTestMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                   Ajouter
                 </button>
               </div>
@@ -609,6 +612,7 @@ export default function ContractDetailPage({
                 disabled={details.length === 0 || saveMutation.isPending}
                 className="w-full rounded-lg bg-green-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-green-700 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
+                {saveMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 Sauvegarder
               </button>
             </div>

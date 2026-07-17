@@ -6,7 +6,7 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { FileText } from "lucide-react";
+import { FileText, Loader2 } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { AxiosError } from "axios";
 import type { UseFormReturn } from "react-hook-form";
@@ -249,7 +249,11 @@ export default function PayrollPage() {
             className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label="Voir PDF"
           >
-            <FileText className="h-3.5 w-3.5" />
+            {pdfLoadingId === row.original.id ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <FileText className="h-3.5 w-3.5" />
+            )}
             {pdfLoadingId === row.original.id ? "..." : "PDF"}
           </button>
         </PermissionGate>

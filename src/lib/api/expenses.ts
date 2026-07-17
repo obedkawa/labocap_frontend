@@ -4,10 +4,20 @@ import type { PageResponse } from "@/types/api";
 // Méthodes de paiement acceptées par le backend
 export type PaymentMethod = "ESPECES" | "CHEQUES" | "MOBILEMONEY" | "VIREMENT";
 
+// Ligne d'article d'une dépense (table `expence_details`, typo héritée de Laravel).
 export interface ExpenseDetail {
   id: string;
-  description?: string;
-  amount: number;
+  articleName?: string;
+  articleId?: string;
+  quantity: number;
+  unitPrice: number;
+  lineAmount: number;
+}
+
+export interface ExpenseDetailRequest {
+  articleName: string;
+  quantity: number;
+  unitPrice: number;
 }
 
 export interface Expense {
@@ -27,6 +37,15 @@ export interface Expense {
   createdAt?: string;
 }
 
+// Création : comme dans Laravel, seuls la catégorie, le fournisseur et l'objet
+// sont saisis. Le montant et la date se renseignent ensuite sur la page détail.
+export interface ExpenseCreateRequest {
+  expenseCategorieId: string;
+  description?: string;
+  supplierId?: string;
+  supplierName?: string;
+}
+
 export interface ExpenseRequest {
   amount: number;
   expenseCategorieId: string;
@@ -42,11 +61,19 @@ export const expensesApi = {
   findAll: (params?: Record<string, unknown>) =>
     apiClient.get<PageResponse<Expense>>("/expenses", { params }),
   findById: (id: string) => apiClient.get<Expense>(`/expenses/${id}`),
-  create: (data: ExpenseRequest) => apiClient.post<Expense>("/expenses", data),
+  create: (data: ExpenseCreateRequest) => apiClient.post<Expense>("/expenses", data),
   update: (id: string, data: ExpenseRequest) =>
     apiClient.put<Expense>(`/expenses/${id}`, data),
   delete: (id: string) => apiClient.delete(`/expenses/${id}`),
+  // Passe la dépense à payée (paid = 1) et débite la caisse de dépense.
   pay: (id: string) => apiClient.patch<Expense>(`/expenses/${id}/pay`),
+  // Passe la dépense à payée + livrée (paid = 2) : entrée en stock, et débit
+  // de la caisse si la dépense n'était pas déjà payée.
+  updateStock: (id: string) => apiClient.patch<Expense>(`/expenses/${id}/update-stock`),
+  addDetail: (id: string, data: ExpenseDetailRequest) =>
+    apiClient.post<Expense>(`/expenses/${id}/details`, data),
+  removeDetail: (id: string, detailId: string) =>
+    apiClient.delete(`/expenses/${id}/details/${detailId}`),
 };
 
 export interface ExpenseCategory {

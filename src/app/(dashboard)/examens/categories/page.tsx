@@ -14,6 +14,7 @@ import { CrudModal } from "@/components/common/CrudModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { RowActions } from "@/components/common/RowActions";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { Button } from "@/components/ui/Button";
 import {
   CategoryForm,
@@ -34,8 +35,7 @@ export default function CategoriesExamensPage() {
   const queryClient = useQueryClient();
 
   // --- State
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
+  const [search, setSearch] = useState("");
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -59,14 +59,24 @@ export default function CategoriesExamensPage() {
   } = useForm<CategoryFormData>({ resolver: zodResolver(categorySchema) });
 
   // --- Query
+  // Le back ne gère pas la recherche sur les catégories : on charge tout (elles
+  // sont peu nombreuses) et on filtre côté client sur le code et le nom.
   const { data, isLoading } = useQuery<PageResponse<CategoryTest>>({
-    queryKey: ["category-tests", { page, size: pageSize }],
+    queryKey: ["category-tests", "all"],
     queryFn: () =>
-      categoryTestsApi.findAll({ page, size: pageSize }).then((r) => r.data),
+      categoryTestsApi.findAll({ page: 0, size: 1000 }).then((r) => r.data),
   });
 
-  const categories = data?.content ?? [];
-  const pageCount = data?.totalPages ?? 0;
+  const allCategories = data?.content ?? [];
+
+  const categories = allCategories.filter((c) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      c.name.toLowerCase().includes(q) ||
+      (c.code ?? "").toLowerCase().includes(q)
+    );
+  });
 
   // --- Mutations
   const createMutation = useMutation({
@@ -191,14 +201,15 @@ export default function CategoriesExamensPage() {
         columns={columns}
         data={categories}
         isLoading={isLoading}
-        pageCount={pageCount}
-        pageIndex={page}
-        pageSize={pageSize}
-        onPageChange={setPage}
-        onPageSizeChange={(size) => {
-          setPageSize(size);
-          setPage(0);
-        }}
+        hideToolbarSearch
+        filters={
+          <SearchInput
+            className="max-w-xs w-full"
+            placeholder="Rechercher par code ou nom…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        }
       />
 
       {/* Modal Création */}

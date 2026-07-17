@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Search, PlusCircle } from "lucide-react";
+import { Search, PlusCircle, Eye } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { AxiosError } from "axios";
 
@@ -20,13 +20,19 @@ import {
   type CashboxResponseDto,
   type CashboxOperationResponseDto,
 } from "@/lib/api/cashbox";
+import { banksApi, type Bank } from "@/lib/api/banks";
+import { NativeSelect } from "@/components/ui/NativeSelect";
 import type { ApiError } from "@/types/api";
 
 // ---------------------------------------------------------------------------
 // Schéma de l'approvisionnement de la caisse
 // ---------------------------------------------------------------------------
 
+// Calque `cashbox/depense/create.blade.php` : aucun champ n'est marqué requis
+// côté HTML Laravel ; on reste souple, seul le montant guide la saisie.
 const supplySchema = z.object({
+  bankId: z.string().optional(),
+  chequeNumber: z.string().optional(),
   amount: z.string().min(1, "Le montant est requis"),
   date: z.string().min(1, "La date est requise"),
   description: z.string().optional(),
@@ -67,12 +73,21 @@ export default function CashboxDepensePage() {
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(20);
   const [supplyOpen, setSupplyOpen] = useState(false);
+  // Opération sélectionnée pour le modal détail (lecture seule) — écran Laravel « edit_depense ».
+  const [detailOp, setDetailOp] = useState<CashboxOperationResponseDto | null>(null);
 
   // === Récupérer la caisse de dépense
   const { data: cashboxesData } = useQuery({
     queryKey: ["cashboxes"],
     queryFn: () => cashboxApi.getCashboxes().then((r) => r.data.content),
   });
+
+  // Banques pour le select « Nom de la banque » du formulaire d'approvisionnement.
+  const { data: banksData } = useQuery({
+    queryKey: ["banks-list"],
+    queryFn: () => banksApi.findAll({ size: 200 }).then((r) => r.data.content),
+  });
+  const banks: Bank[] = banksData ?? [];
 
   // Comme pour la caisse de vente, des doublons vides peuvent exister (artefacts
   // de migration) : on retient la caisse de type "depense" au solde le plus élevé.
@@ -116,6 +131,8 @@ export default function CashboxDepensePage() {
   const supplyForm = useForm<SupplyFormData>({
     resolver: zodResolver(supplySchema),
     defaultValues: {
+      bankId: "",
+      chequeNumber: "",
       amount: "",
       date: new Date().toISOString().split("T")[0],
       description: "",
@@ -130,6 +147,8 @@ export default function CashboxDepensePage() {
         type: "CREDIT",
         description: values.description || undefined,
         operationDate: values.date,
+        bankId: values.bankId || undefined,
+        chequeNumber: values.chequeNumber || undefined,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cashboxes"] });
@@ -137,6 +156,8 @@ export default function CashboxDepensePage() {
       toast.success("Caisse approvisionnée");
       setSupplyOpen(false);
       supplyForm.reset({
+        bankId: "",
+        chequeNumber: "",
         amount: "",
         date: new Date().toISOString().split("T")[0],
         description: "",
@@ -192,6 +213,21 @@ export default function CashboxDepensePage() {
         <span className="text-sm text-gray-700">
           {row.original.userName ?? "—"}
         </span>
+      ),
+    },
+    {
+      header: "Action",
+      id: "actions",
+      cell: ({ row }) => (
+        <button
+          type="button"
+          onClick={() => setDetailOp(row.original)}
+          className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+          title="Voir le détail"
+        >
+          <Eye className="h-3.5 w-3.5" />
+          Détail
+        </button>
       ),
     },
   ];
@@ -301,27 +337,42 @@ export default function CashboxDepensePage() {
         isSubmitting={supplyMutation.isPending}
       >
         <div className="grid grid-cols-1 gap-4">
-          {depenseCashbox && (
-            <p className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-600">
-              Solde caisse de dépense :{" "}
-              <span className="font-semibold text-gray-800">
-                {formatFCFA(depenseCashbox.balance)}
-              </span>{" "}
-              — le montant saisi sera ajouté à la caisse.
-            </p>
-          )}
+          {/* Nom de la banque + Numéro de chèque (une ligne) */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700">
+                Nom de la banque
+              </label>
+              <NativeSelect {...supplyForm.register("bankId")}>
+                <option value="">Sélectionner une banque</option>
+                {banks.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
 
-          {/* Montant */}
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700">
+                Numéro de chèque
+              </label>
+              <input
+                type="text"
+                {...supplyForm.register("chequeNumber")}
+                className={inputClass}
+              />
+            </div>
+          </div>
+
+          {/* Montant (pleine largeur) */}
           <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-gray-700">
-              Montant (FCFA) <span className="text-red-500">*</span>
-            </label>
+            <label className="text-sm font-medium text-gray-700">Montant</label>
             <input
               type="number"
               min={0}
               step="any"
               {...supplyForm.register("amount")}
-              placeholder="0"
               className={inputClass}
             />
             {supplyForm.formState.errors.amount && (
@@ -331,24 +382,33 @@ export default function CashboxDepensePage() {
             )}
           </div>
 
-          {/* Date */}
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-gray-700">
-              Date <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="date"
-              {...supplyForm.register("date")}
-              className={inputClass}
-            />
-            {supplyForm.formState.errors.date && (
-              <p className="text-xs text-red-500">
-                {supplyForm.formState.errors.date.message}
-              </p>
-            )}
+          {/* Date + Attachement (une ligne) */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700">Date</label>
+              <input
+                type="date"
+                {...supplyForm.register("date")}
+                className={inputClass}
+              />
+              {supplyForm.formState.errors.date && (
+                <p className="text-xs text-red-500">
+                  {supplyForm.formState.errors.date.message}
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700">
+                Attachement
+              </label>
+              {/* Champ présent comme dans Laravel ; la pièce jointe n'est pas
+                  persistée par l'approvisionnement (le contrôleur l'ignore). */}
+              <input type="file" className={inputClass} />
+            </div>
           </div>
 
-          {/* Description */}
+          {/* Description (pleine largeur) */}
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium text-gray-700">
               Description
@@ -356,12 +416,69 @@ export default function CashboxDepensePage() {
             <textarea
               rows={3}
               {...supplyForm.register("description")}
-              placeholder="Référence / commentaire (optionnel)"
               className={`${inputClass} resize-none`}
             />
           </div>
         </div>
       </CrudModal>
+
+      {/* === Modal détail opération (lecture seule) — écran Laravel edit_depense === */}
+      {detailOp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <h2 className="text-base font-semibold text-gray-900">
+                {detailOp.type === "DEBIT"
+                  ? "Détail dépense"
+                  : "Détail approvisionnement"}
+              </h2>
+              <button
+                onClick={() => setDetailOp(null)}
+                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                aria-label="Fermer"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-3 p-6 text-sm">
+              <DetailRow label="Date" value={formatDateTime(detailOp.createdAt)} />
+              <DetailRow
+                label="Montant"
+                value={`${detailOp.type === "DEBIT" ? "-" : ""}${formatFCFA(detailOp.amount)}`}
+              />
+              <DetailRow
+                label="Type"
+                value={
+                  detailOp.type === "DEBIT" ? "Dépense" : "Approvisionnement"
+                }
+              />
+              {detailOp.invoiceCode && (
+                <DetailRow label="Facture" value={detailOp.invoiceCode} />
+              )}
+              <DetailRow label="Description" value={detailOp.description ?? "—"} />
+              <DetailRow label="Utilisateur" value={detailOp.userName ?? "—"} />
+            </div>
+            <div className="flex justify-end border-t border-gray-200 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setDetailOp(null)}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <span className="text-gray-500">{label}</span>
+      <span className="text-right font-medium text-gray-800">{value}</span>
     </div>
   );
 }

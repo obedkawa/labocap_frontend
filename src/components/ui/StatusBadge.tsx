@@ -23,14 +23,15 @@ const domainMappings: Record<
     cancelled: { label: "Annulé", variant: "danger" },
   },
   report: {
-    DRAFT: { label: "Brouillon", variant: "secondary" },
+    DRAFT: { label: "En attente de relecture", variant: "warning" },
     REVIEWED: { label: "Révisé", variant: "info" },
     SIGNED: { label: "Signé", variant: "primary" },
+    VALIDATED: { label: "VALIDER", variant: "success" },
     DELIVERED: { label: "Livré", variant: "success" },
   },
   testOrder: {
     PENDING: { label: "En attente", variant: "warning" },
-    VALIDATED: { label: "Validé", variant: "info" },
+    VALIDATED: { label: "Validé", variant: "success" },
     DELIVERED: { label: "Livré", variant: "success" },
   },
   contract: {
@@ -39,7 +40,11 @@ const domainMappings: Record<
     "CLÔTURER": { label: "Clôturé", variant: "danger" },
     CLOTURE: { label: "Clôturé", variant: "danger" },
   },
-  general: {},
+  general: {
+    // « Inactif » en rouge (danger) ; « Actif » conserve le fond gris actuel (secondary).
+    ACTIF: { label: "ACTIF", variant: "secondary" },
+    INACTIF: { label: "INACTIF", variant: "danger" },
+  },
 };
 
 function getStatusConfig(

@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { AxiosError } from "axios";
 
@@ -198,6 +198,9 @@ export default function InvoiceSettingsPage() {
                   disabled={updateMutation.isPending}
                   className="inline-flex items-center rounded-md bg-green-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
                 >
+                  {updateMutation.isPending && (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  )}
                   {updateMutation.isPending ? "Enregistrement..." : "Mettre à jour"}
                 </button>
               </div>

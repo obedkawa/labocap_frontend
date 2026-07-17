@@ -2,6 +2,7 @@
 
 import { useState, Suspense } from "react";
 import Link from "next/link";
+import { Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -290,6 +291,7 @@ function ResetPasswordForm() {
                 disabled={isLoading}
                 className="bg-blue-600 hover:bg-blue-700 text-white w-full py-2 rounded font-medium text-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
+                {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
                 {isLoading ? "Enregistrement..." : "Enregistrer le mot de passe"}
               </button>
 

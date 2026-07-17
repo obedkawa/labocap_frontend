@@ -76,9 +76,10 @@ function StepBadges({ macro }: { macro: MacroListItem }) {
 
 function StepSelect({ onUpdate }: { onUpdate: (step: string) => void }) {
   const steps = [
+    // Les valeurs envoyées au backend sont en snake_case (enum étape).
     { value: "circulation", label: "Circulation" },
     { value: "embedding", label: "Enrobage" },
-    { value: "microtomySpreading", label: "Microtomie et étalement" },
+    { value: "microtomy_spreading", label: "Microtomie et étalement" },
     { value: "staining", label: "Coloration" },
     { value: "mounting", label: "Montage" },
   ];

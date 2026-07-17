@@ -65,6 +65,41 @@ export async function downloadDocFile(
   }
 }
 
+/**
+ * Ouvre un fichier joint dans un nouvel onglet, récupéré via apiClient (cookies)
+ * puis exposé en `blob:` — l'URL reste sur le front (jamais le chemin backend) et
+ * le CSP strict de l'API ne bloque pas l'aperçu (PDF/images).
+ */
+export async function openDocFile(attachment: string): Promise<void> {
+  // Ouvrir l'onglet SYNCHRONEMENT (dans le geste de clic), avant tout `await` :
+  // sinon le navigateur bloque le popup (window.open après une promesse n'est
+  // plus rattaché au geste utilisateur).
+  const tab = window.open("about:blank", "_blank");
+  try {
+    const response = await apiClient.get(`/files/${attachment}`, {
+      responseType: "blob",
+    });
+    const blob = response.data as Blob;
+    const url = window.URL.createObjectURL(blob);
+    if (tab) {
+      // Onglet déjà ouvert : on y charge le blob.
+      tab.location.href = url;
+    } else {
+      // Popup bloqué malgré tout → repli sur un téléchargement.
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = attachment.split("/").pop() || "document";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+    setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+  } catch {
+    if (tab) tab.close();
+    toast.error("Échec de l'ouverture du fichier");
+  }
+}
+
 export function formatFileSize(bytes?: number): string {
   if (!bytes) return "—";
   if (bytes < 1024) return `${bytes} B`;

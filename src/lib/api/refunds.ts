@@ -7,15 +7,21 @@ export interface RefundReason {
 }
 
 export interface RefundRequestLog {
+  id?: string;
+  userId?: string;
+  userFullName?: string;
   operation: string;
-  userName?: string;
   createdAt?: string;
 }
 
 export interface RefundRequest {
   id: string;
   invoiceId: string;
+  /** Code lisible de la facture de référence. */
+  invoiceCode?: string;
   refundReasonId?: string;
+  /** Libellé de la raison — colonne « Objet ». */
+  refundReasonLabel?: string;
   montant: number;
   note?: string;
   attachment?: string;
@@ -24,6 +30,8 @@ export interface RefundRequest {
   logs?: RefundRequestLog[];
   branchId?: string;
   createdAt: string;
+  /** Colonne « Dernière actualisation ». */
+  updatedAt?: string;
 }
 
 export interface RefundCreateRequest {
@@ -55,6 +63,10 @@ export const refundsApi = {
       "/refund-requests",
       { params }
     ),
+
+  /** Badge du menu « Remboursements » : demandes en attente. */
+  countPending: () =>
+    apiClient.get<{ count: number }>("/refund-requests/count-pending"),
 
   findById: (id: string) =>
     apiClient.get<RefundRequest>(`/refund-requests/${id}`),

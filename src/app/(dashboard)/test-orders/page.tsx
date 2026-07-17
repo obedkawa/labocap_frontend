@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LimitedSelect as Select } from "@/components/ui/LimitedSelect";
-import { Eye, Pencil, FileText, Trash2, Plus, Printer, Check, FileDown } from "lucide-react";
+import { Eye, Pencil, FileText, Trash2, Plus, Printer, Check, FileDown, Download, Loader2 } from "lucide-react";
 import type { AxiosError } from "axios";
 import type { ColumnDef } from "@tanstack/react-table";
 
@@ -24,6 +24,7 @@ import { reportsApi } from "@/lib/api/reports";
 import { typeOrdersApi, type TypeOrder } from "@/lib/api/examens";
 import { usersApi } from "@/lib/api/users";
 import apiClient from "@/lib/api/client";
+import { openDocFile } from "@/lib/api/docs";
 import type { PageResponse, ApiError } from "@/types/api";
 
 // ---------------------------------------------------------------------------
@@ -136,6 +137,8 @@ function ActionButtons({
     mutationFn: () => testOrdersApi.deliver(order.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["test-orders"] });
+      // Rafraîchit aussi la page détails éventuellement ouverte (clé ["test-order", id]).
+      queryClient.invalidateQueries({ queryKey: ["test-order"] });
       toast.success("Demande marquée comme retirée");
     },
     onError: (err: AxiosError<ApiError>) =>
@@ -193,7 +196,7 @@ function ActionButtons({
       {/* Marquer comme retiré — VERT (si validé mais pas encore livré) */}
       {order.reportStatus === "VALIDATED" &&
         !order.reportIsDelivered &&
-        can(PERMISSIONS.DELIVER_REPORTS) && (
+        can(PERMISSIONS.EDIT_REPORTS) && (
           <button
             type="button"
             onClick={() => deliverMutation.mutate()}
@@ -201,7 +204,7 @@ function ActionButtons({
             className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
             title="Marquer comme retiré"
           >
-            <Check className="h-3.5 w-3.5" />
+            {deliverMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
           </button>
         )}
 
@@ -216,7 +219,7 @@ function ActionButtons({
             className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-gray-600 text-white hover:bg-gray-700 transition-colors disabled:opacity-50"
             title="Imprimer le compte rendu"
           >
-            <FileDown className="h-3.5 w-3.5" />
+            {downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
           </button>
         )}
 
@@ -238,7 +241,7 @@ function ActionButtons({
           className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
           title="Créer la facture"
         >
-          <Printer className="h-3.5 w-3.5" />
+          {creatingInvoice ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Printer className="h-3.5 w-3.5" />}
         </button>
       ) : null}
 
@@ -294,7 +297,7 @@ export default function TestOrdersPage() {
           page,
           size: pageSize,
           contratId: contratFilter || undefined,
-          status: statusFilter || undefined,
+          reportStatus: statusFilter || undefined,
           typeOrderId: typeFilter || undefined,
           isUrgent: urgentFilter === "1" ? true : undefined,
           attribuateDoctorId: docteurFilter || undefined,
@@ -443,21 +446,34 @@ export default function TestOrdersPage() {
       cell: ({ row }) =>
         `${row.original.patientFirstname} ${row.original.patientLastname}`,
     },
-    // 6. Examens
+    // 6. Examens — comme Laravel : titre du type d'examen (en gras) suivi des
+    // analyses. Le type s'affiche même avant l'ajout d'analyses (juste après la
+    // création), pour ne pas laisser la colonne vide.
     {
       header: "Examens",
       id: "tests",
-      cell: ({ row }) => (
-        <div className="text-xs text-gray-700 max-w-[160px]">
-          {row.original.details?.length
-            ? row.original.details.map((d) => (
-                <div key={d.id ?? `${row.original.id}-${d.labTestId}`}>
-                  {d.testName}
-                </div>
-              ))
-            : "—"}
-        </div>
-      ),
+      cell: ({ row }) => {
+        const typeTitle =
+          row.original.typeOrderTitle ??
+          typeOrders.find((t) => t.id === row.original.typeOrderId)?.title ??
+          "";
+        const details = row.original.details ?? [];
+        if (!typeTitle && details.length === 0) {
+          return <span className="text-xs text-gray-500">—</span>;
+        }
+        return (
+          <div className="text-xs text-gray-700 max-w-[160px]">
+            {typeTitle && (
+              <span className="font-semibold">{typeTitle}</span>
+            )}
+            {details.map((d) => (
+              <div key={d.id ?? `${row.original.id}-${d.labTestId}`}>
+                {d.testName}
+              </div>
+            ))}
+          </div>
+        );
+      },
     },
     // 7. Contrat
     {
@@ -465,27 +481,58 @@ export default function TestOrdersPage() {
       accessorKey: "contratName",
       cell: ({ row }) => row.original.contratName ?? "—",
     },
+    // Pièce jointe — comme Laravel : lien vers le fichier (nouvel onglet), sinon « Aucun fichier ».
+    {
+      header: "Pièce jointe",
+      id: "archive",
+      enableSorting: false,
+      cell: ({ row }) =>
+        row.original.archive ? (
+          <button
+            type="button"
+            onClick={() => openDocFile(row.original.archive!)}
+            className="inline-flex items-center gap-1 text-blue-600 hover:underline"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Voir
+          </button>
+        ) : (
+          <span className="text-xs text-gray-400">Aucun fichier</span>
+        ),
+    },
     // 8. Montant
     {
       header: "Montant",
       id: "amount",
       cell: ({ row }) => formatCFA(row.original.total),
     },
-    // 9. Compte rendu — badge bleu "Valider" / gris "En attente"
+    // 9. Compte rendu — 4 statuts (aligné sur la page détails) :
+    // Non renseigné (pas de CR) / En attente (brouillon) / Validé / Livré.
     {
       header: "Compte rendu",
       id: "report",
       cell: ({ row }) => {
-        const status = row.original.reportStatus;
-        const isValidated =
-          status === "VALIDATED" || status === "DELIVERED";
+        const { reportId, reportStatus, reportIsDelivered } = row.original;
+        let label = "Non renseigné";
+        let cls = "bg-gray-400";
+        if (!reportId) {
+          label = "Non renseigné";
+          cls = "bg-gray-400";
+        } else if (reportIsDelivered || reportStatus === "DELIVERED") {
+          label = "Livré";
+          cls = "bg-green-600";
+        } else if (reportStatus === "VALIDATED") {
+          label = "Validé";
+          cls = "bg-blue-600";
+        } else {
+          label = "En attente";
+          cls = "bg-amber-500";
+        }
         return (
           <span
-            className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium text-white ${
-              isValidated ? "bg-blue-600" : "bg-gray-500"
-            }`}
+            className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium text-white ${cls}`}
           >
-            {isValidated ? "Valider" : "En attente"}
+            {label}
           </span>
         );
       },
@@ -496,7 +543,7 @@ export default function TestOrdersPage() {
       id: "urgent",
       cell: ({ row }) =>
         row.original.isUrgent ? (
-          <span className="inline-flex items-center rounded-full bg-red-600 px-2 py-0.5 text-xs font-medium text-white">
+          <span className="inline-flex items-center rounded-full bg-red-700 px-2 py-0.5 text-xs font-medium text-white">
             Urgent
           </span>
         ) : (
@@ -547,10 +594,10 @@ export default function TestOrdersPage() {
               onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
             >
               <option value="">Tous</option>
-              <option value="VALIDATED">Valider</option>
-              <option value="PENDING">En attente</option>
-              <option value="DELIVERED">Livrer</option>
-              <option value="CANCELLED">Non Livrer</option>
+              <option value="NONE">Non renseigné</option>
+              <option value="DRAFT">En attente</option>
+              <option value="VALIDATED">Validé</option>
+              <option value="DELIVERED">Livré</option>
             </NativeSelect>
           </div>
 

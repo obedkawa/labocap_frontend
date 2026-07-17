@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { AxiosError } from "axios";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -24,9 +24,9 @@ import type { ApiError } from "@/types/api";
 // Zod schema
 // ---------------------------------------------------------------------------
 
+// Laravel n'expose qu'un champ `Nom` (unites_measurement/create.blade.php).
 const unitSchema = z.object({
   name: z.string().min(1, "Le nom est requis"),
-  symbol: z.string().optional(),
 });
 
 type UnitFormData = z.infer<typeof unitSchema>;
@@ -56,16 +56,6 @@ function UnitFormFields({ register, errors }: UnitFormFieldsProps) {
         {errors.name && (
           <p className="text-xs text-red-500">{errors.name.message}</p>
         )}
-      </div>
-
-      {/* Symbole */}
-      <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-gray-700">Symbole</label>
-        <input
-          type="text"
-          {...register("symbol")}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
       </div>
     </div>
   );
@@ -108,7 +98,7 @@ export default function UnitesMesurePage() {
 
   // --- Mutations
   const createMutation = useMutation({
-    mutationFn: (payload: { name: string; symbol?: string }) =>
+    mutationFn: (payload: { name: string }) =>
       unitesMesureApi.create(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["units"] });
@@ -127,7 +117,7 @@ export default function UnitesMesurePage() {
       payload,
     }: {
       id: string;
-      payload: { name: string; symbol?: string };
+      payload: { name: string };
     }) => unitesMesureApi.update(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["units"] });
@@ -160,7 +150,7 @@ export default function UnitesMesurePage() {
   // --- Handlers
   const handleOpenEdit = (unit: UniteMesure) => {
     setSelectedUnit(unit);
-    resetEdit({ name: unit.name, symbol: unit.symbol ?? "" });
+    resetEdit({ name: unit.name });
     setEditOpen(true);
   };
 
@@ -176,33 +166,34 @@ export default function UnitesMesurePage() {
   };
 
   const onCreateSubmit = (formData: UnitFormData) => {
-    createMutation.mutate({
-      name: formData.name,
-      symbol: formData.symbol || undefined,
-    });
+    createMutation.mutate({ name: formData.name });
   };
 
   const onEditSubmit = (formData: UnitFormData) => {
     if (!selectedUnit) return;
     updateMutation.mutate({
       id: selectedUnit.id,
-      payload: {
-        name: formData.name,
-        symbol: formData.symbol || undefined,
-      },
+      payload: { name: formData.name },
     });
   };
 
   // --- Columns
+  const actionBtn =
+    "inline-flex h-8 w-9 items-center justify-center rounded-md text-white transition-colors";
+
   const columns: ColumnDef<UniteMesure>[] = [
+    {
+      // Colonne `#` de Laravel : une case à cocher décorative, sans action.
+      header: "#",
+      id: "select",
+      enableSorting: false,
+      cell: () => (
+        <input type="checkbox" aria-label="Sélectionner la ligne" />
+      ),
+    },
     {
       header: "Nom",
       accessorKey: "name",
-    },
-    {
-      header: "Symbole",
-      id: "symbol",
-      cell: ({ row }) => row.original.symbol ?? "—",
     },
     {
       header: "Actions",
@@ -215,7 +206,7 @@ export default function UnitesMesurePage() {
               <button
                 type="button"
                 onClick={() => handleOpenEdit(unit)}
-                className="inline-flex items-center justify-center rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-blue-600 transition-colors"
+                className={`${actionBtn} bg-blue-600 hover:bg-blue-700`}
                 title="Modifier"
               >
                 <Pencil className="h-4 w-4" />
@@ -226,7 +217,7 @@ export default function UnitesMesurePage() {
               <button
                 type="button"
                 onClick={() => setDeleteConfirm(unit)}
-                className="inline-flex items-center justify-center rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-red-600 transition-colors"
+                className={`${actionBtn} bg-red-500 hover:bg-red-600`}
                 title="Supprimer"
               >
                 <Trash2 className="h-4 w-4" />
@@ -249,20 +240,18 @@ export default function UnitesMesurePage() {
               onClick={() => setCreateOpen(true)}
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
             >
-              <Plus className="h-4 w-4" />
-              Ajouter une unité
+              Ajouter une unité de mesure
             </button>
           ) : undefined
         }
       />
 
-      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <DataTable
-          columns={columns}
-          data={units}
-          isLoading={isLoading}
-        />
-      </div>
+      <DataTable
+        title="Liste des unités de mesure"
+        columns={columns}
+        data={units}
+        isLoading={isLoading}
+      />
 
       {/* Modal Création */}
       <CrudModal

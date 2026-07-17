@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect } from "react";
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm, Controller } from "react-hook-form";
@@ -14,12 +14,16 @@ import {
   loadDoctorOptions,
   loadHospitalOptions,
   loadPatientOptions,
+  loadTestOrderOptions,
 } from "@/lib/api/optionLoaders";
+import type { TestOrderOption } from "@/lib/api/optionLoaders";
 import type { AxiosError } from "axios";
 
+import { Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { FormToggle } from "@/components/ui/FormToggle";
 import { testOrdersApi, type TestOrderRequest } from "@/lib/api/testOrders";
+import { openDocFile } from "@/lib/api/docs";
 import { typeOrdersApi, type TypeOrder } from "@/lib/api/examens";
 import type { ApiError as ApiErrorType } from "@/types/api";
 import apiClient from "@/lib/api/client";
@@ -33,28 +37,25 @@ interface ContractOption {
   name: string;
 }
 
-interface UserOption {
-  id: string;
-  firstname: string;
-  lastname: string;
-  roles?: string[];
-}
+/** Recherche des demandes d'examen (toutes) pour la référence Immuno Interne. */
+const loadTestOrderReferences = loadTestOrderOptions();
 
 // ---------------------------------------------------------------------------
 // Zod schema
 // ---------------------------------------------------------------------------
 
 const editOrderSchema = z.object({
-  typeOrderId: z.string().optional(),
-  contratId: z.string().optional(),
+  // Mêmes champs obligatoires que le formulaire d'ajout.
+  typeOrderId: z.string().min(1, "Le type d'examen est requis"),
+  contratId: z.string().min(1, "Le contrat est requis"),
   patientId: z.string().min(1, "Le patient est requis"),
-  doctorId: z.string().optional(),
-  hospitalId: z.string().optional(),
+  doctorId: z.string().min(1, "Le médecin est requis"),
+  hospitalId: z.string().min(1, "L'hôpital est requis"),
   referenceHopital: z.string().optional(),
+  examenReferenceInput: z.string().optional(),
+  examenReferenceOrderId: z.string().optional(),
   prelevementDate: z.string().min(1, "La date de prélèvement est requise"),
   isUrgent: z.boolean(),
-  option: z.boolean().optional(),
-  assignedToUserId: z.string().optional(),
 });
 
 type EditOrderFormData = z.infer<typeof editOrderSchema>;
@@ -76,6 +77,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
     handleSubmit,
     control,
     reset,
+    watch,
     formState: { errors },
   } = useForm<EditOrderFormData>({
     resolver: zodResolver(editOrderSchema),
@@ -83,6 +85,17 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
       isUrgent: false,
     },
   });
+
+  // Libellé de la demande de référence Immuno Interne déjà sélectionnée.
+  const [referenceOrderOption, setReferenceOrderOption] =
+    useState<TestOrderOption | null>(null);
+
+  // Pièce jointe (examen_file de Laravel) : nouveau fichier à téléverser (le fichier
+  // déjà attaché est lu depuis order.archive).
+  const [examenFile, setExamenFile] = useState<File | null>(null);
+
+  // Watch type d'examen pour les champs conditionnels Immuno.
+  const selectedTypeOrderId = watch("typeOrderId");
 
   // --- Query : demande existante
   const { data: order, isLoading: orderLoading } = useQuery({
@@ -101,11 +114,25 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
       doctorId: order.doctorId ?? "",
       hospitalId: order.hospitalId ?? "",
       referenceHopital: order.referenceHopital ?? "",
+      // Examen de référence pré-rempli depuis test_affiliate, pour externe (texte)
+      // comme interne (le select affiche la valeur enregistrée, modifiable).
+      examenReferenceInput: order.testAffiliate ?? "",
+      examenReferenceOrderId: order.testAffiliate ?? "",
       prelevementDate: order.prelevementDate ?? "",
       isUrgent: order.isUrgent,
-      option: order.option ?? false,
-      assignedToUserId: order.assignedToUserId ?? "",
     });
+    // Interne : amorce l'option affichée du select avec la référence enregistrée
+    // (test_affiliate = code). Le champ montre donc la valeur courante, et
+    // rechoisir une demande la remplace.
+    setReferenceOrderOption(
+      order.testAffiliate
+        ? ({
+            value: order.testAffiliate,
+            label: order.testAffiliate,
+            order: { code: order.testAffiliate },
+          } as unknown as TestOrderOption)
+        : null
+    );
   }, [order, reset]);
 
   // --- Options déjà sélectionnées à l'ouverture : les listes (patients,
@@ -145,21 +172,6 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
     queryFn: () => typeOrdersApi.findAll().then((r) => r.data),
   });
 
-  // Utilisateurs pour "Affecter à"
-  const { data: usersData } = useQuery<UserOption[]>({
-    queryKey: ["users-doctors"],
-    queryFn: async () => {
-      try {
-        const res = await apiClient.get<{ content: UserOption[] }>("/users", {
-          params: { size: 1000, role: "doctor" },
-        });
-        return res.data.content;
-      } catch {
-        return [];
-      }
-    },
-  });
-
   // Options React Select
 
   const contractOptions =
@@ -176,16 +188,30 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
         label: t.title,
       })) ?? [];
 
-  const userOptions =
-    usersData?.map((u) => ({
-      value: u.id,
-      label: `${u.firstname} ${u.lastname}`,
-    })) ?? [];
+  // Détection du type sélectionné pour afficher les champs Immuno (même logique
+  // que le formulaire d'ajout) : insensible à la casse et aux accents.
+  const selectedTypeOrder = typeOrdersData?.find(
+    (t) => t.id === selectedTypeOrderId
+  );
+  const normalizedTypeTitle = (selectedTypeOrder?.title ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+  const isImmunoExterne = normalizedTypeTitle.includes("immuno externe");
+  const isImmunoInterne = normalizedTypeTitle.includes("immuno interne");
 
   // --- Mutation mise à jour
   const updateMutation = useMutation({
     mutationFn: (data: TestOrderRequest) => testOrdersApi.update(id, data),
-    onSuccess: () => {
+    onSuccess: async () => {
+      // Téléverser la nouvelle pièce jointe si un fichier a été choisi.
+      if (examenFile) {
+        try {
+          await testOrdersApi.uploadArchive(id, examenFile);
+        } catch {
+          toast.error("Demande mise à jour, mais échec de l'envoi de la pièce jointe");
+        }
+      }
       toast.success("Demande mise à jour avec succès");
       router.push(`/test-orders/${id}/details`);
     },
@@ -208,8 +234,13 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
     if (data.doctorId) payload.doctorId = data.doctorId;
     if (data.hospitalId) payload.hospitalId = data.hospitalId;
     if (data.referenceHopital) payload.referenceHopital = data.referenceHopital;
-    if (data.assignedToUserId) payload.assignedToUserId = data.assignedToUserId;
-    if (data.option !== undefined) payload.option = data.option;
+    // Examen de référence → colonne test_affiliate. Externe : texte. Interne :
+    // code de la demande nouvellement choisie, sinon on conserve la valeur existante.
+    if (isImmunoExterne && data.examenReferenceInput)
+      payload.testAffiliate = data.examenReferenceInput;
+    if (isImmunoInterne)
+      payload.testAffiliate =
+        referenceOrderOption?.order.code ?? order?.testAffiliate ?? "";
 
     // Le PUT remplace l'intégralité de la demande, examens compris.
     // On réinjecte donc les examens existants pour ne pas les effacer
@@ -246,11 +277,13 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
 
       <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          <div className="grid grid-cols-1 gap-6">
+          {/* Disposition alignée sur Laravel : 2 colonnes en grand écran (md+),
+              empilé en petit écran. */}
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             {/* 1. Type d'examen */}
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-700">
-                Type d&apos;examen
+                Type d&apos;examen <span className="text-red-500">*</span>
               </label>
               <Controller
                 name="typeOrderId"
@@ -281,7 +314,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
             {/* 2. Contrat */}
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-700">
-                Contrat
+                Contrat <span className="text-red-500">*</span>
               </label>
               <Controller
                 name="contratId"
@@ -308,6 +341,62 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
                 </p>
               )}
             </div>
+
+            {/* Examen de référence (conditionnel Immuno) — pleine largeur sous la
+                ligne Type/Contrat, comme le formulaire d'ajout. */}
+            {isImmunoExterne && (
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 md:col-span-2">
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-medium text-gray-700">
+                    Examen de Référence
+                  </label>
+                  <input
+                    type="text"
+                    {...register("examenReferenceInput")}
+                    placeholder="Référence de l'examen externe..."
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  {errors.examenReferenceInput && (
+                    <p className="text-xs text-red-500">
+                      {errors.examenReferenceInput.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {isImmunoInterne && (
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 md:col-span-2">
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-medium text-gray-700">
+                    Demande d&apos;examen de référence
+                  </label>
+                  <Controller
+                    name="examenReferenceOrderId"
+                    control={control}
+                    render={({ field }) => (
+                      <RemoteSelectField
+                        id="examenReferenceOrderId"
+                        loadOptions={loadTestOrderReferences}
+                        value={field.value || null}
+                        onChange={(v, opt) => {
+                          field.onChange(v ?? "");
+                          setReferenceOrderOption(opt);
+                        }}
+                        selectedOption={referenceOrderOption}
+                        placeholder="Rechercher une demande de référence (code, patient)..."
+                        isClearable
+                      />
+                    )}
+                  />
+                  {errors.examenReferenceOrderId && (
+                    <p className="text-xs text-red-500">
+                      {errors.examenReferenceOrderId.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* 3. Patient */}
             <div className="flex flex-col gap-1">
@@ -339,7 +428,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
             {/* 4. Médecin traitant */}
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-700">
-                Médecin traitant
+                Médecin traitant <span className="text-red-500">*</span>
               </label>
               <Controller
                 name="doctorId"
@@ -361,7 +450,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
             {/* 5. Hôpital de provenance */}
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-700">
-                Hôpital de provenance
+                Hôpital de provenance <span className="text-red-500">*</span>
               </label>
               <Controller
                 name="hospitalId"
@@ -410,8 +499,35 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
               )}
             </div>
 
-            {/* 8. Cas urgent */}
-            <div className="flex flex-col gap-2">
+            {/* Pièce jointe — colonne droite de « Date prélèvement », comme Laravel. */}
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700">
+                Pièce jointe
+              </label>
+              {order?.archive && (
+                <button
+                  type="button"
+                  onClick={() => openDocFile(order.archive!)}
+                  className="mb-1 inline-flex w-fit items-center gap-1 text-xs font-medium text-blue-600 hover:underline"
+                >
+                  Pièce jointe actuelle — ouvrir
+                </button>
+              )}
+              <input
+                type="file"
+                onChange={(e) => setExamenFile(e.target.files?.[0] ?? null)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              {order?.archive && (
+                <p className="text-xs text-gray-400">
+                  Choisir un fichier remplace la pièce jointe actuelle.
+                </p>
+              )}
+            </div>
+
+            {/* 8. Cas urgent — ligne dédiée, colonne gauche (comme l'ajout ;
+                l'emplacement de « Pièce jointe » reste vide). */}
+            <div className="flex flex-col gap-2 md:col-start-1">
               <label className="text-sm font-medium text-gray-700">
                 Cas urgent
               </label>
@@ -429,50 +545,6 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
               />
             </div>
 
-            {/* 9. Option */}
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-gray-700">
-                Option
-              </label>
-              <Controller
-                name="option"
-                control={control}
-                render={({ field }) => (
-                  <FormToggle
-                    id="option-edit"
-                    label={field.value ? "Oui" : "Non"}
-                    checked={field.value ?? false}
-                    onChange={field.onChange}
-                  />
-                )}
-              />
-            </div>
-
-            {/* 10. Affecter à (champ additionnel édition) */}
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-700">
-                Affecter à
-              </label>
-              <Controller
-                name="assignedToUserId"
-                control={control}
-                render={({ field }) => (
-                  <Select
-                    instanceId="order-assigned-user"
-                    inputId="assignedToUserId"
-                    options={userOptions}
-                    placeholder="Sélectionner un utilisateur..."
-                    value={
-                      userOptions.find((o) => o.value === field.value) ?? null
-                    }
-                    onChange={(opt) => field.onChange(opt?.value ?? "")}
-                    isClearable
-                    isSearchable
-                    classNamePrefix="react-select"
-                  />
-                )}
-              />
-            </div>
           </div>
 
           {/* Boutons */}
@@ -489,27 +561,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
               disabled={updateMutation.isPending}
               className="inline-flex items-center gap-2 rounded-lg bg-yellow-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-yellow-600 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {updateMutation.isPending && (
-                <svg
-                  className="h-4 w-4 animate-spin"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8v8H4z"
-                  />
-                </svg>
-              )}
+              {updateMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               Mettre à jour
             </button>
           </div>

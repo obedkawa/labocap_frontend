@@ -78,9 +78,6 @@ export default function EmployeesPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
 
-  // Filtre
-  const [search, setSearch] = useState("");
-
   // ---- Queries & Mutations ------------------------------------------------
 
   const { data, isLoading } = useQuery({
@@ -93,14 +90,6 @@ export default function EmployeesPage() {
     () => data?.content ?? [],
     [data?.content]
   );
-
-  // Employés filtrés (filtrage local)
-  const filtered = useMemo(() => {
-    return employees.filter((e) => {
-      const fullName = `${e.firstName} ${e.lastName}`.toLowerCase();
-      return !search || fullName.includes(search.toLowerCase());
-    });
-  }, [employees, search]);
 
   const createMutation = useMutation({
     mutationFn: (payload: EmployeeRequest) => hrApi.create(payload),
@@ -241,7 +230,7 @@ export default function EmployeesPage() {
         <div className="flex items-center gap-2">
           <Link
             href={`/hr/employees/${row.original.id}`}
-            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors"
+            className="inline-flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-xs font-medium bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors"
             title="Voir le profil"
           >
             <Eye className="h-3.5 w-3.5" />
@@ -293,19 +282,8 @@ export default function EmployeesPage() {
         }
       />
 
-      {/* Filtre */}
-      <div className="flex flex-wrap gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <input
-          type="text"
-          placeholder="Rechercher un employé..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
-      </div>
-
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5">
-        <DataTable columns={columns} data={filtered} isLoading={isLoading} />
+        <DataTable columns={columns} data={employees} isLoading={isLoading} />
       </div>
 
       {/* ---- Modal création ---- */}

@@ -1,27 +1,33 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Save, ClipboardCheck, PenLine, Send, ArrowLeft, Clock, X, FileDown, FileText } from "lucide-react";
+import { ArrowLeft, Printer, Paperclip, Loader2 } from "lucide-react";
 import { LimitedSelect as Select } from "@/components/ui/LimitedSelect";
 import type { AxiosError } from "axios";
 
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { RichTextEditor } from "@/components/ui/RichTextEditor";
+import { AuthThumbnail } from "@/components/ui/AuthThumbnail";
+import { QRCodeSVG } from "qrcode.react";
 import { PermissionGate } from "@/components/common/PermissionGate";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { formatDate } from "@/lib/utils";
-import { reportsApi, type ReportDetail, type StoreSignatureRequest } from "@/lib/api/reports";
+import { reportsApi, type ReportDetail } from "@/lib/api/reports";
+import { reportTemplatesApi } from "@/lib/api/reportTemplates";
+import { titleReportsApi } from "@/lib/api/reportSettings";
 import { usersApi } from "@/lib/api/users";
 import { tagsApi } from "@/lib/api/tags";
-import { reportTemplatesApi } from "@/lib/api/reportTemplates";
-import { useAuthStore } from "@/stores/auth.store";
+import { patientsApi } from "@/lib/api/patients";
+import { testOrdersApi, type ImageDto } from "@/lib/api/testOrders";
+import { openDocFile } from "@/lib/api/docs";
 import type { ApiError } from "@/types/api";
 
 // ---------------------------------------------------------------------------
@@ -29,8 +35,11 @@ import type { ApiError } from "@/types/api";
 // ---------------------------------------------------------------------------
 
 const reportEditSchema = z.object({
+  titleId: z.string().optional(),
   content: z.string().optional(),
   contentMicro: z.string().optional(),
+  descriptionSupplementaire: z.string().optional(),
+  descriptionSupplementaireMicro: z.string().optional(),
   comment: z.string().optional(),
   commentSup: z.string().optional(),
   receiverName: z.string().optional(),
@@ -44,47 +53,36 @@ const reportEditSchema = z.object({
 type ReportEditFormValues = z.infer<typeof reportEditSchema>;
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Helpers de style (réplique des « card » Laravel avec le design du projet)
 // ---------------------------------------------------------------------------
 
 const inputClass =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
 
 const textareaClass =
-  "w-full min-h-[200px] p-3 border border-gray-300 rounded font-mono text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 resize-y";
+  "w-full p-3 border border-gray-300 rounded text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 resize-y";
 
-// ---------------------------------------------------------------------------
-// Timeline des logs
-// ---------------------------------------------------------------------------
+const labelClass = "text-sm font-medium text-gray-700";
 
-function LogTimeline({ logs }: { logs: ReportDetail["logs"] }) {
-  if (!logs || logs.length === 0) {
-    return (
-      <p className="text-sm text-gray-400 italic">Aucune activité enregistrée.</p>
-    );
-  }
-
+/** Carte à en-tête façon Laravel (`<h5 class="card-header">`). */
+function Card({
+  title,
+  children,
+  className,
+}: {
+  title?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <ol className="relative border-l border-gray-200 space-y-4 ml-3">
-      {logs.map((log, idx) => (
-        <li key={idx} className="ml-4">
-          <div className="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border border-white bg-blue-500" />
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-sm font-medium text-gray-800">{log.action}</p>
-              {log.description && (
-                <p className="text-xs text-gray-500 mt-0.5">{log.description}</p>
-              )}
-              <p className="text-xs text-gray-400 mt-0.5">Par {log.userName}</p>
-            </div>
-            <span className="text-xs text-gray-400 whitespace-nowrap flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              {formatDate(log.createdAt)}
-            </span>
-          </div>
-        </li>
-      ))}
-    </ol>
+    <div className={`rounded-xl border border-gray-200 bg-white shadow-sm ${className ?? ""}`}>
+      {title && (
+        <div className="border-b border-gray-200 px-5 py-3 text-base font-semibold text-gray-800">
+          {title}
+        </div>
+      )}
+      <div className="p-5">{children}</div>
+    </div>
   );
 }
 
@@ -101,14 +99,11 @@ export default function ReportDetailPage({
   const router = useRouter();
   const { can } = usePermissions();
   const queryClient = useQueryClient();
-  const { user } = useAuthStore();
 
-  // --- Etats modaux deliver / storeSignature
-  const [showDeliverModal, setShowDeliverModal] = useState(false);
-  const [deliverReceiverName, setDeliverReceiverName] = useState("");
-
-  const [showSignatureModal, setShowSignatureModal] = useState(false);
-  const [signatorName, setSignatorName] = useState("");
+  // --- Etat du compte rendu (select Laravel : 0 = En attente / 1 = Terminé)
+  const [statusValue, setStatusValue] = useState<"0" | "1">("0");
+  // --- Affichage du bloc « Contenu complémentaire » (switch Laravel)
+  const [showComplementaire, setShowComplementaire] = useState(false);
 
   // --- Query rapport
   const { data: report, isLoading } = useQuery<ReportDetail>({
@@ -117,7 +112,31 @@ export default function ReportDetailPage({
     enabled: !!id,
   });
 
-  // --- Utilisateurs (réviseur / signataires)
+  // --- Bon d'examen lié (patient + galerie)
+  const { data: testOrder } = useQuery({
+    queryKey: ["report-test-order", report?.testOrderId],
+    queryFn: () => testOrdersApi.findById(report!.testOrderId).then((r) => r.data),
+    enabled: !!report?.testOrderId,
+    staleTime: 5 * 60_000,
+  });
+
+  // --- Profil patient (Nom / Code / Téléphone)
+  const { data: patientProfile } = useQuery({
+    queryKey: ["report-patient", testOrder?.patientId],
+    queryFn: () => patientsApi.findById(testOrder!.patientId).then((r) => r.data),
+    enabled: !!testOrder?.patientId,
+    staleTime: 5 * 60_000,
+  });
+
+  // --- Galerie d'images de la demande (pièces jointes)
+  const { data: galleryImages } = useQuery<ImageDto[]>({
+    queryKey: ["report-order-images", report?.testOrderId],
+    queryFn: () => testOrdersApi.getImages(report!.testOrderId).then((r) => r.data),
+    enabled: !!report?.testOrderId,
+    staleTime: 5 * 60_000,
+  });
+
+  // --- Utilisateurs (signataires / relecteur)
   const { data: usersData } = useQuery({
     queryKey: ["users-for-report"],
     queryFn: () => usersApi.findAll({ size: 200 }).then((r) => r.data.content),
@@ -125,7 +144,7 @@ export default function ReportDetailPage({
   });
   const userOptions = (usersData ?? []).map((u) => ({
     value: u.id,
-    label: `${u.firstname} ${u.lastname}`.trim(),
+    label: `${u.lastname} ${u.firstname}`.trim(),
   }));
 
   // --- Tags
@@ -136,14 +155,24 @@ export default function ReportDetailPage({
   });
   const tagOptions = (tagsData ?? []).map((t) => ({ value: t.id, label: t.name }));
 
-  // --- Modèles de compte-rendu
+  // --- Titres du compte rendu
+  const { data: titlesData } = useQuery({
+    queryKey: ["title-reports"],
+    queryFn: () => titleReportsApi.findAll({ size: 200 }).then((r) => r.data.content),
+    staleTime: 5 * 60_000,
+  });
+  const titleOptions = (titlesData ?? []).map((t) => ({ value: t.id, label: t.name }));
+
+  // --- Modèles / templates (« modèle d'expression »)
   const { data: templatesData } = useQuery({
     queryKey: ["report-templates"],
     queryFn: () => reportTemplatesApi.findAll({ size: 200 }).then((r) => r.data.content),
     staleTime: 5 * 60_000,
   });
-  const templateOptions = (templatesData ?? []).map((t) => ({ value: t.id, label: t.title ?? t.name }));
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const templateOptions = (templatesData ?? []).map((t) => ({
+    value: t.id,
+    label: t.title ?? t.name ?? "—",
+  }));
 
   // --- Formulaire
   const {
@@ -151,11 +180,15 @@ export default function ReportDetailPage({
     handleSubmit,
     reset,
     control,
+    setValue,
   } = useForm<ReportEditFormValues>({
     resolver: zodResolver(reportEditSchema),
     defaultValues: {
+      titleId: "",
       content: "",
       contentMicro: "",
+      descriptionSupplementaire: "",
+      descriptionSupplementaireMicro: "",
       comment: "",
       commentSup: "",
       receiverName: "",
@@ -171,8 +204,11 @@ export default function ReportDetailPage({
   useEffect(() => {
     if (report) {
       reset({
+        titleId: report.titleId ?? "",
         content: report.content ?? "",
         contentMicro: report.contentMicro ?? "",
+        descriptionSupplementaire: report.descriptionSupplementaire ?? "",
+        descriptionSupplementaireMicro: report.descriptionSupplementaireMicro ?? "",
         comment: report.comment ?? "",
         commentSup: report.commentSup ?? "",
         receiverName: report.receiverName ?? "",
@@ -182,16 +218,42 @@ export default function ReportDetailPage({
         reviewedById: report.reviewedById ?? "",
         tagIds: report.tagIds ?? [],
       });
+      setStatusValue(report.status === "DRAFT" ? "0" : "1");
+      setShowComplementaire(
+        !!report.descriptionSupplementaire || !!report.descriptionSupplementaireMicro
+      );
     }
   }, [report, reset]);
 
+  // Titre par défaut : pour un compte rendu NON validé (DRAFT) qui n'a pas encore
+  // de titre, on pré-sélectionne le titre marqué « par défaut ». L'utilisateur reste
+  // libre d'en choisir un autre dans la liste. Appliqué une seule fois.
+  const defaultTitleApplied = useRef(false);
+  useEffect(() => {
+    if (!report || defaultTitleApplied.current) return;
+    if (report.status === "DRAFT" && !report.titleId && titlesData) {
+      const def = titlesData.find((t) => t.isDefault);
+      if (def) {
+        setValue("titleId", def.id);
+        defaultTitleApplied.current = true;
+      }
+    }
+  }, [report, titlesData, setValue]);
+
   // --- Mutations
 
+  // Réplique du ReportController@store Laravel : UN SEUL enregistrement pilote
+  // le contenu ET le statut. Le select « État du compte rendu » décide :
+  //   "1" (Terminé)             → status VALIDATED
+  //   "0" (En attente relecture) → status DRAFT
   const updateMutation = useMutation({
     mutationFn: (data: ReportEditFormValues) =>
       reportsApi.update(id, {
+        titleId: data.titleId || undefined,
         content: data.content || undefined,
         contentMicro: data.contentMicro || undefined,
+        descriptionSupplementaire: data.descriptionSupplementaire || undefined,
+        descriptionSupplementaireMicro: data.descriptionSupplementaireMicro || undefined,
         comment: data.comment || undefined,
         commentSup: data.commentSup || undefined,
         receiverName: data.receiverName || undefined,
@@ -199,67 +261,52 @@ export default function ReportDetailPage({
         signatory2Id: data.signatory2Id || undefined,
         signatory3Id: data.signatory3Id || undefined,
         reviewedById: data.reviewedById || undefined,
+        status: statusValue === "1" ? "VALIDATED" : "DRAFT",
         tagIds: data.tagIds ?? [],
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["report", id] });
-      toast.success("Rapport sauvegardé");
+      toast.success(
+        statusValue === "1" ? "Compte rendu validé" : "Compte rendu mis à jour"
+      );
     },
     onError: (err: AxiosError<ApiError>) => {
       toast.error(err.response?.data?.message ?? "Erreur lors de la sauvegarde");
     },
   });
 
-  const validateMutation = useMutation({
-    mutationFn: () => reportsApi.validate(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["report", id] });
-      toast.success("Rapport validé");
-    },
-    onError: (err: AxiosError<ApiError>) => {
-      toast.error(err.response?.data?.message ?? "Erreur lors de la validation");
-    },
-  });
+  // Applique le contenu d'un template dans le champ ciblé (« modèle d'expression »)
+  const applyTemplate = async (
+    templateId: string,
+    field: "content" | "contentMicro" | "descriptionSupplementaire" | "descriptionSupplementaireMicro"
+  ) => {
+    if (!templateId) return;
+    try {
+      const tpl = await reportTemplatesApi.findById(templateId).then((r) => r.data);
+      setValue(field, tpl.content ?? "", { shouldDirty: true });
+      toast.success("Template appliqué");
+    } catch {
+      toast.error("Erreur lors du chargement du template");
+    }
+  };
 
-  const storeSignatureMutation = useMutation({
-    mutationFn: (data: StoreSignatureRequest) => reportsApi.storeSignature(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["report", id] });
-      setShowSignatureModal(false);
-      setSignatorName("");
-      toast.success("Signature enregistrée");
-    },
-    onError: (err: AxiosError<ApiError>) => {
-      toast.error(err.response?.data?.message ?? "Erreur lors de la signature");
-    },
-  });
-
-  const deliverMutation = useMutation({
-    mutationFn: (receiverName: string) => reportsApi.deliver(id, receiverName),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["report", id] });
-      setShowDeliverModal(false);
-      setDeliverReceiverName("");
-      toast.success("Rapport livré");
-    },
-    onError: (err: AxiosError<ApiError>) => {
-      toast.error(err.response?.data?.message ?? "Erreur lors de la livraison");
-    },
-  });
-
-  const setTemplateMutation = useMutation({
-    mutationFn: (templateId: string) => reportsApi.setTemplate(id, templateId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["report", id] });
-      toast.success("Modèle associé au compte-rendu");
-    },
-    onError: (err: AxiosError<ApiError>) => {
-      toast.error(err.response?.data?.message ?? "Erreur lors de l'association du modèle");
-    },
-  });
+  // Ouvre le PDF du compte rendu (Imprimer le compte rendu) dans un nouvel onglet
+  const printReport = async () => {
+    const tab = window.open("about:blank", "_blank");
+    try {
+      const res = await reportsApi.downloadPdf(id);
+      const blob = new Blob([res.data as BlobPart], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      if (tab) tab.location.href = url;
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      if (tab) tab.close();
+      toast.error("Erreur lors de la génération du PDF");
+    }
+  };
 
   // ---------------------------------------------------------------------------
-  // Guard de permission
+  // Guard permission / états de chargement
   // ---------------------------------------------------------------------------
 
   if (!can(PERMISSIONS.VIEW_REPORTS)) {
@@ -270,15 +317,10 @@ export default function ReportDetailPage({
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Loading / not found
-  // ---------------------------------------------------------------------------
-
   if (isLoading) {
     return (
       <div className="space-y-4">
         <div className="h-8 w-72 animate-pulse rounded bg-gray-200" />
-        <div className="h-10 animate-pulse rounded-xl bg-gray-100" />
         <div className="h-48 animate-pulse rounded-xl bg-gray-100" />
         <div className="h-32 animate-pulse rounded-xl bg-gray-100" />
       </div>
@@ -288,608 +330,510 @@ export default function ReportDetailPage({
   if (!report) {
     return (
       <div className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
-        <p className="text-sm text-gray-500">Rapport introuvable.</p>
+        <p className="text-sm text-gray-500">Compte rendu introuvable.</p>
       </div>
     );
   }
 
-  const isEditable = report.status === "DRAFT";
+  // Comme Laravel : le formulaire reste modifiable tant que le compte rendu n'est
+  // pas livré (un CR VALIDATED peut être ré-édité / repassé En attente via le
+  // select). Seul DELIVERED verrouille l'édition.
+  const canEdit = can(PERMISSIONS.EDIT_REPORTS) && report.status !== "DELIVERED";
+  const patient = patientProfile?.patient;
 
   // ---------------------------------------------------------------------------
-  // Render
+  // Render — layout Laravel (col-9 principal / col-3 sidebar) puis historiques
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={`Compte rendu — ${report.testOrderCode ?? report.code ?? id}`}
-        breadcrumbs={[
-          { label: "Accueil", href: "/home" },
-          { label: "Comptes rendus", href: "/reports" },
-          { label: report.testOrderCode ?? report.code ?? id },
-        ]}
-      />
-
-      {/* ===================================================================
-          Toolbar workflow
-      =================================================================== */}
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white px-5 py-3 shadow-sm">
-        {/* Retour */}
+    <div className="space-y-4">
+      {/* En-tête : titre + retour à la liste (réplique page-title-box Laravel) */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <PageHeader
+          title={`Compte rendu : ${report.testOrderCode ?? report.code ?? id}`}
+          breadcrumbs={[
+            { label: "Accueil", href: "/home" },
+            { label: "Comptes rendus", href: "/reports" },
+            { label: report.testOrderCode ?? report.code ?? id },
+          ]}
+        />
         <button
           type="button"
-          onClick={() => router.back()}
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+          onClick={() => router.push("/reports")}
+          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
         >
           <ArrowLeft className="h-4 w-4" />
-          Retour
+          Retour à la liste des comptes rendus
         </button>
+      </div>
 
-        <div className="h-5 w-px bg-gray-200" />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        {/* ============================ COLONNE PRINCIPALE ============================ */}
+        <div className="space-y-4 lg:col-span-8 xl:col-span-9">
+          <div className="text-right text-xs text-gray-500">
+            <span className="text-red-500">*</span> champs obligatoires
+          </div>
 
-        {/* Statut courant */}
-        <StatusBadge status={report.status} domain="report" />
+          {/* --- Titre --- */}
+          <Card>
+            <label className={labelClass}>
+              Titre <span className="text-red-500">*</span>
+            </label>
+            <div className="mt-1">
+              <Controller
+                name="titleId"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    instanceId="report-title"
+                    options={titleOptions}
+                    value={titleOptions.find((o) => o.value === field.value) ?? null}
+                    onChange={(opt) => field.onChange(opt?.value ?? "")}
+                    isDisabled={!canEdit}
+                    placeholder="Sélectionner un titre..."
+                    noOptionsMessage={() => "Aucun titre"}
+                    classNamePrefix="react-select"
+                  />
+                )}
+              />
+            </div>
+          </Card>
 
-        <div className="ml-auto flex items-center gap-2">
-          {/* Sauvegarder — DRAFT uniquement */}
-          <PermissionGate permission={PERMISSIONS.EDIT_REPORTS}>
-            {isEditable && (
-              <button
-                type="button"
-                onClick={handleSubmit((data) => updateMutation.mutate(data))}
-                disabled={updateMutation.isPending}
-                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-              >
-                <Save className="h-4 w-4" />
-                {updateMutation.isPending ? "Sauvegarde..." : "Sauvegarder"}
-              </button>
+          {/* --- Contenu de base --- */}
+          <Card title="Contenu de base">
+            {/* Macro */}
+            <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-700">Macro</h3>
+
+            <div className="mb-3">
+              <label className={labelClass}>Template</label>
+              <div className="mt-1">
+                <Select
+                  instanceId="template-macro"
+                  options={templateOptions}
+                  value={null}
+                  onChange={(opt) => opt?.value && applyTemplate(opt.value, "content")}
+                  isDisabled={!canEdit}
+                  placeholder="Sélectionner un template"
+                  noOptionsMessage={() => "Aucun template"}
+                  classNamePrefix="react-select"
+                />
+              </div>
+            </div>
+
+            <div className="mb-3">
+              <label className={labelClass}>Commentaire</label>
+              <textarea
+                {...register("comment")}
+                rows={4}
+                disabled={!canEdit}
+                placeholder="Commentaire..."
+                className={`mt-1 ${textareaClass}`}
+              />
+            </div>
+
+            <div className="mb-6">
+              <label className={labelClass}>
+                Récapitulatifs <span className="text-red-500">*</span>
+              </label>
+              <div className="mt-1">
+                <Controller
+                  name="content"
+                  control={control}
+                  render={({ field }) => (
+                    <RichTextEditor
+                      value={field.value ?? ""}
+                      onChange={field.onChange}
+                      disabled={!canEdit}
+                      placeholder="Saisir le récapitulatif macroscopique..."
+                      minHeightClass="min-h-[300px]"
+                    />
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* Micro */}
+            <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-700">Micro</h3>
+
+            <div className="mb-3">
+              <label className={labelClass}>Template</label>
+              <div className="mt-1">
+                <Select
+                  instanceId="template-micro"
+                  options={templateOptions}
+                  value={null}
+                  onChange={(opt) => opt?.value && applyTemplate(opt.value, "contentMicro")}
+                  isDisabled={!canEdit}
+                  placeholder="Sélectionner un template"
+                  noOptionsMessage={() => "Aucun template"}
+                  classNamePrefix="react-select"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className={labelClass}>
+                Récapitulatifs <span className="text-red-500">*</span>
+              </label>
+              <div className="mt-1">
+                <Controller
+                  name="contentMicro"
+                  control={control}
+                  render={({ field }) => (
+                    <RichTextEditor
+                      value={field.value ?? ""}
+                      onChange={field.onChange}
+                      disabled={!canEdit}
+                      placeholder="Saisir le récapitulatif microscopique..."
+                      minHeightClass="min-h-[300px]"
+                    />
+                  )}
+                />
+              </div>
+            </div>
+          </Card>
+
+          {/* --- Contenu complémentaire (affiché via le switch de la sidebar) --- */}
+          {showComplementaire && (
+            <Card title="Contenu complémentaire">
+              <div className="mb-3">
+                <label className={labelClass}>Template</label>
+                <div className="mt-1">
+                  <Select
+                    instanceId="template-sup"
+                    options={templateOptions}
+                    value={null}
+                    onChange={(opt) => opt?.value && applyTemplate(opt.value, "descriptionSupplementaire")}
+                    isDisabled={!canEdit}
+                    placeholder="Sélectionner un template"
+                    noOptionsMessage={() => "Aucun template"}
+                    classNamePrefix="react-select"
+                  />
+                </div>
+              </div>
+
+              <div className="mb-3">
+                <label className={labelClass}>Commentaire supplémentaire</label>
+                <textarea
+                  {...register("commentSup")}
+                  rows={4}
+                  disabled={!canEdit}
+                  placeholder="Commentaire supplémentaire..."
+                  className={`mt-1 ${textareaClass}`}
+                />
+              </div>
+
+              <div className="mb-6">
+                <label className={labelClass}>
+                  Récapitulatifs <span className="text-red-500">*</span>
+                </label>
+                <div className="mt-1">
+                  <Controller
+                    name="descriptionSupplementaire"
+                    control={control}
+                    render={({ field }) => (
+                      <RichTextEditor
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                        disabled={!canEdit}
+                        placeholder="Récapitulatif complémentaire..."
+                        minHeightClass="min-h-[200px]"
+                      />
+                    )}
+                  />
+                </div>
+              </div>
+
+              <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-700">Micro</h3>
+              <div className="mb-3">
+                <label className={labelClass}>Template</label>
+                <div className="mt-1">
+                  <Select
+                    instanceId="template-sup-micro"
+                    options={templateOptions}
+                    value={null}
+                    onChange={(opt) => opt?.value && applyTemplate(opt.value, "descriptionSupplementaireMicro")}
+                    isDisabled={!canEdit}
+                    placeholder="Sélectionner un template"
+                    noOptionsMessage={() => "Aucun template"}
+                    classNamePrefix="react-select"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className={labelClass}>
+                  Récapitulatifs <span className="text-red-500">*</span>
+                </label>
+                <div className="mt-1">
+                  <Controller
+                    name="descriptionSupplementaireMicro"
+                    control={control}
+                    render={({ field }) => (
+                      <RichTextEditor
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                        disabled={!canEdit}
+                        placeholder="Récapitulatif microscopique complémentaire..."
+                        minHeightClass="min-h-[200px]"
+                      />
+                    )}
+                  />
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* --- Pièces jointes --- */}
+          <Card title="Pièces jointes">
+            {(galleryImages?.length ?? 0) === 0 ? (
+              <p className="flex items-center gap-2 text-sm italic text-gray-400">
+                <Paperclip className="h-4 w-4" />
+                Aucune pièce jointe.
+              </p>
+            ) : (
+              <div className="flex flex-wrap justify-center gap-2">
+                {(galleryImages ?? []).map((img) => (
+                  <AuthThumbnail
+                    key={img.index}
+                    filename={img.filename}
+                    alt={`Image ${img.index + 1}`}
+                    onClick={() => openDocFile(img.filename)}
+                  />
+                ))}
+              </div>
             )}
-          </PermissionGate>
+          </Card>
 
-          {/* Valider — DRAFT */}
-          {report.status === "DRAFT" && can(PERMISSIONS.REVIEW_REPORTS) && (
-            <button
-              type="button"
-              onClick={() => validateMutation.mutate()}
-              disabled={validateMutation.isPending}
-              className="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cyan-700 disabled:opacity-50"
-            >
-              <ClipboardCheck className="h-4 w-4" />
-              {validateMutation.isPending ? "En cours..." : "Valider"}
-            </button>
+          {/* --- Signature --- */}
+          <Card title={<span>Signature <span className="text-red-500">*</span></span>}>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className={labelClass}>Signé par</label>
+                <div className="mt-1">
+                  <Controller
+                    name="signatory1Id"
+                    control={control}
+                    render={({ field }) => (
+                      <Select
+                        instanceId="report-signatory1"
+                        options={userOptions}
+                        value={userOptions.find((o) => o.value === field.value) ?? null}
+                        onChange={(opt) => field.onChange(opt?.value ?? "")}
+                        isDisabled={!canEdit}
+                        isClearable
+                        placeholder="Sélectionner un docteur"
+                        noOptionsMessage={() => "Aucun utilisateur"}
+                        classNamePrefix="react-select"
+                      />
+                    )}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className={labelClass}>
+                  Second avis de relecture donné et validé par :
+                </label>
+                <div className="mt-1">
+                  <Controller
+                    name="reviewedById"
+                    control={control}
+                    render={({ field }) => (
+                      <Select
+                        instanceId="report-reviewer"
+                        options={userOptions}
+                        value={userOptions.find((o) => o.value === field.value) ?? null}
+                        onChange={(opt) => field.onChange(opt?.value ?? "")}
+                        isDisabled={!canEdit}
+                        isClearable
+                        placeholder="Sélectionner un docteur"
+                        noOptionsMessage={() => "Aucun utilisateur"}
+                        classNamePrefix="react-select"
+                      />
+                    )}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <label className={labelClass}>
+                Etat du compte rendu <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={statusValue}
+                onChange={(e) => setStatusValue(e.target.value as "0" | "1")}
+                disabled={!canEdit}
+                className={`mt-1 ${inputClass}`}
+              >
+                <option value="0">En attente de relecture</option>
+                <option value="1">Terminé</option>
+              </select>
+            </div>
+
+            {/* Mettre à jour (Laravel : bouton unique qui enregistre + applique le statut) */}
+            <PermissionGate permission={PERMISSIONS.EDIT_REPORTS}>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={handleSubmit((data) => updateMutation.mutate(data))}
+                  disabled={updateMutation.isPending}
+                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-amber-600 disabled:opacity-50"
+                >
+                  {updateMutation.isPending && (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  )}
+                  {updateMutation.isPending ? "Mise à jour..." : "Mettre à jour"}
+                </button>
+              )}
+            </PermissionGate>
+          </Card>
+        </div>
+
+        {/* ============================ SIDEBAR ============================ */}
+        <div className="space-y-4 lg:col-span-4 xl:col-span-3">
+          {/* État du compte rendu */}
+          <Card title="État du compte rendu">
+            <div className="space-y-2 text-sm text-gray-700">
+              <p className="flex items-center gap-2">
+                <span className="font-semibold">État :</span>
+                <StatusBadge status={report.status} domain="report" />
+              </p>
+              <p>
+                <span className="font-semibold">Créé le :</span>{" "}
+                {formatDate(report.createdAt)}
+              </p>
+              <p>
+                <span className="font-semibold">Dernière mise à jour :</span>{" "}
+                {formatDate(report.updatedAt)}
+              </p>
+
+              {/* Switch Complémentaire */}
+              <div className="pt-1">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={showComplementaire}
+                    onChange={(e) => setShowComplementaire(e.target.checked)}
+                    disabled={!canEdit}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="font-medium">Complémentaire</span>
+                </label>
+              </div>
+
+              {/* Tags */}
+              <div className="pt-2">
+                <label className={labelClass}>
+                  Tags <span className="text-red-500">*</span>
+                </label>
+                <div className="mt-1">
+                  <Controller
+                    name="tagIds"
+                    control={control}
+                    render={({ field }) => (
+                      <Select
+                        instanceId="report-tags"
+                        isMulti
+                        options={tagOptions}
+                        value={tagOptions.filter((o) => (field.value ?? []).includes(o.value))}
+                        onChange={(opts) => field.onChange(opts.map((o) => o.value))}
+                        isDisabled={!canEdit}
+                        placeholder="Sélectionner les tags"
+                        noOptionsMessage={() => "Aucun tag"}
+                        classNamePrefix="react-select"
+                      />
+                    )}
+                  />
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Informations patient */}
+          <Card title="Informations patient">
+            <div className="space-y-1.5 text-sm text-gray-700">
+              <p>
+                <span className="font-semibold">Nom :</span>{" "}
+                {patient
+                  ? `${patient.lastname} ${patient.firstname}`.trim()
+                  : report.patientName ?? "—"}
+              </p>
+              <p>
+                <span className="font-semibold">Code patient :</span>{" "}
+                {patient?.code ?? "—"}
+              </p>
+              <p>
+                <span className="font-semibold">Téléphone :</span>{" "}
+                {patient?.telephone1 ?? "—"}
+              </p>
+            </div>
+          </Card>
+
+          {/* Signataires */}
+          <Card title="Signataires">
+            <div className="space-y-1.5 text-sm text-gray-700">
+              <p>
+                <span className="font-semibold">Signature 1 :</span>{" "}
+                {report.signatory1Name ?? "Inactif"}
+              </p>
+              <p>
+                <span className="font-semibold">Avis de relecture :</span>{" "}
+                {report.reviewedByName ?? "Inactif"}
+              </p>
+            </div>
+          </Card>
+
+          {/* Code ANAPATH */}
+          {report.testOrderCode && (
+            <Card title="Code ANAPATH">
+              <div className="flex flex-col items-center">
+                <QRCodeSVG value={report.testOrderCode} size={140} level="M" />
+              </div>
+            </Card>
           )}
 
-          {/* Signer — VALIDATED */}
-          {report.status === "VALIDATED" && can(PERMISSIONS.SIGN_REPORTS) && (
-            <button
-              type="button"
-              onClick={() => setShowSignatureModal(true)}
-              disabled={storeSignatureMutation.isPending}
-              className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700 disabled:opacity-50"
-            >
-              <PenLine className="h-4 w-4" />
-              {storeSignatureMutation.isPending ? "Signature..." : "Signer"}
-            </button>
-          )}
-
-          {/* Livrer — VALIDATED */}
-          {report.status === "VALIDATED" && can(PERMISSIONS.DELIVER_REPORTS) && (
-            <button
-              type="button"
-              onClick={() => setShowDeliverModal(true)}
-              disabled={deliverMutation.isPending}
-              className="inline-flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-600 disabled:opacity-50"
-            >
-              <Send className="h-4 w-4" />
-              {deliverMutation.isPending ? "Livraison..." : "Livrer"}
-            </button>
-          )}
-
-          {/* Télécharger PDF */}
+          {/* Imprimer le compte rendu */}
           <button
             type="button"
-            onClick={async () => {
-              try {
-                const res = await reportsApi.downloadPdf(id);
-                const blob = new Blob([res.data as BlobPart], { type: "application/pdf" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `rapport-${report.testOrderCode ?? id}.pdf`;
-                a.click();
-                URL.revokeObjectURL(url);
-              } catch {
-                toast.error("Erreur lors du téléchargement du PDF");
-              }
-            }}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            onClick={printReport}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gray-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-700"
           >
-            <FileDown className="h-4 w-4" />
-            PDF
+            <Printer className="h-4 w-4" />
+            Imprimer le compte rendu
           </button>
         </div>
       </div>
 
-      {/* ===================================================================
-          Informations rapport
-      =================================================================== */}
-      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-base font-semibold text-gray-800">
-          Informations
-        </h2>
-        <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 text-sm">
-          {report.patientName && (
-            <div className="flex items-start gap-2">
-              <dt className="w-36 flex-shrink-0 font-medium text-gray-500">Patient :</dt>
-              <dd className="text-gray-800">{report.patientName}</dd>
-            </div>
-          )}
-          <div className="flex items-start gap-2">
-            <dt className="w-36 flex-shrink-0 font-medium text-gray-500">Code demande :</dt>
-            <dd className="text-gray-800">{report.testOrderCode ?? "—"}</dd>
-          </div>
-          {report.titleName && (
-            <div className="flex items-start gap-2">
-              <dt className="w-36 flex-shrink-0 font-medium text-gray-500">Titre :</dt>
-              <dd className="text-gray-800">{report.titleName}</dd>
-            </div>
-          )}
-          {report.signatory1Name && (
-            <div className="flex items-start gap-2">
-              <dt className="w-36 flex-shrink-0 font-medium text-gray-500">Signataire 1 :</dt>
-              <dd className="text-gray-800">{report.signatory1Name}</dd>
-            </div>
-          )}
-          {report.signatory2Name && (
-            <div className="flex items-start gap-2">
-              <dt className="w-36 flex-shrink-0 font-medium text-gray-500">Signataire 2 :</dt>
-              <dd className="text-gray-800">{report.signatory2Name}</dd>
-            </div>
-          )}
-          {report.signatory3Name && (
-            <div className="flex items-start gap-2">
-              <dt className="w-36 flex-shrink-0 font-medium text-gray-500">Signataire 3 :</dt>
-              <dd className="text-gray-800">{report.signatory3Name}</dd>
-            </div>
-          )}
-          <div className="flex items-start gap-2">
-            <dt className="w-36 flex-shrink-0 font-medium text-gray-500">Créé le :</dt>
-            <dd className="text-gray-800">{formatDate(report.createdAt)}</dd>
-          </div>
-          {report.signatureDate && (
-            <div className="flex items-start gap-2">
-              <dt className="w-36 flex-shrink-0 font-medium text-gray-500">Signé le :</dt>
-              <dd className="text-gray-800">{formatDate(report.signatureDate)}</dd>
-            </div>
-          )}
-          {report.deliveryDate && (
-            <div className="flex items-start gap-2">
-              <dt className="w-36 flex-shrink-0 font-medium text-gray-500">Livré le :</dt>
-              <dd className="text-gray-800">{formatDate(report.deliveryDate)}</dd>
-            </div>
-          )}
-          {report.status === "DELIVERED" && (
-            <>
-              <div className="flex items-start gap-2">
-                <dt className="w-36 flex-shrink-0 font-medium text-gray-500">Livré au patient :</dt>
-                <dd className="text-gray-800">{report.isDelivered ? "Oui" : "Non"}</dd>
-              </div>
-              <div className="flex items-start gap-2">
-                <dt className="w-36 flex-shrink-0 font-medium text-gray-500">Patient informé :</dt>
-                <dd className="text-gray-800">{report.isCalled ? "Oui" : "Non"}</dd>
-              </div>
-              {report.receiverName && (
-                <div className="flex items-start gap-2">
-                  <dt className="w-36 flex-shrink-0 font-medium text-gray-500">Récepteur :</dt>
-                  <dd className="text-gray-800">{report.receiverName}</dd>
-                </div>
-              )}
-            </>
-          )}
-          {report.tagNames && report.tagNames.length > 0 && (
-            <div className="flex items-start gap-2 sm:col-span-2">
-              <dt className="w-36 flex-shrink-0 font-medium text-gray-500">Tags :</dt>
-              <dd className="flex flex-wrap gap-1">
-                {report.tagNames.map((tag) => (
-                  <span
-                    key={tag}
-                    className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700"
-                  >
-                    {tag}
-                  </span>
+      {/* ============================ HISTORIQUES (pleine largeur) ============================ */}
+      <Card title="Historiques">
+        {(report.logs?.length ?? 0) === 0 ? (
+          <p className="text-sm italic text-gray-400">Aucune activité enregistrée.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 text-left text-gray-500">
+                  <th className="px-3 py-2 font-medium">#</th>
+                  <th className="px-3 py-2 font-medium">Date</th>
+                  <th className="px-3 py-2 font-medium">Opération</th>
+                  <th className="px-3 py-2 font-medium">Utilisateur</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {(report.logs ?? []).map((log, idx) => (
+                  <tr key={idx} className="text-gray-700">
+                    <td className="px-3 py-2">{idx + 1}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{formatDate(log.createdAt)}</td>
+                    <td className="px-3 py-2">{log.action}</td>
+                    <td className="px-3 py-2">{log.userName}</td>
+                  </tr>
                 ))}
-              </dd>
-            </div>
-          )}
-        </dl>
-      </div>
-
-      {/* ===================================================================
-          Formulaire édition
-      =================================================================== */}
-      <PermissionGate permission={PERMISSIONS.EDIT_REPORTS}>
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm space-y-6">
-          <h2 className="text-base font-semibold text-gray-800">
-            Contenu du rapport
-          </h2>
-
-          {!isEditable && (
-            <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-              Le rapport ne peut être modifié qu&apos;au statut Brouillon.
-            </p>
-          )}
-
-          {/* Description Macro */}
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-gray-700">
-              Description Macro
-            </label>
-            <textarea
-              {...register("content")}
-              disabled={!isEditable}
-              placeholder="Saisir la description macroscopique..."
-              className={textareaClass}
-            />
-          </div>
-
-          {/* Description Micro */}
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-gray-700">
-              Description Micro
-            </label>
-            <textarea
-              {...register("contentMicro")}
-              disabled={!isEditable}
-              placeholder="Saisir la description microscopique..."
-              className={textareaClass}
-            />
-          </div>
-
-          {/* Commentaire */}
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-gray-700">
-              Commentaire
-            </label>
-            <textarea
-              {...register("comment")}
-              rows={4}
-              disabled={!isEditable}
-              placeholder="Commentaire..."
-              className={textareaClass}
-            />
-          </div>
-
-          {/* Commentaire supplémentaire */}
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-gray-700">
-              Commentaire supplémentaire
-            </label>
-            <textarea
-              {...register("commentSup")}
-              rows={3}
-              disabled={!isEditable}
-              placeholder="Commentaire supplémentaire..."
-              className={textareaClass}
-            />
-          </div>
-        </div>
-      </PermissionGate>
-
-      {/* ===================================================================
-          Signataires & Récepteur
-      =================================================================== */}
-      <PermissionGate permission={PERMISSIONS.EDIT_REPORTS}>
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-base font-semibold text-gray-800">
-            Signataires &amp; Livraison
-          </h2>
-          <div className="grid grid-cols-1 gap-4">
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-700">
-                Signataire 1
-              </label>
-              <Controller
-                name="signatory1Id"
-                control={control}
-                render={({ field }) => (
-                  <Select
-                    instanceId="report-signatory1"
-                    options={userOptions}
-                    value={userOptions.find((o) => o.value === field.value) ?? null}
-                    onChange={(opt) => field.onChange(opt?.value ?? "")}
-                    isDisabled={!isEditable}
-                    isClearable
-                    placeholder="Sélectionner un signataire..."
-                    noOptionsMessage={() => "Aucun utilisateur"}
-                    classNamePrefix="react-select"
-                  />
-                )}
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-700">
-                Signataire 2
-              </label>
-              <Controller
-                name="signatory2Id"
-                control={control}
-                render={({ field }) => (
-                  <Select
-                    instanceId="report-signatory2"
-                    options={userOptions}
-                    value={userOptions.find((o) => o.value === field.value) ?? null}
-                    onChange={(opt) => field.onChange(opt?.value ?? "")}
-                    isDisabled={!isEditable}
-                    isClearable
-                    placeholder="Sélectionner un signataire..."
-                    noOptionsMessage={() => "Aucun utilisateur"}
-                    classNamePrefix="react-select"
-                  />
-                )}
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-700">
-                Signataire 3
-              </label>
-              <Controller
-                name="signatory3Id"
-                control={control}
-                render={({ field }) => (
-                  <Select
-                    instanceId="report-signatory3"
-                    options={userOptions}
-                    value={userOptions.find((o) => o.value === field.value) ?? null}
-                    onChange={(opt) => field.onChange(opt?.value ?? "")}
-                    isDisabled={!isEditable}
-                    isClearable
-                    placeholder="Sélectionner un signataire..."
-                    noOptionsMessage={() => "Aucun utilisateur"}
-                    classNamePrefix="react-select"
-                  />
-                )}
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-700">
-                Nom du récepteur
-              </label>
-              <input
-                type="text"
-                {...register("receiverName")}
-                disabled={!isEditable}
-                placeholder="Nom de la personne qui reçoit..."
-                className={inputClass}
-              />
-            </div>
-
-            {/* Réviseur / relecteur */}
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-700">
-                Réviseur (relecteur)
-              </label>
-              <Controller
-                name="reviewedById"
-                control={control}
-                render={({ field }) => (
-                  <Select
-                    instanceId="report-reviewer"
-                    options={userOptions}
-                    value={userOptions.find((o) => o.value === field.value) ?? null}
-                    onChange={(opt) => field.onChange(opt?.value ?? "")}
-                    isDisabled={!isEditable}
-                    isClearable
-                    placeholder="Assigner un relecteur..."
-                    noOptionsMessage={() => "Aucun utilisateur"}
-                    classNamePrefix="react-select"
-                  />
-                )}
-              />
-            </div>
-          </div>
-
-          {/* Tags */}
-          <div className="mt-4 flex flex-col gap-1">
-            <label className="text-sm font-medium text-gray-700">Tags</label>
-            <Controller
-              name="tagIds"
-              control={control}
-              render={({ field }) => (
-                <Select
-                  instanceId="report-tags"
-                  isMulti
-                  options={tagOptions}
-                  value={tagOptions.filter((o) => (field.value ?? []).includes(o.value))}
-                  onChange={(opts) => field.onChange(opts.map((o) => o.value))}
-                  isDisabled={!isEditable}
-                  placeholder="Sélectionner des tags..."
-                  noOptionsMessage={() => "Aucun tag"}
-                  classNamePrefix="react-select"
-                />
-              )}
-            />
-          </div>
-        </div>
-      </PermissionGate>
-
-      {/* ===================================================================
-          Modèle (template) du compte-rendu
-      =================================================================== */}
-      <PermissionGate permission={PERMISSIONS.EDIT_REPORTS}>
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-gray-800">
-            <FileText className="h-4 w-4" />
-            Modèle d&apos;impression
-          </h2>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-            <div className="flex flex-1 flex-col gap-1">
-              <label className="text-sm font-medium text-gray-700">
-                Modèle à associer
-              </label>
-              <Select
-                instanceId="report-template"
-                options={templateOptions}
-                value={templateOptions.find((o) => o.value === selectedTemplateId) ?? null}
-                onChange={(opt) => setSelectedTemplateId(opt?.value ?? "")}
-                placeholder="Sélectionner un modèle..."
-                noOptionsMessage={() => "Aucun modèle"}
-                classNamePrefix="react-select"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => selectedTemplateId && setTemplateMutation.mutate(selectedTemplateId)}
-              disabled={!selectedTemplateId || setTemplateMutation.isPending}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-            >
-              <FileText className="h-4 w-4" />
-              Appliquer
-            </button>
-          </div>
-        </div>
-      </PermissionGate>
-
-      {/* Bouton de sauvegarde bas de page */}
-      <PermissionGate permission={PERMISSIONS.EDIT_REPORTS}>
-        {isEditable && (
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={handleSubmit((data) => updateMutation.mutate(data))}
-              disabled={updateMutation.isPending}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-            >
-              <Save className="h-4 w-4" />
-              {updateMutation.isPending ? "Sauvegarde..." : "Sauvegarder les modifications"}
-            </button>
+              </tbody>
+            </table>
           </div>
         )}
-      </PermissionGate>
-
-      {/* ===================================================================
-          Historique (logs)
-      =================================================================== */}
-      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-base font-semibold text-gray-800">
-          Historique
-        </h2>
-        <LogTimeline logs={report.logs ?? []} />
-      </div>
-
-      {/* ===================================================================
-          Modal — Livrer
-      =================================================================== */}
-      {showDeliverModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-gray-800">Livrer le rapport</h3>
-              <button
-                type="button"
-                onClick={() => { setShowDeliverModal(false); setDeliverReceiverName(""); }}
-                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="flex flex-col gap-1 mb-5">
-              <label className="text-sm font-medium text-gray-700">
-                Nom du récepteur <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={deliverReceiverName}
-                onChange={(e) => setDeliverReceiverName(e.target.value)}
-                placeholder="Nom de la personne qui récupère le rapport..."
-                className={inputClass}
-                autoFocus
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => { setShowDeliverModal(false); setDeliverReceiverName(""); }}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Annuler
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!deliverReceiverName.trim()) {
-                    toast.error("Le nom du récepteur est obligatoire");
-                    return;
-                  }
-                  deliverMutation.mutate(deliverReceiverName.trim());
-                }}
-                disabled={deliverMutation.isPending}
-                className="inline-flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 disabled:opacity-50"
-              >
-                <Send className="h-4 w-4" />
-                {deliverMutation.isPending ? "Livraison..." : "Confirmer la livraison"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===================================================================
-          Modal — Signature
-      =================================================================== */}
-      {showSignatureModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-gray-800">Enregistrer la signature</h3>
-              <button
-                type="button"
-                onClick={() => { setShowSignatureModal(false); setSignatorName(""); }}
-                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="flex flex-col gap-1 mb-5">
-              <label className="text-sm font-medium text-gray-700">
-                Nom du signataire <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={signatorName}
-                onChange={(e) => setSignatorName(e.target.value)}
-                placeholder="Nom complet du signataire..."
-                className={inputClass}
-                autoFocus
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => { setShowSignatureModal(false); setSignatorName(""); }}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Annuler
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const name = signatorName.trim() || (user ? `${user.firstname} ${user.lastname}` : "");
-                  if (!name) {
-                    toast.error("Le nom du signataire est obligatoire");
-                    return;
-                  }
-                  const signature = user?.signature ?? name;
-                  storeSignatureMutation.mutate({ signatorName: name, signature });
-                }}
-                disabled={storeSignatureMutation.isPending}
-                className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
-              >
-                <PenLine className="h-4 w-4" />
-                {storeSignatureMutation.isPending ? "Signature..." : "Confirmer la signature"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      </Card>
     </div>
   );
 }

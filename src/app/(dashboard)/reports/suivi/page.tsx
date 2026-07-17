@@ -166,7 +166,7 @@ function CallCell({ row, onMarkInformed, onCall, onSms }: CallCellProps) {
 
   // Appel vocal / SMS OurVoice : nécessite la permission, un CR terminé et un téléphone.
   const canNotify =
-    can(PERMISSIONS.DELIVER_REPORTS) && reportTerminated && !!phone && !!row.reportId;
+    can(PERMISSIONS.EDIT_REPORTS) && reportTerminated && !!phone && !!row.reportId;
 
   const actions = canNotify ? (
     <div className="flex items-center gap-1">

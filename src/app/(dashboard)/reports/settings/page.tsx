@@ -3,11 +3,13 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Trash2, Plus, ArrowLeft, Star, Search } from "lucide-react";
+import { Pencil, Trash2, Plus, ArrowLeft, Star, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { AxiosError } from "axios";
+import type { ColumnDef } from "@tanstack/react-table";
 
 import { PageHeader } from "@/components/ui/PageHeader";
+import { DataTable } from "@/components/common/DataTable";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { CrudModal } from "@/components/common/CrudModal";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -52,14 +54,6 @@ export default function ReportSettingsPage() {
     [titlesQuery.data]
   );
 
-  // Champ de recherche local
-  const [searchTitre, setSearchTitre] = useState("");
-  const titles = useMemo(() => {
-    const q = searchTitre.trim().toLowerCase();
-    if (!q) return allTitles;
-    return allTitles.filter((t) => (t.name ?? "").toLowerCase().includes(q));
-  }, [allTitles, searchTitre]);
-
   const createMutation = useMutation({
     mutationFn: (data: TitleReportRequest) => titleReportsApi.create(data),
     onSuccess: () => {
@@ -101,6 +95,61 @@ export default function ReportSettingsPage() {
     setEditTarget(target);
     setTitleForm({ name: target.name, isDefault: target.isDefault });
   };
+
+  // Colonnes du DataTable des titres (design partagé : recherche/pagination/toolbar intégrées)
+  const titleColumns: ColumnDef<TitleReport>[] = [
+    {
+      header: "#",
+      id: "index",
+      cell: ({ row }) => <span className="text-gray-700">{row.index + 1}</span>,
+    },
+    {
+      header: "Titres",
+      accessorKey: "name",
+      cell: ({ row }) => (
+        <div className="flex items-center gap-2">
+          <span
+            className={
+              row.original.isDefault ? "font-bold text-gray-900" : "text-gray-800"
+            }
+          >
+            {row.original.name}
+          </span>
+          {row.original.isDefault && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700">
+              <Star className="h-3 w-3 fill-current" />
+              Par défaut
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      header: "Actions",
+      id: "actions",
+      cell: ({ row }) =>
+        canManage ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => openEdit(row.original)}
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Modifier
+            </button>
+            <button
+              type="button"
+              onClick={() => setDeleteTarget(row.original)}
+              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-600 text-white hover:bg-red-700"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Supprimer
+            </button>
+          </div>
+        ) : null,
+    },
+  ];
 
   // === Onglet Placeholder ===
   const settingsQuery = useQuery({
@@ -173,107 +222,12 @@ export default function ReportSettingsPage() {
       {/* === Onglet Titres === */}
       {tab === "titres" && (
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-base font-semibold text-gray-800">
-              Liste des titres
-            </h2>
-
-            {/* Champ de recherche */}
-            <div className="relative w-full max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                value={searchTitre}
-                onChange={(e) => setSearchTitre(e.target.value)}
-                placeholder="Rechercher un titre..."
-                className="w-full rounded-md border border-gray-300 pl-9 pr-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          <div className="overflow-hidden rounded-lg border border-gray-200">
-            <table className="w-full text-sm [&_th]:border-r [&_th]:border-gray-300 [&_th:last-child]:border-r-0 [&_td]:border-r [&_td]:border-gray-200 [&_td:last-child]:border-r-0">
-              <thead className="border-b-2 border-gray-300 bg-gray-200">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-800 w-12">
-                    #
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-800">
-                    Titres
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-800 w-48">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {titlesQuery.isLoading ? (
-                  <tr>
-                    <td
-                      colSpan={3}
-                      className="px-4 py-8 text-center text-sm text-gray-500"
-                    >
-                      Chargement...
-                    </td>
-                  </tr>
-                ) : titles.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={3}
-                      className="px-4 py-8 text-center text-sm text-gray-500"
-                    >
-                      Aucun titre
-                    </td>
-                  </tr>
-                ) : (
-                  titles.map((t, idx) => (
-                    <tr key={t.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-gray-700">{idx + 1}</td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={
-                            t.isDefault
-                              ? "font-bold text-gray-900"
-                              : "text-gray-800"
-                          }
-                        >
-                          {t.name}
-                        </span>
-                        {t.isDefault && (
-                          <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700">
-                            <Star className="h-3 w-3 fill-current" />
-                            Par défaut
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {canManage && (
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => openEdit(t)}
-                              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                              Modifier
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setDeleteTarget(t)}
-                              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-600 text-white hover:bg-red-700"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                              Supprimer
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={titleColumns}
+            data={allTitles}
+            isLoading={titlesQuery.isLoading}
+            title="Liste des titres"
+          />
         </div>
       )}
 
@@ -292,10 +246,13 @@ export default function ReportSettingsPage() {
         onClose={() => setCreateOpen(false)}
         title="Ajouter un nouveau titre"
         onSubmit={() => createMutation.mutate(titleForm)}
-        submitLabel="Ajouter"
+        submitLabel="Ajouter un nouveau titre"
         isSubmitting={createMutation.isPending}
       >
         <div className="space-y-4">
+          <div className="text-right text-xs text-gray-500">
+            <span className="text-red-500">*</span> champs obligatoires
+          </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
               Titre <span className="text-red-500">*</span>
@@ -309,23 +266,28 @@ export default function ReportSettingsPage() {
                   name: e.target.value.toUpperCase(),
                 })
               }
-              className={inputClass}
+              className={`${inputClass} uppercase`}
               required
             />
           </div>
-          <label className="inline-flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={titleForm.isDefault ?? false}
-              onChange={(e) =>
-                setTitleForm({ ...titleForm, isDefault: e.target.checked })
-              }
-              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-            />
-            <span className="text-sm text-gray-700">
-              Définir comme titre par défaut
-            </span>
-          </label>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Par défaut
+            </label>
+            <label className="inline-flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={titleForm.isDefault ?? false}
+                onChange={(e) =>
+                  setTitleForm({ ...titleForm, isDefault: e.target.checked })
+                }
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm text-gray-700">
+                {titleForm.isDefault ? "oui" : "non"}
+              </span>
+            </label>
+          </div>
         </div>
       </CrudModal>
 
@@ -355,23 +317,28 @@ export default function ReportSettingsPage() {
                   name: e.target.value.toUpperCase(),
                 })
               }
-              className={inputClass}
+              className={`${inputClass} uppercase`}
               required
             />
           </div>
-          <label className="inline-flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={titleForm.isDefault ?? false}
-              onChange={(e) =>
-                setTitleForm({ ...titleForm, isDefault: e.target.checked })
-              }
-              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-            />
-            <span className="text-sm text-gray-700">
-              Définir comme titre par défaut
-            </span>
-          </label>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Par défaut
+            </label>
+            <label className="inline-flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={titleForm.isDefault ?? false}
+                onChange={(e) =>
+                  setTitleForm({ ...titleForm, isDefault: e.target.checked })
+                }
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm text-gray-700">
+                {titleForm.isDefault ? "oui" : "non"}
+              </span>
+            </label>
+          </div>
         </div>
       </CrudModal>
 
@@ -423,7 +390,7 @@ function FooterPlaceholderCard({
       <div className="space-y-4">
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">
-            Texte affiché en bas des rapports
+            Pied de page
           </label>
           <textarea
             value={footerValue}
@@ -439,8 +406,11 @@ function FooterPlaceholderCard({
               type="button"
               onClick={() => saveFooterMutation.mutate()}
               disabled={saveFooterMutation.isPending}
-              className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
+              {saveFooterMutation.isPending && (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              )}
               {saveFooterMutation.isPending
                 ? "Enregistrement..."
                 : "Mettre à jour"}

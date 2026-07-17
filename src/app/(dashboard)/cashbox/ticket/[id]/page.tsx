@@ -1,0 +1,407 @@
+"use client";
+
+import { use, useState, useEffect } from "react";
+import Link from "next/link";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { toast } from "sonner";
+import { ArrowLeft, Plus, Trash2, Save } from "lucide-react";
+import type { AxiosError } from "axios";
+
+import { PageHeader } from "@/components/ui/PageHeader";
+import { RHFSelect } from "@/components/ui/RHFSelect";
+import { FormField } from "@/components/ui/FormField";
+import { PermissionGate } from "@/components/common/PermissionGate";
+import { PERMISSIONS } from "@/lib/constants/permissions";
+import { cashboxApi } from "@/lib/api/cashbox";
+import { expenseCategoriesApi } from "@/lib/api/expenses";
+import { suppliersApi } from "@/lib/api/suppliers";
+import type { ApiError } from "@/types/api";
+
+const inputClass =
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+
+function formatAmount(v?: number) {
+  if (v == null) return "—";
+  return new Intl.NumberFormat("fr-FR").format(v) + " FCFA";
+}
+
+// ---------------------------------------------------------------------------
+// Schéma en-tête du bon
+// ---------------------------------------------------------------------------
+
+const headerSchema = z.object({
+  description: z.string().min(1, "L'objet est requis"),
+  expenseCategoryId: z.string().min(1, "La catégorie est requise"),
+  supplierId: z.string().min(1, "Le fournisseur est requis"),
+});
+
+type HeaderData = z.infer<typeof headerSchema>;
+
+interface PageProps {
+  params: Promise<{ id: string }>;
+}
+
+// ---------------------------------------------------------------------------
+// Page — Édition d'un bon de caisse (réplique Laravel cashbox.ticket.details.index)
+// ---------------------------------------------------------------------------
+
+export default function CashboxTicketEditPage({ params }: PageProps) {
+  const { id } = use(params);
+  const queryClient = useQueryClient();
+
+  // Ligne article en cours de saisie
+  const [itemName, setItemName] = useState("");
+  const [unitPrice, setUnitPrice] = useState("");
+  const [quantity, setQuantity] = useState("1");
+
+  const lineTotal = (Number(unitPrice) || 0) * (Number(quantity) || 0);
+
+  // ---- Queries -------------------------------------------------------------
+
+  const { data: voucher, isLoading } = useQuery({
+    queryKey: ["cashbox-ticket", id],
+    queryFn: () => cashboxApi.getVoucher(id).then((r) => r.data),
+  });
+
+  const { data: categoriesData } = useQuery({
+    queryKey: ["expense-categories-all"],
+    queryFn: () => expenseCategoriesApi.findAll({ size: 200 }).then((r) => r.data),
+  });
+
+  const { data: suppliersData } = useQuery({
+    queryKey: ["suppliers-all"],
+    queryFn: () => suppliersApi.findAll({ size: 200 }).then((r) => r.data),
+  });
+
+  const categories = categoriesData?.content ?? [];
+  const suppliers = suppliersData?.content ?? [];
+
+  const isEditable = voucher?.status === "en attente";
+
+  // ---- Form en-tête --------------------------------------------------------
+
+  const form = useForm<HeaderData>({
+    resolver: zodResolver(headerSchema),
+    defaultValues: { description: "", expenseCategoryId: "", supplierId: "" },
+  });
+
+  // Réinitialise le formulaire quand le bon est chargé.
+  useEffect(() => {
+    if (voucher) {
+      form.reset({
+        description: voucher.description ?? "",
+        expenseCategoryId: voucher.expenseCategoryId ?? "",
+        supplierId: voucher.supplierId ?? "",
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voucher?.id]);
+
+  // ---- Mutations -----------------------------------------------------------
+
+  const headerMutation = useMutation({
+    mutationFn: (d: HeaderData) =>
+      cashboxApi.updateVoucher(id, {
+        description: d.description,
+        expenseCategoryId: d.expenseCategoryId,
+        supplierId: d.supplierId,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cashbox-ticket", id] });
+      queryClient.invalidateQueries({ queryKey: ["cashbox-tickets"] });
+      toast.success("Bon de caisse enregistré");
+    },
+    onError: (e: AxiosError<ApiError>) =>
+      toast.error(e.response?.data?.message ?? "Erreur lors de l'enregistrement"),
+  });
+
+  const addDetailMutation = useMutation({
+    mutationFn: () =>
+      cashboxApi.addVoucherDetail(id, {
+        itemName: itemName.trim(),
+        quantity: Number(quantity) || 1,
+        unitPrice: Number(unitPrice),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cashbox-ticket", id] });
+      queryClient.invalidateQueries({ queryKey: ["cashbox-tickets"] });
+      setItemName("");
+      setUnitPrice("");
+      setQuantity("1");
+    },
+    onError: (e: AxiosError<ApiError>) =>
+      toast.error(e.response?.data?.message ?? "Erreur lors de l'ajout de l'article"),
+  });
+
+  const removeDetailMutation = useMutation({
+    mutationFn: (detailId: string) => cashboxApi.deleteVoucherDetail(id, detailId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cashbox-ticket", id] });
+      queryClient.invalidateQueries({ queryKey: ["cashbox-tickets"] });
+    },
+    onError: (e: AxiosError<ApiError>) =>
+      toast.error(e.response?.data?.message ?? "Erreur lors de la suppression"),
+  });
+
+  function handleAddDetail() {
+    if (!itemName.trim()) {
+      toast.error("Le nom de l'article est requis");
+      return;
+    }
+    if (!(Number(unitPrice) > 0)) {
+      toast.error("Le prix doit être supérieur à 0");
+      return;
+    }
+    addDetailMutation.mutate();
+  }
+
+  // ---- Render --------------------------------------------------------------
+
+  const details = voucher?.details ?? [];
+
+  return (
+    <PermissionGate
+      permission={PERMISSIONS.VIEW_CASHBOX_TICKETS}
+      fallback={
+        <div className="flex h-64 items-center justify-center text-sm text-gray-500">
+          Accès non autorisé.
+        </div>
+      }
+    >
+      <div className="space-y-6">
+        <PageHeader
+          title={`Bon de caisse : ${voucher?.code ?? ""}`}
+          breadcrumbs={[
+            { label: "Trésorerie" },
+            { label: "Bon de caisse", href: "/cashbox/ticket" },
+            { label: voucher?.code ?? "Détail" },
+          ]}
+          action={
+            <Link
+              href="/cashbox/ticket"
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Retour
+            </Link>
+          }
+        />
+
+        {isLoading ? (
+          <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500 shadow-sm">
+            Chargement…
+          </div>
+        ) : !voucher ? (
+          <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500 shadow-sm">
+            Bon de caisse introuvable.
+          </div>
+        ) : (
+          <>
+            {/* === Card 1 : en-tête du bon === */}
+            <form
+              onSubmit={form.handleSubmit((d) => headerMutation.mutate(d))}
+              className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-base font-semibold text-gray-800">
+                  Informations du bon
+                </h2>
+                <span className="text-xs text-gray-400">* champs obligatoires</span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <FormField label="Type de caisse" required>
+                  <input
+                    type="text"
+                    value="Caisse de dépense"
+                    readOnly
+                    className={`${inputClass} bg-gray-50 text-gray-500`}
+                  />
+                </FormField>
+
+                <RHFSelect
+                  control={form.control}
+                  name="expenseCategoryId"
+                  label="Catégorie de dépense"
+                  required
+                  options={categories.map((c) => ({ value: c.id, label: c.name }))}
+                  placeholder="Choisir une catégorie..."
+                  error={form.formState.errors.expenseCategoryId?.message}
+                  isDisabled={!isEditable}
+                />
+
+                <RHFSelect
+                  control={form.control}
+                  name="supplierId"
+                  label="Fournisseur"
+                  required
+                  options={suppliers.map((s) => ({ value: s.id, label: s.name }))}
+                  placeholder="Choisir un fournisseur..."
+                  error={form.formState.errors.supplierId?.message}
+                  isDisabled={!isEditable}
+                />
+
+                <FormField
+                  label="Objet"
+                  required
+                  error={form.formState.errors.description?.message}
+                >
+                  <input
+                    type="text"
+                    {...form.register("description")}
+                    readOnly={!isEditable}
+                    className={`${inputClass} ${!isEditable ? "bg-gray-50 text-gray-500" : ""}`}
+                  />
+                </FormField>
+              </div>
+
+              {isEditable && (
+                <div className="mt-4 flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={headerMutation.isPending}
+                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  >
+                    <Save className="h-4 w-4" />
+                    Enregistrer
+                  </button>
+                </div>
+              )}
+            </form>
+
+            {/* === Card 2 : articles === */}
+            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+              <h2 className="mb-4 text-base font-semibold text-gray-800">
+                Liste des articles
+              </h2>
+
+              {/* Formulaire d'ajout d'un article */}
+              {isEditable && (
+                <div className="mb-4 grid grid-cols-1 gap-3 border-b border-gray-100 pb-4 sm:grid-cols-12 sm:items-end">
+                  <div className="sm:col-span-5">
+                    <label className="mb-1 block text-xs text-gray-500">Article</label>
+                    <input
+                      type="text"
+                      value={itemName}
+                      onChange={(e) => setItemName(e.target.value)}
+                      placeholder="Désignation"
+                      className={inputClass}
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-xs text-gray-500">Prix</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={unitPrice}
+                      onChange={(e) => setUnitPrice(e.target.value)}
+                      placeholder="0"
+                      className={inputClass}
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-xs text-gray-500">Quantité</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={quantity}
+                      onChange={(e) => setQuantity(e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-xs text-gray-500">Total</label>
+                    <input
+                      type="text"
+                      value={formatAmount(lineTotal)}
+                      readOnly
+                      className={`${inputClass} bg-gray-50 text-gray-500`}
+                    />
+                  </div>
+                  <div className="sm:col-span-1">
+                    <button
+                      type="button"
+                      onClick={handleAddDetail}
+                      disabled={addDetailMutation.isPending}
+                      className="inline-flex h-[38px] w-full items-center justify-center gap-1 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
+                      title="Ajouter l'article"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Tableau des articles */}
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 text-left text-xs font-medium uppercase text-gray-500">
+                    <th className="pb-2 pr-4">#</th>
+                    <th className="pb-2 pr-4">Article</th>
+                    <th className="pb-2 pr-4 text-right">Prix</th>
+                    <th className="pb-2 pr-4 text-right">Quantité</th>
+                    <th className="pb-2 pr-4 text-right">Total</th>
+                    {isEditable && <th className="pb-2 text-right">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {details.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={isEditable ? 6 : 5}
+                        className="py-6 text-center text-sm text-gray-400"
+                      >
+                        Aucun article. Ajoutez-en ci-dessus.
+                      </td>
+                    </tr>
+                  ) : (
+                    details.map((d, i) => (
+                      <tr key={d.id}>
+                        <td className="py-2 pr-4 text-gray-500">{i + 1}</td>
+                        <td className="py-2 pr-4 font-medium">{d.itemName}</td>
+                        <td className="py-2 pr-4 text-right text-gray-600">
+                          {formatAmount(d.unitPrice)}
+                        </td>
+                        <td className="py-2 pr-4 text-right">{d.quantity}</td>
+                        <td className="py-2 pr-4 text-right font-medium">
+                          {formatAmount(d.lineAmount)}
+                        </td>
+                        {isEditable && (
+                          <td className="py-2 text-right">
+                            <button
+                              type="button"
+                              onClick={() => removeDetailMutation.mutate(d.id)}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                              title="Supprimer la ligne"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-gray-300 font-semibold">
+                    <td colSpan={4} className="py-3 pr-4 text-right text-gray-700">
+                      Total :
+                    </td>
+                    <td className="py-3 pr-4 text-right text-gray-900">
+                      {formatAmount(voucher.amount)}
+                    </td>
+                    {isEditable && <td />}
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+    </PermissionGate>
+  );
+}

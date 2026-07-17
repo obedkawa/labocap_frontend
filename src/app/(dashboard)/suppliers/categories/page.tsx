@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { AxiosError } from "axios";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -23,12 +23,19 @@ import {
 } from "@/lib/api/suppliers";
 import type { ApiError } from "@/types/api";
 
+// Calque `suppliers/category/create.blade.php` : nom requis, description libre.
 const schema = z.object({
   name: z.string().min(1, "Le nom est requis"),
   description: z.string().optional(),
 });
 
 type FormData = z.infer<typeof schema>;
+
+const inputClass =
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+
+const actionBtn =
+  "inline-flex h-8 w-9 items-center justify-center rounded-md text-white transition-colors";
 
 function FormFields({
   register,
@@ -39,26 +46,23 @@ function FormFields({
 }) {
   return (
     <div className="flex flex-col gap-4">
+      <p className="text-right text-sm text-gray-600">
+        <span className="text-red-600">*</span>champs obligatoires
+      </p>
+
       <div className="flex flex-col gap-1">
         <label className="text-sm font-medium text-gray-700">
-          Nom <span className="text-red-500">*</span>
+          Nom de la catégorie <span className="text-red-500">*</span>
         </label>
-        <input
-          type="text"
-          {...register("name")}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
+        <input type="text" {...register("name")} className={inputClass} />
         {errors.name && (
           <p className="text-xs text-red-500">{errors.name.message}</p>
         )}
       </div>
+
       <div className="flex flex-col gap-1">
         <label className="text-sm font-medium text-gray-700">Description</label>
-        <textarea
-          rows={3}
-          {...register("description")}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
+        <textarea rows={5} {...register("description")} className={inputClass} />
       </div>
     </div>
   );
@@ -71,86 +75,129 @@ export default function SupplierCategoriesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [selected, setSelected] = useState<SupplierCategory | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<SupplierCategory | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<SupplierCategory | null>(
+    null,
+  );
 
-  const createForm = useForm<FormData>({ resolver: zodResolver(schema) });
-  const editForm = useForm<FormData>({ resolver: zodResolver(schema) });
+  const {
+    register: registerCreate,
+    handleSubmit: handleSubmitCreate,
+    formState: { errors: createErrors },
+    reset: resetCreate,
+  } = useForm<FormData>({ resolver: zodResolver(schema) });
 
-  const { data: items = [], isLoading } = useQuery<SupplierCategory[]>({
+  const {
+    register: registerEdit,
+    handleSubmit: handleSubmitEdit,
+    formState: { errors: editErrors },
+    reset: resetEdit,
+  } = useForm<FormData>({ resolver: zodResolver(schema) });
+
+  const { data: categories = [], isLoading } = useQuery<SupplierCategory[]>({
     queryKey: ["supplier-categories"],
     queryFn: () => supplierCategoriesApi.findAll().then((r) => r.data),
   });
 
+  function apiError(err: AxiosError<ApiError>) {
+    toast.error(err.response?.data?.message ?? "Erreur d'enrégistrement");
+  }
+
+  function invalidate() {
+    queryClient.invalidateQueries({ queryKey: ["supplier-categories"] });
+  }
+
   const createMutation = useMutation({
-    mutationFn: (d: FormData) => supplierCategoriesApi.create(d),
+    mutationFn: (payload: FormData) =>
+      supplierCategoriesApi.create({
+        name: payload.name,
+        description: payload.description || undefined,
+      }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["supplier-categories"] });
-      toast.success("Catégorie créée");
+      invalidate();
+      toast.success(" Opération effectuée avec succès  ! ");
       setCreateOpen(false);
-      createForm.reset();
+      resetCreate();
     },
-    onError: (e: AxiosError<ApiError>) =>
-      toast.error(e.response?.data?.message ?? "Erreur lors de la création"),
+    onError: apiError,
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: FormData }) =>
-      supplierCategoriesApi.update(id, payload),
+      supplierCategoriesApi.update(id, {
+        name: payload.name,
+        description: payload.description || undefined,
+      }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["supplier-categories"] });
-      toast.success("Catégorie modifiée");
+      invalidate();
+      toast.success(" Mise à jour effectuée avec succès  ! ");
       setEditOpen(false);
       setSelected(null);
-      editForm.reset();
+      resetEdit();
     },
-    onError: (e: AxiosError<ApiError>) =>
-      toast.error(e.response?.data?.message ?? "Erreur lors de la modification"),
+    onError: apiError,
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => supplierCategoriesApi.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["supplier-categories"] });
-      toast.success("Catégorie supprimée");
+      invalidate();
+      toast.success("    Un élement a été supprimé ! ");
       setDeleteConfirm(null);
     },
-    onError: (e: AxiosError<ApiError>) =>
-      toast.error(e.response?.data?.message ?? "Erreur lors de la suppression"),
+    onError: (err: AxiosError<ApiError>) => {
+      toast.error(
+        err.response?.data?.message ??
+          "Impossible de supprimer cet élément !  Celui-ci est lié à d'autres éléments. Pour effectuer cette suppression, vous devez d'abord supprimer ou mettre à jour les éléments liés dans d'autres tables.",
+      );
+    },
   });
 
-  const handleOpenEdit = (item: SupplierCategory) => {
-    setSelected(item);
-    editForm.reset({ name: item.name, description: item.description ?? "" });
+  function openEdit(category: SupplierCategory) {
+    setSelected(category);
+    resetEdit({
+      name: category.name,
+      description: category.description ?? "",
+    });
     setEditOpen(true);
-  };
+  }
 
   const columns: ColumnDef<SupplierCategory>[] = [
-    { header: "Nom", accessorKey: "name" },
+    {
+      header: "#",
+      id: "index",
+      enableSorting: false,
+      cell: ({ row }) => row.index + 1,
+    },
+    {
+      header: "Nom de la catégorie",
+      accessorKey: "name",
+    },
     {
       header: "Description",
       accessorKey: "description",
-      cell: ({ row }) => row.original.description ?? "—",
+      cell: ({ row }) => row.original.description ?? "",
     },
     {
       header: "Actions",
       id: "actions",
+      enableSorting: false,
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
-          <PermissionGate permission={PERMISSIONS.MANAGE_SETTINGS}>
+          <PermissionGate permission={PERMISSIONS.EDIT_SUPPLIER_CATEGORIES}>
             <button
               type="button"
-              onClick={() => handleOpenEdit(row.original)}
-              className="inline-flex items-center justify-center rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-blue-600 transition-colors"
+              onClick={() => openEdit(row.original)}
+              className={`${actionBtn} bg-blue-600 hover:bg-blue-700`}
               title="Modifier"
             >
               <Pencil className="h-4 w-4" />
             </button>
           </PermissionGate>
-          <PermissionGate permission={PERMISSIONS.MANAGE_SETTINGS}>
+          <PermissionGate permission={PERMISSIONS.DELETE_SUPPLIER_CATEGORIES}>
             <button
               type="button"
               onClick={() => setDeleteConfirm(row.original)}
-              className="inline-flex items-center justify-center rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-red-600 transition-colors"
+              className={`${actionBtn} bg-red-500 hover:bg-red-600`}
               title="Supprimer"
             >
               <Trash2 className="h-4 w-4" />
@@ -164,61 +211,74 @@ export default function SupplierCategoriesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Catégories de fournisseurs"
+        title="Catégories de fournisseur"
         action={
-          can(PERMISSIONS.MANAGE_SETTINGS) ? (
+          can(PERMISSIONS.CREATE_SUPPLIER_CATEGORIES) ? (
             <button
               type="button"
-              onClick={() => setCreateOpen(true)}
+              onClick={() => {
+                resetCreate();
+                setCreateOpen(true);
+              }}
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
             >
-              <Plus className="h-4 w-4" />
-              Ajouter
+              Ajouter une nouvelle catégorie
             </button>
           ) : undefined
         }
       />
 
-      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        {/* Pas de pageCount/handlers : données complètes → pagination cliente du DataTable */}
-        <DataTable
-          columns={columns}
-          data={items}
-          isLoading={isLoading}
-        />
-      </div>
+      <DataTable
+        title="Liste des catégories de fournisseurs"
+        columns={columns}
+        data={categories}
+        isLoading={isLoading}
+      />
 
+      {/* Modal création */}
       <CrudModal
         isOpen={createOpen}
-        onClose={() => { setCreateOpen(false); createForm.reset(); }}
-        title="Ajouter une catégorie"
-        onSubmit={createForm.handleSubmit((d) => createMutation.mutate(d))}
-        submitLabel="Ajouter"
+        onClose={() => {
+          setCreateOpen(false);
+          resetCreate();
+        }}
+        title="Ajouter une nouvelle catégorie"
+        onSubmit={handleSubmitCreate((d) => createMutation.mutate(d))}
+        submitLabel="Ajouter une nouvelle catégorie"
         isSubmitting={createMutation.isPending}
       >
-        <FormFields register={createForm.register} errors={createForm.formState.errors} />
+        <FormFields register={registerCreate} errors={createErrors} />
       </CrudModal>
 
+      {/* Modal édition — le titre reprend celui du Blade Laravel. */}
       <CrudModal
         isOpen={editOpen}
-        onClose={() => { setEditOpen(false); setSelected(null); editForm.reset(); }}
-        title="Modifier la catégorie"
-        onSubmit={editForm.handleSubmit((d) => {
+        onClose={() => {
+          setEditOpen(false);
+          setSelected(null);
+          resetEdit();
+        }}
+        title="Modifier la catégorie d'examen"
+        onSubmit={handleSubmitEdit((d) => {
           if (selected) updateMutation.mutate({ id: selected.id, payload: d });
         })}
-        submitLabel="Modifier"
+        submitLabel="Mettre à jour"
         isSubmitting={updateMutation.isPending}
       >
-        <FormFields register={editForm.register} errors={editForm.formState.errors} />
+        <FormFields register={registerEdit} errors={editErrors} />
       </CrudModal>
 
+      {/* Confirmation suppression */}
       <ConfirmModal
         isOpen={deleteConfirm !== null}
         onClose={() => setDeleteConfirm(null)}
-        onConfirm={() => { if (deleteConfirm) deleteMutation.mutate(deleteConfirm.id); }}
-        title="Supprimer cette catégorie"
-        message={deleteConfirm ? `Voulez-vous supprimer "${deleteConfirm.name}" ?` : ""}
-        confirmLabel="Supprimer"
+        onConfirm={() => {
+          if (deleteConfirm) deleteMutation.mutate(deleteConfirm.id);
+        }}
+        title="Voulez-vous supprimer l'élément ?"
+        message={`Catégorie : ${deleteConfirm?.name ?? ""}`}
+        confirmLabel="Oui"
+        cancelLabel="Non !"
         confirmVariant="danger"
         isLoading={deleteMutation.isPending}
       />

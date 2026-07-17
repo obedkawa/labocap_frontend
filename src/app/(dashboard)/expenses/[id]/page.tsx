@@ -1,0 +1,496 @@
+"use client";
+
+import { use, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { toast } from "sonner";
+import { ArrowLeft, Loader2, Paperclip, Trash2 } from "lucide-react";
+import type { AxiosError } from "axios";
+
+import { ConfirmModal } from "@/components/common/ConfirmModal";
+import { FormField } from "@/components/ui/FormField";
+import { NativeSelect } from "@/components/ui/NativeSelect";
+import { usePermissions } from "@/hooks/usePermissions";
+import { PERMISSIONS } from "@/lib/constants/permissions";
+import {
+  expensesApi,
+  type Expense,
+  type ExpenseDetail,
+  type PaymentMethod,
+} from "@/lib/api/expenses";
+import { expenseCategoriesApi, type ExpenseCategory } from "@/lib/api/expenses";
+import { downloadDocFile } from "@/lib/api/docs";
+import { suppliersApi } from "@/lib/api/suppliers";
+import { inventoryApi } from "@/lib/api/inventory";
+
+// ---------------------------------------------------------------------------
+// Constantes
+// ---------------------------------------------------------------------------
+
+const PAYMENT_OPTIONS: { value: PaymentMethod; label: string }[] = [
+  { value: "ESPECES", label: "ESPECES" },
+  { value: "MOBILEMONEY", label: "MOBILE MONEY" },
+  { value: "CHEQUES", label: "CHEQUES" },
+  { value: "VIREMENT", label: "VIREMENT" },
+];
+
+const inputClass =
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500 read-only:bg-gray-50 read-only:text-gray-500";
+
+function formatAmount(amount: number): string {
+  // FCFA n'a pas de sous-unité : on affiche des entiers, jamais de décimales.
+  return (
+    new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(
+      Math.round(amount),
+    ) + " FCFA"
+  );
+}
+
+const expenseSchema = z.object({
+  expenseCategorieId: z.string().min(1, { message: "La catégorie est requise" }),
+  supplierId: z.string().optional(),
+  description: z.string().optional(),
+  date: z.string().optional(),
+  amount: z.string().min(1, { message: "Le montant est requis" }),
+  payment: z.enum(["ESPECES", "CHEQUES", "MOBILEMONEY", "VIREMENT"] as const).optional(),
+  invoiceNumber: z.string().optional(),
+  paid: z.string(),
+});
+
+type ExpenseFormValues = z.infer<typeof expenseSchema>;
+
+const detailSchema = z.object({
+  articleName: z.string().min(1, { message: "Ajouter un article" }),
+  unitPrice: z.string().min(1, { message: "Le prix de l'article est requis" }),
+  quantity: z.string().min(1, { message: "La quantité de l'article est requise" }),
+});
+
+type DetailFormValues = z.infer<typeof detailSchema>;
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
+export default function ExpenseDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = use(params);
+  const { can } = usePermissions();
+  const router = useRouter();
+  const queryClient = useQueryClient();
+
+  const [toDelete, setToDelete] = useState<ExpenseDetail | null>(null);
+
+  // ---- Queries -------------------------------------------------------------
+
+  const { data: expense, isLoading } = useQuery({
+    queryKey: ["expense", id],
+    queryFn: () => expensesApi.findById(id).then((r) => r.data),
+  });
+
+  const { data: categoriesData } = useQuery({
+    queryKey: ["expense-categories"],
+    queryFn: () => expenseCategoriesApi.findAll({ size: 200 }).then((r) => r.data),
+  });
+  const categories: ExpenseCategory[] = categoriesData?.content ?? [];
+
+  const { data: suppliersData } = useQuery({
+    queryKey: ["suppliers-select"],
+    queryFn: () => suppliersApi.findAll({ size: 200 }).then((r) => r.data),
+  });
+  const suppliers = suppliersData?.content ?? [];
+
+  const { data: articlesData } = useQuery({
+    queryKey: ["articles-select"],
+    queryFn: () => inventoryApi.findAll({ size: 200 }).then((r) => r.data),
+  });
+  const articles = articlesData?.articles?.content ?? [];
+
+  // ---- Formulaires ---------------------------------------------------------
+
+  const form = useForm<ExpenseFormValues>({
+    resolver: zodResolver(expenseSchema),
+    values: expense
+      ? {
+          expenseCategorieId: expense.expenseCategorieId ?? "",
+          supplierId: expense.supplierId ?? "",
+          description: expense.description ?? "",
+          date: expense.date ?? new Date().toISOString().slice(0, 10),
+          amount: String(Math.round(Number(expense.amount ?? 0))),
+          payment: (expense.payment as PaymentMethod) ?? "ESPECES",
+          invoiceNumber: expense.invoiceNumber ?? "",
+          paid: String(expense.paid ?? 0),
+        }
+      : undefined,
+  });
+
+  const detailForm = useForm<DetailFormValues>({
+    resolver: zodResolver(detailSchema),
+    defaultValues: { articleName: "", unitPrice: "", quantity: "" },
+  });
+
+  // Total de la ligne, recalculé dès que le prix OU la quantité change.
+  const watchedPrice = detailForm.watch("unitPrice");
+  const watchedQty = detailForm.watch("quantity");
+  const lineTotal = Math.round(
+    (Number(watchedPrice) || 0) * (Number(watchedQty) || 0),
+  );
+
+  // ---- Mutations -----------------------------------------------------------
+
+  function apiMessage(err: AxiosError): string {
+    return (
+      (err.response?.data as { message?: string })?.message ?? "Une erreur est survenue"
+    );
+  }
+
+  function refresh() {
+    queryClient.invalidateQueries({ queryKey: ["expense", id] });
+    queryClient.invalidateQueries({ queryKey: ["expenses"] });
+  }
+
+  const updateMutation = useMutation({
+    mutationFn: async (values: ExpenseFormValues) => {
+      const current = expense?.paid ?? 0;
+      const target = Number(values.paid);
+
+      // Les champs verrouillés retombent sur la valeur enregistrée : un select
+      // désactivé ne doit jamais effacer silencieusement ce qu'il affiche.
+      await expensesApi.update(id, {
+        amount: Number(values.amount),
+        expenseCategorieId: values.expenseCategorieId,
+        description: values.description || undefined,
+        supplierId: values.supplierId || undefined,
+        invoiceNumber: values.invoiceNumber || undefined,
+        date: values.date || undefined,
+        payment: values.payment ?? expense?.payment,
+        // Repris tel quel : sans lui, le back remettrait la pièce jointe à vide.
+        receipt: expense?.receipt,
+      });
+
+      // Le statut n'est pas porté par l'update : on déclenche les mêmes
+      // opérations que la liste, pour que caisse et stock restent cohérents.
+      if (target > current) {
+        if (target === 1) await expensesApi.pay(id);
+        else await expensesApi.updateStock(id);
+      }
+      return target;
+    },
+    onSuccess: () => {
+      refresh();
+      toast.success("Mise à jour effectuée avec succès !");
+      router.push("/expenses");
+    },
+    onError: (err: AxiosError) => toast.error(apiMessage(err)),
+  });
+
+  const addDetailMutation = useMutation({
+    mutationFn: (values: DetailFormValues) =>
+      expensesApi.addDetail(id, {
+        articleName: values.articleName,
+        unitPrice: Number(values.unitPrice),
+        quantity: Number(values.quantity),
+      }),
+    onSuccess: () => {
+      refresh();
+      toast.success("Donnée ajoutée avec succès");
+      detailForm.reset();
+    },
+    onError: (err: AxiosError) => toast.error(apiMessage(err)),
+  });
+
+  const removeDetailMutation = useMutation({
+    mutationFn: (detailId: string) => expensesApi.removeDetail(id, detailId),
+    onSuccess: () => {
+      refresh();
+      setToDelete(null);
+    },
+    onError: (err: AxiosError) => {
+      toast.error(apiMessage(err));
+      setToDelete(null);
+    },
+  });
+
+  // ---- Garde d'accès -------------------------------------------------------
+
+  if (!can(PERMISSIONS.VIEW_EXPENCE_DETAILS) && !can(PERMISSIONS.VIEW_EXPENSES)) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <p className="text-gray-500">Accès non autorisé</p>
+      </div>
+    );
+  }
+
+  if (isLoading || !expense) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+      </div>
+    );
+  }
+
+  // ---- Verrouillage par statut (règles de show.blade.php) ------------------
+
+  const isSuper = can(PERMISSIONS.VIEW_SUPER_DEPENSES);
+  const paid = expense.paid ?? 0;
+  // Dès que la dépense est payée, les données financières se figent.
+  const lockedWhenPaid = paid !== 0 && !isSuper;
+  // Une fois livrée, tout se fige, y compris le statut et la facture.
+  const lockedWhenDelivered = paid === 2 && !isSuper;
+
+  const details: ExpenseDetail[] = expense.details ?? [];
+  const detailsTotal = details.reduce((sum, d) => sum + (d.lineAmount ?? 0), 0);
+
+  // ---- Render --------------------------------------------------------------
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => router.push("/expenses")}
+          className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Retour
+        </button>
+      </div>
+
+      <form onSubmit={form.handleSubmit((v) => updateMutation.mutate(v))} className="space-y-6">
+        {/* Bloc 1 — Informations */}
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-baseline justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">Détails de la dépense</h2>
+            <span className="text-xs text-gray-500">*champs obligatoires</span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <FormField
+              label="Catégorie de dépense*"
+              error={form.formState.errors.expenseCategorieId?.message}
+            >
+              <NativeSelect {...form.register("expenseCategorieId")}>
+                <option value="">Sélectionner une catégorie</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </FormField>
+
+            <FormField label="Fournisseur*">
+              <NativeSelect {...form.register("supplierId")}>
+                <option value="">Sélectionner le fournisseur</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </FormField>
+
+            <FormField label="Objet de la dépense">
+              <input
+                type="text"
+                className={inputClass}
+                readOnly={lockedWhenPaid}
+                {...form.register("description")}
+              />
+            </FormField>
+
+            <FormField label="Date de la dépense">
+              <input
+                type="date"
+                className={inputClass}
+                readOnly={lockedWhenPaid}
+                {...form.register("date")}
+              />
+            </FormField>
+
+            <FormField label="Montant*" error={form.formState.errors.amount?.message}>
+              <input
+                type="number"
+                step="1"
+                min={0}
+                className={inputClass}
+                readOnly={lockedWhenPaid}
+                {...form.register("amount")}
+              />
+            </FormField>
+
+            <FormField label="Type de paiement">
+              <NativeSelect {...form.register("payment")} disabled={lockedWhenPaid}>
+                {PAYMENT_OPTIONS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </NativeSelect>
+            </FormField>
+
+            <FormField label="Numéro de la facture">
+              <input
+                type="text"
+                className={inputClass}
+                readOnly={lockedWhenDelivered}
+                {...form.register("invoiceNumber")}
+              />
+            </FormField>
+
+            <FormField label="Pièce jointe">
+              {expense.receipt ? (
+                <button
+                  type="button"
+                  onClick={() => downloadDocFile(expense.receipt!)}
+                  className="inline-flex w-fit items-center gap-1 text-sm font-medium text-blue-600 hover:underline"
+                >
+                  <Paperclip className="h-4 w-4" />
+                  Télécharger le reçu
+                </button>
+              ) : (
+                <span className="text-sm text-gray-400">Aucune pièce jointe</span>
+              )}
+            </FormField>
+
+            <FormField label="Status de la dépense">
+              <NativeSelect {...form.register("paid")} disabled={lockedWhenDelivered}>
+                <option value="0">Non payé</option>
+                <option value="1">Payé</option>
+                <option value="2">Payé et Livré</option>
+              </NativeSelect>
+            </FormField>
+          </div>
+        </div>
+
+        {/* Bloc 2 — Liste des articles */}
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-4 text-lg font-semibold text-gray-900">Liste des articles</h2>
+
+          {paid === 0 && can(PERMISSIONS.CREATE_EXPENCE_DETAILS) && (
+            <div className="mb-5 grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <FormField label="Article" error={detailForm.formState.errors.articleName?.message}>
+                <input
+                  type="text"
+                  list="expense-articles"
+                  className={inputClass}
+                  {...detailForm.register("articleName")}
+                />
+                <datalist id="expense-articles">
+                  {articles.map((a) => (
+                    <option key={a.id} value={a.name} />
+                  ))}
+                </datalist>
+              </FormField>
+
+              <FormField label="Prix" error={detailForm.formState.errors.unitPrice?.message}>
+                <input type="number" step="1" min={0} className={inputClass} {...detailForm.register("unitPrice")} />
+              </FormField>
+
+              <FormField label="Quantité" error={detailForm.formState.errors.quantity?.message}>
+                <input type="number" step="1" className={inputClass} {...detailForm.register("quantity")} />
+              </FormField>
+
+              <FormField label="Total">
+                <input type="number" className={inputClass} value={lineTotal} readOnly />
+              </FormField>
+
+              <div>
+                <button
+                  type="button"
+                  onClick={detailForm.handleSubmit((v) => addDetailMutation.mutate(v))}
+                  disabled={addDetailMutation.isPending}
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+                >
+                  Ajouter
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 text-left text-xs uppercase text-gray-500">
+                  <th className="px-3 py-2">#</th>
+                  <th className="px-3 py-2">Article</th>
+                  <th className="px-3 py-2">Prix</th>
+                  <th className="px-3 py-2">Quantité</th>
+                  <th className="px-3 py-2">Total</th>
+                  {paid === 0 && <th className="px-3 py-2">Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {details.length === 0 ? (
+                  <tr>
+                    <td colSpan={paid === 0 ? 6 : 5} className="px-3 py-6 text-center text-gray-400">
+                      Aucun article
+                    </td>
+                  </tr>
+                ) : (
+                  details.map((d, i) => (
+                    <tr key={d.id} className="border-b border-gray-100">
+                      <td className="px-3 py-2 text-gray-500">{i + 1}</td>
+                      <td className="px-3 py-2">{d.articleName ?? "—"}</td>
+                      <td className="px-3 py-2">{formatAmount(d.unitPrice ?? 0)}</td>
+                      <td className="px-3 py-2">{d.quantity}</td>
+                      <td className="px-3 py-2">{formatAmount(d.lineAmount ?? 0)}</td>
+                      {paid === 0 && (
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={() => setToDelete(d)}
+                            className="inline-flex items-center rounded bg-red-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-red-700"
+                            aria-label="Supprimer la ligne"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-gray-200 font-semibold">
+                  <td className="px-3 py-2" colSpan={4}>
+                    Total:
+                  </td>
+                  <td className="px-3 py-2">{formatAmount(detailsTotal)}</td>
+                  {paid === 0 && <td />}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <button
+            type="submit"
+            disabled={lockedWhenDelivered || updateMutation.isPending}
+            className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-60"
+          >
+            {updateMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+            Soumettre
+          </button>
+        </div>
+      </form>
+
+      <ConfirmModal
+        isOpen={toDelete !== null}
+        onClose={() => setToDelete(null)}
+        onConfirm={() => {
+          if (toDelete) removeDetailMutation.mutate(toDelete.id);
+        }}
+        title="Confirmation"
+        message="Voulez-vous supprimer l'élément ?"
+        confirmLabel="Supprimer"
+        confirmVariant="danger"
+        isLoading={removeDetailMutation.isPending}
+      />
+    </div>
+  );
+}

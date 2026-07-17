@@ -1,42 +1,36 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm, Controller } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Pencil, Trash2, Paperclip } from "lucide-react";
-import { LimitedSelect as ReactSelect } from "@/components/ui/LimitedSelect";
+import { Eye, Paperclip } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { AxiosError } from "axios";
-import type { UseFormReturn } from "react-hook-form";
 
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DataTable } from "@/components/common/DataTable";
-import { CrudModal } from "@/components/common/CrudModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
-import { PermissionGate } from "@/components/common/PermissionGate";
 import { FormField } from "@/components/ui/FormField";
-import { RHFSelect } from "@/components/ui/RHFSelect";
 import { NativeSelect } from "@/components/ui/NativeSelect";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
-import { expensesApi, Expense, ExpenseRequest, PaymentMethod } from "@/lib/api/expenses";
+import {
+  expensesApi,
+  type Expense,
+  type ExpenseCreateRequest,
+  type PaymentMethod,
+} from "@/lib/api/expenses";
 import { downloadDocFile } from "@/lib/api/docs";
 import { suppliersApi } from "@/lib/api/suppliers";
-import apiClient from "@/lib/api/client";
-import type { PageResponse } from "@/types/api";
+import { expenseCategoriesApi, type ExpenseCategory } from "@/lib/api/expenses";
 
 // ---------------------------------------------------------------------------
-// Types locaux
+// Constantes
 // ---------------------------------------------------------------------------
-
-interface ExpenseCategory {
-  id: string;
-  name: string;
-  description?: string;
-}
 
 const PAYMENT_OPTIONS: { value: PaymentMethod; label: string }[] = [
   { value: "ESPECES", label: "Espèces" },
@@ -46,53 +40,33 @@ const PAYMENT_OPTIONS: { value: PaymentMethod; label: string }[] = [
 ];
 
 function paymentLabel(payment?: string): string {
-  return PAYMENT_OPTIONS.find((p) => p.value === payment)?.label ?? payment ?? "—";
+  return PAYMENT_OPTIONS.find((p) => p.value === payment)?.label ?? payment ?? "";
 }
 
-function paidLabel(paid: number): string {
-  if (paid === 2) return "Payé + stock";
-  if (paid === 1) return "Payé";
-  return "Non payé";
+function formatAmount(amount: number): string {
+  // FCFA n'a pas de sous-unité : on affiche des entiers, jamais de décimales.
+  return (
+    new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(
+      Math.round(amount),
+    ) + " FCFA"
+  );
 }
-
-// ---------------------------------------------------------------------------
-// Zod schema — aligné sur ExpenseRequestDto
-// ---------------------------------------------------------------------------
-
-const expenseSchema = z.object({
-  amount: z.string().min(1, { message: "Le montant est requis" }),
-  expenseCategorieId: z.string().min(1, { message: "La catégorie est requise" }),
-  description: z.string().optional(),
-  invoiceNumber: z.string().optional(),
-  date: z.string().optional(),
-  payment: z.enum(["ESPECES", "CHEQUES", "MOBILEMONEY", "VIREMENT"] as const).optional(),
-  supplierId: z.string().optional(),
-});
-
-type ExpenseFormValues = z.infer<typeof expenseSchema>;
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 const inputClass =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
 
-function formatAmount(amount: number): string {
-  return new Intl.NumberFormat("fr-FR").format(amount) + " FCFA";
-}
+// Formulaire de création en ligne : « Catégorie de dépense », « Fournisseur »,
+// « Objet ». Le montant est saisi ensuite sur la page détail.
+const createSchema = z.object({
+  expenseCategorieId: z.string().min(1, { message: "La catégorie est requise" }),
+  supplierName: z.string().optional(),
+  description: z.string().optional(),
+});
 
-function buildPayload(values: ExpenseFormValues): ExpenseRequest {
-  return {
-    amount: Number(values.amount),
-    expenseCategorieId: values.expenseCategorieId,
-    description: values.description || undefined,
-    invoiceNumber: values.invoiceNumber || undefined,
-    date: values.date || undefined,
-    payment: values.payment || undefined,
-    supplierId: values.supplierId || undefined,
-  };
-}
+type CreateFormValues = z.infer<typeof createSchema>;
+
+// Transition de statut demandée depuis la colonne « Traitement ».
+type StatusChange = { expense: Expense; target: 1 | 2 };
 
 // ---------------------------------------------------------------------------
 // Page
@@ -100,24 +74,16 @@ function buildPayload(values: ExpenseFormValues): ExpenseRequest {
 
 export default function ExpensesPage() {
   const { can } = usePermissions();
+  const router = useRouter();
   const queryClient = useQueryClient();
 
-  const [createOpen, setCreateOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [selected, setSelected] = useState<Expense | null>(null);
-
-  // Filtres
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [paidFilter, setPaidFilter] = useState("");
+  const [statusChange, setStatusChange] = useState<StatusChange | null>(null);
 
   // ---- Queries -------------------------------------------------------------
 
-  const params: Record<string, unknown> = {};
-  if (dateFrom) params.dateFrom = dateFrom;
-  if (dateTo) params.dateTo = dateTo;
+  const params: Record<string, unknown> = { size: 200 };
   if (categoryFilter) params.expenseCategorieId = categoryFilter;
   if (paidFilter !== "") params.paid = paidFilter;
 
@@ -130,142 +96,102 @@ export default function ExpensesPage() {
 
   const { data: categoriesData } = useQuery({
     queryKey: ["expense-categories"],
-    queryFn: () =>
-      apiClient
-        .get<PageResponse<ExpenseCategory>>("/expense-categories", {
-          params: { size: 200 },
-        })
-        .then((r) => r.data),
+    queryFn: () => expenseCategoriesApi.findAll({ size: 200 }).then((r) => r.data),
   });
 
   const categories: ExpenseCategory[] = categoriesData?.content ?? [];
-  const categoryOptions = categories.map((c) => ({ value: c.id, label: c.name }));
 
   const { data: suppliersData } = useQuery({
     queryKey: ["suppliers-select"],
-    queryFn: () =>
-      suppliersApi.findAll({ size: 200 }).then((r) => r.data),
+    queryFn: () => suppliersApi.findAll({ size: 200 }).then((r) => r.data),
   });
 
-  const supplierOptions =
-    suppliersData?.content?.map((s) => ({ value: s.id, label: s.name })) ?? [];
+  const suppliers = suppliersData?.content ?? [];
 
   function supplierName(id?: string): string {
     if (!id) return "—";
-    return supplierOptions.find((o) => o.value === id)?.label ?? "—";
+    return suppliers.find((s) => s.id === id)?.name ?? "—";
   }
 
   // ---- Mutations -----------------------------------------------------------
 
+  function apiMessage(err: AxiosError): string {
+    return (
+      (err.response?.data as { message?: string })?.message ??
+      "Une erreur est survenue"
+    );
+  }
+
+  // Comme dans Laravel, la création redirige vers la page détail pour y saisir
+  // le montant, la date et les lignes d'articles.
   const createMutation = useMutation({
-    mutationFn: (payload: ExpenseRequest) => expensesApi.create(payload),
-    onSuccess: () => {
+    mutationFn: (payload: ExpenseCreateRequest) => expensesApi.create(payload),
+    onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
-      toast.success("Dépense créée");
-      setCreateOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["suppliers-select"] });
+      toast.success("Opération effectuée avec succès !");
       createForm.reset();
+      router.push(`/expenses/${res.data.id}`);
     },
-    onError: (err: AxiosError) => {
-      const msg =
-        (err.response?.data as { message?: string })?.message ??
-        "Une erreur est survenue";
-      toast.error(msg);
-    },
+    onError: (err: AxiosError) => toast.error(apiMessage(err)),
   });
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: ExpenseRequest }) =>
-      expensesApi.update(id, data),
+  const payMutation = useMutation({
+    mutationFn: (id: string) => expensesApi.pay(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
-      toast.success("Dépense modifiée");
-      setEditOpen(false);
+      toast.success("Dépense marquée comme payée");
+      setStatusChange(null);
     },
     onError: (err: AxiosError) => {
-      const msg =
-        (err.response?.data as { message?: string })?.message ??
-        "Une erreur est survenue";
-      toast.error(msg);
+      toast.error(apiMessage(err));
+      setStatusChange(null);
     },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => expensesApi.delete(id),
+  const stockMutation = useMutation({
+    mutationFn: (id: string) => expensesApi.updateStock(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
-      toast.success("Dépense supprimée");
-      setDeleteOpen(false);
-      setSelected(null);
+      toast.success("Stock mis à jour");
+      setStatusChange(null);
     },
     onError: (err: AxiosError) => {
-      const msg =
-        (err.response?.data as { message?: string })?.message ??
-        "Une erreur est survenue";
-      toast.error(msg);
+      toast.error(apiMessage(err));
+      setStatusChange(null);
     },
   });
 
-  // ---- Forms ---------------------------------------------------------------
+  // ---- Formulaire de création ---------------------------------------------
 
-  const createForm = useForm<ExpenseFormValues>({
-    resolver: zodResolver(expenseSchema),
-    defaultValues: {
-      amount: "",
-      expenseCategorieId: "",
-      description: "",
-      invoiceNumber: "",
-      date: "",
-      payment: undefined,
-      supplierId: undefined,
-    },
+  const createForm = useForm<CreateFormValues>({
+    resolver: zodResolver(createSchema),
+    defaultValues: { expenseCategorieId: "", supplierName: "", description: "" },
   });
 
-  const editForm = useForm<ExpenseFormValues>({
-    resolver: zodResolver(expenseSchema),
-  });
-
-  // ---- Handlers ------------------------------------------------------------
-
-  function openEdit(expense: Expense) {
-    setSelected(expense);
-    editForm.reset({
-      amount: String(expense.amount),
-      expenseCategorieId: expense.expenseCategorieId ?? "",
-      description: expense.description ?? "",
-      invoiceNumber: expense.invoiceNumber ?? "",
-      date: expense.date ?? "",
-      payment: (expense.payment as PaymentMethod) ?? undefined,
-      supplierId: expense.supplierId ?? undefined,
+  function onCreateSubmit(values: CreateFormValues) {
+    const typed = values.supplierName?.trim();
+    // Un nom déjà connu est réutilisé tel quel ; sinon le back crée le fournisseur.
+    const known = suppliers.find(
+      (s) => s.name.toLowerCase() === (typed ?? "").toLowerCase()
+    );
+    createMutation.mutate({
+      expenseCategorieId: values.expenseCategorieId,
+      description: values.description || undefined,
+      supplierId: known?.id,
+      supplierName: known ? undefined : typed || undefined,
     });
-    setEditOpen(true);
   }
 
-  function openDelete(expense: Expense) {
-    setSelected(expense);
-    setDeleteOpen(true);
-  }
+  // ---- Colonnes ------------------------------------------------------------
 
-  function onCreateSubmit(values: ExpenseFormValues) {
-    createMutation.mutate(buildPayload(values));
-  }
+  const canProcess = can(PERMISSIONS.VIEW_PROCESS_CASHBOX_TICKETS);
 
-  function onEditSubmit(values: ExpenseFormValues) {
-    if (!selected) return;
-    updateMutation.mutate({ id: selected.id, data: buildPayload(values) });
-  }
-
-  // ---- Columns -------------------------------------------------------------
-
-  // Colonnes alignées sur la vue Laravel `expenses/index.blade.php` :
-  // #, Date, Fournisseur, Objet de la dépense, Montant (+ mode de paiement),
-  // Piece jointe (n° facture + reçu), Traitement (statut), Action.
   const columns: ColumnDef<Expense>[] = [
     {
       header: "#",
       id: "rownum",
-      cell: ({ row }) => (
-        <span className="text-sm text-gray-500">{row.index + 1}</span>
-      ),
+      cell: ({ row }) => <span className="text-sm text-gray-500">{row.index + 1}</span>,
     },
     {
       header: "Date",
@@ -304,8 +230,7 @@ export default function ExpensesPage() {
       id: "attachment",
       cell: ({ row }) => {
         const { invoiceNumber, receipt } = row.original;
-        if (!invoiceNumber && !receipt)
-          return <span className="text-gray-400">—</span>;
+        if (!invoiceNumber && !receipt) return <span className="text-gray-400">—</span>;
         return (
           <div className="flex flex-col gap-1">
             {invoiceNumber && (
@@ -325,47 +250,55 @@ export default function ExpensesPage() {
         );
       },
     },
-    {
-      header: "Traitement",
-      accessorKey: "paid",
-      cell: ({ row }) => (
-        <span
-          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
-            row.original.paid >= 1
-              ? "bg-green-50 text-green-700 ring-green-600/20"
-              : "bg-yellow-50 text-yellow-700 ring-yellow-600/20"
-          }`}
-        >
-          {paidLabel(row.original.paid)}
-        </span>
-      ),
-    },
+    // « Traitement » : select de changement de statut, remplacé par un badge figé
+    // une fois la dépense livrée. Réservé à view-process-cashbox-tickets.
+    ...(canProcess
+      ? [
+          {
+            header: "Traitement",
+            id: "process",
+            cell: ({ row }) => {
+              const expense = row.original;
+              if (expense.paid === 2) {
+                return (
+                  <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset bg-green-50 text-green-700 ring-green-600/20">
+                    Marquée comme livrée
+                  </span>
+                );
+              }
+              return (
+                <NativeSelect
+                  value={String(expense.paid)}
+                  onChange={(e) => {
+                    const target = Number(e.target.value);
+                    if (target === 1 || target === 2) {
+                      setStatusChange({ expense, target });
+                    }
+                  }}
+                  className="w-[250px]"
+                >
+                  <option value="0">Non payée</option>
+                  <option value="1">Payée non livrée</option>
+                  <option value="2">Payée et livrée</option>
+                </NativeSelect>
+              );
+            },
+          } as ColumnDef<Expense>,
+        ]
+      : []),
     {
       header: "Action",
       id: "actions",
       cell: ({ row }) => (
-        <div className="flex items-center gap-2">
-          <PermissionGate permission={PERMISSIONS.EDIT_EXPENSES}>
-            <button
-              onClick={() => openEdit(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-              aria-label="Modifier"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              Modifier
-            </button>
-          </PermissionGate>
-          <PermissionGate permission={PERMISSIONS.DELETE_EXPENSES}>
-            <button
-              onClick={() => openDelete(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
-              aria-label="Supprimer"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Supprimer
-            </button>
-          </PermissionGate>
-        </div>
+        <button
+          type="button"
+          onClick={() => router.push(`/expenses/${row.original.id}`)}
+          className="inline-flex items-center gap-1 rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-700"
+          aria-label="Voir le détail"
+          title="Voir le détail"
+        >
+          <Eye className="h-3.5 w-3.5" />
+        </button>
       ),
     },
   ];
@@ -374,7 +307,7 @@ export default function ExpensesPage() {
 
   if (!can(PERMISSIONS.VIEW_EXPENSES)) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <p className="text-gray-500">Accès non autorisé</p>
       </div>
     );
@@ -382,222 +315,107 @@ export default function ExpensesPage() {
 
   // ---- Render --------------------------------------------------------------
 
+  const confirmMessage =
+    statusChange?.target === 1
+      ? "Voulez-vous marquer cette dépense comme payée non livrée ?"
+      : "Voulez-vous marquer cette dépense comme payée et livrée ?";
+
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Dépenses"
-        action={
-          can(PERMISSIONS.CREATE_EXPENSES) ? (
-            <button
-              onClick={() => {
-                createForm.reset();
-                setCreateOpen(true);
-              }}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-            >
-              Ajouter
-            </button>
-          ) : undefined
-        }
-      />
+      <PageHeader title="Dépenses" />
 
-      {/* Filtres */}
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <input
-            type="date"
-            placeholder="Date début"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className={inputClass}
-            title="Date début"
-          />
-          <input
-            type="date"
-            placeholder="Date fin"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className={inputClass}
-            title="Date fin"
-          />
+      {/* Création en ligne — reprend le formulaire en tête de la liste Laravel */}
+      {can(PERMISSIONS.CREATE_EXPENSES) && (
+        <form
+          onSubmit={createForm.handleSubmit(onCreateSubmit)}
+          autoComplete="off"
+          className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
+        >
+          <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <FormField
+              label="Catégorie de dépense*"
+              error={createForm.formState.errors.expenseCategorieId?.message}
+            >
+              <NativeSelect {...createForm.register("expenseCategorieId")}>
+                <option value="">Sélectionner une catégorie</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </FormField>
+
+            <FormField label="Fournisseur*">
+              <input
+                type="text"
+                list="expense-suppliers"
+                className={inputClass}
+                {...createForm.register("supplierName")}
+              />
+              <datalist id="expense-suppliers">
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.name} />
+                ))}
+              </datalist>
+            </FormField>
+
+            <FormField label="Objet*">
+              <input type="text" className={inputClass} {...createForm.register("description")} />
+            </FormField>
+
+            <div>
+              <button
+                type="submit"
+                disabled={createMutation.isPending}
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+              >
+                Ajouter
+              </button>
+            </div>
+          </div>
+        </form>
+      )}
+
+      {/* Filtres serveur (catégorie / statut) */}
+      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <NativeSelect
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
           >
             <option value="">Toutes les catégories</option>
             {categories.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
             ))}
           </NativeSelect>
-          <NativeSelect
-            value={paidFilter}
-            onChange={(e) => setPaidFilter(e.target.value)}
-          >
+          <NativeSelect value={paidFilter} onChange={(e) => setPaidFilter(e.target.value)}>
             <option value="">Tous les statuts</option>
-            <option value="0">Non payé</option>
-            <option value="1">Payé</option>
-            <option value="2">Payé + stock</option>
+            <option value="0">Non payée</option>
+            <option value="1">Payée non livrée</option>
+            <option value="2">Payée et livrée</option>
           </NativeSelect>
         </div>
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5">
+      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <DataTable columns={columns} data={expenses} isLoading={isLoading} />
       </div>
 
-      {/* Modal création */}
-      <CrudModal
-        isOpen={createOpen}
-        onClose={() => setCreateOpen(false)}
-        title="Ajouter une dépense"
-        size="lg"
-        onSubmit={createForm.handleSubmit(onCreateSubmit)}
-        submitLabel="Ajouter"
-        isSubmitting={createMutation.isPending}
-      >
-        <ExpenseForm form={createForm} categoryOptions={categoryOptions} supplierOptions={supplierOptions} />
-      </CrudModal>
-
-      {/* Modal édition */}
-      <CrudModal
-        isOpen={editOpen}
-        onClose={() => setEditOpen(false)}
-        title="Modifier la dépense"
-        size="lg"
-        onSubmit={editForm.handleSubmit(onEditSubmit)}
-        submitLabel="Modifier"
-        isSubmitting={updateMutation.isPending}
-      >
-        <ExpenseForm form={editForm} categoryOptions={categoryOptions} supplierOptions={supplierOptions} />
-      </CrudModal>
-
-      {/* Modal suppression */}
       <ConfirmModal
-        isOpen={deleteOpen}
-        onClose={() => {
-          setDeleteOpen(false);
-          setSelected(null);
-        }}
+        isOpen={statusChange !== null}
+        onClose={() => setStatusChange(null)}
         onConfirm={() => {
-          if (selected) deleteMutation.mutate(selected.id);
+          if (!statusChange) return;
+          if (statusChange.target === 1) payMutation.mutate(statusChange.expense.id);
+          else stockMutation.mutate(statusChange.expense.id);
         }}
-        title="Supprimer cette dépense"
-        message={`Voulez-vous vraiment supprimer cette dépense ? Cette action est irréversible.`}
-        confirmLabel="Supprimer"
-        confirmVariant="danger"
-        isLoading={deleteMutation.isPending}
-      />
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// ExpenseForm
-// ---------------------------------------------------------------------------
-
-interface CategoryOption {
-  value: string;
-  label: string;
-}
-
-interface SupplierOption {
-  value: string;
-  label: string;
-}
-
-interface ExpenseFormProps {
-  form: UseFormReturn<ExpenseFormValues>;
-  categoryOptions: CategoryOption[];
-  supplierOptions: SupplierOption[];
-}
-
-function ExpenseForm({ form, categoryOptions, supplierOptions }: ExpenseFormProps) {
-  const {
-    register,
-    control,
-    formState: { errors },
-  } = form;
-
-  return (
-    <div className="grid grid-cols-1 gap-4">
-      <FormField label="Montant (FCFA)" required error={errors.amount?.message}>
-        <input
-          type="number"
-          {...register("amount")}
-          placeholder="0"
-          min={0.01}
-          step="0.01"
-          className={inputClass}
-        />
-      </FormField>
-
-      <FormField label="Catégorie" required error={errors.expenseCategorieId?.message}>
-        <Controller
-          name="expenseCategorieId"
-          control={control}
-          render={({ field }) => (
-            <ReactSelect
-              instanceId="expense-category"
-              options={categoryOptions}
-              value={categoryOptions.find((o) => o.value === field.value) ?? null}
-              onChange={(opt) => field.onChange(opt?.value ?? "")}
-              placeholder="Sélectionner une catégorie..."
-              isClearable
-              classNamePrefix="react-select"
-            />
-          )}
-        />
-      </FormField>
-
-      <FormField label="Fournisseur" error={errors.supplierId?.message} className="sm:col-span-2">
-        <Controller
-          name="supplierId"
-          control={control}
-          render={({ field }) => (
-            <ReactSelect<SupplierOption>
-              instanceId="expense-supplier"
-              options={supplierOptions}
-              value={supplierOptions.find((o) => o.value === field.value) ?? null}
-              onChange={(opt) => field.onChange(opt?.value ?? undefined)}
-              placeholder="Sélectionner un fournisseur (optionnel)..."
-              isClearable
-              classNamePrefix="react-select"
-              noOptionsMessage={() => "Aucun fournisseur trouvé"}
-            />
-          )}
-        />
-      </FormField>
-
-      <FormField label="Description" error={errors.description?.message} className="sm:col-span-2">
-        <input
-          type="text"
-          {...register("description")}
-          placeholder="Objet de la dépense"
-          className={inputClass}
-        />
-      </FormField>
-
-      <FormField label="N° facture" error={errors.invoiceNumber?.message}>
-        <input
-          type="text"
-          {...register("invoiceNumber")}
-          placeholder="Ex : FAC-2024-001"
-          className={inputClass}
-        />
-      </FormField>
-
-      <FormField label="Date" error={errors.date?.message}>
-        <input type="date" {...register("date")} className={inputClass} />
-      </FormField>
-
-      <RHFSelect
-        control={control}
-        name="payment"
-        label="Mode de paiement"
-        options={PAYMENT_OPTIONS}
-        placeholder="Sélectionner un mode..."
-        error={errors.payment?.message}
-        isClearable
+        title="Confirmation"
+        message={confirmMessage}
+        confirmLabel="Confirmer"
+        isLoading={payMutation.isPending || stockMutation.isPending}
       />
     </div>
   );

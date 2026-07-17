@@ -21,7 +21,7 @@ export interface LabTest {
 export interface UniteMesure {
   id: string;
   name: string;
-  symbol?: string;
+  abbreviation?: string;
   branchId: string;
 }
 
@@ -66,9 +66,9 @@ export const unitesMesureApi = {
   findAll: () => apiClient.get<UniteMesure[]>("/unit-measurements/all"),
   findPaged: (params?: { page?: number; size?: number }) =>
     apiClient.get<PageResponse<UniteMesure>>("/unit-measurements", { params }),
-  create: (data: { name: string; symbol?: string }) =>
+  create: (data: { name: string; abbreviation?: string }) =>
     apiClient.post<UniteMesure>("/unit-measurements", data),
-  update: (id: string, data: { name: string; symbol?: string }) =>
+  update: (id: string, data: { name: string; abbreviation?: string }) =>
     apiClient.put<UniteMesure>(`/unit-measurements/${id}`, data),
   delete: (id: string) => apiClient.delete(`/unit-measurements/${id}`),
 };

@@ -12,12 +12,23 @@ export default function DashboardLayout({
   return (
     <AuthGuard>
       <AppSettingsEffects />
-      <div className="flex h-screen overflow-hidden bg-[#fafbfe]">
-        <Sidebar />
-        <div className="flex flex-col flex-1 overflow-hidden">
-          <Topbar />
-          <main className="flex-1 overflow-y-auto p-6">{children}</main>
-          <Footer />
+      {/* En impression : on masque la coque (sidebar/topbar/footer) et on
+          neutralise les contraintes de hauteur/scroll qui tronquent la page,
+          pour n'imprimer que le contenu (ex. récapitulatif de caisse). */}
+      <div className="flex h-screen overflow-hidden bg-[#fafbfe] print:block print:h-auto print:overflow-visible">
+        <div className="contents print:hidden">
+          <Sidebar />
+        </div>
+        <div className="flex flex-col flex-1 overflow-hidden print:overflow-visible">
+          <div className="print:hidden">
+            <Topbar />
+          </div>
+          <main className="flex-1 overflow-y-auto p-6 print:overflow-visible print:p-0">
+            {children}
+          </main>
+          <div className="print:hidden">
+            <Footer />
+          </div>
         </div>
       </div>
     </AuthGuard>

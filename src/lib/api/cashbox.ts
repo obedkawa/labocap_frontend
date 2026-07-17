@@ -10,6 +10,8 @@ export interface CashboxResponseDto {
   name: string;
   type: string;
   balance: number;
+  /** Statut de la caisse — source de vérité Laravel pour Ouvert/Fermée : 1 = Ouvert, 0 = Fermée. */
+  statut: number;
   branchId: string;
   createdAt: string;
 }
@@ -60,6 +62,15 @@ export interface CashboxDailyOpenDto {
   cashboxId: string;
 }
 
+/** Sommes calculées par mode de paiement depuis la dernière ouverture (GET /cashbox-dailies/summary). */
+export interface CashboxDailySummaryDto {
+  totalEspeces: number;
+  totalMobileMoney: number;
+  totalCheques: number;
+  totalVirement: number;
+  total: number;
+}
+
 export interface CashboxDailyCloseDto {
   closingBalance: number;
   cashCalculated: number;
@@ -106,6 +117,9 @@ export interface CashboxOperationCreateDto {
   type: string;
   description?: string;
   operationDate: string;
+  /** Banque associée (approvisionnement par chèque / virement). */
+  bankId?: string;
+  chequeNumber?: string;
 }
 
 export interface CashboxOperationParams {
@@ -159,6 +173,9 @@ export interface CashboxVoucherDetailCreateDto {
   unitPrice: number;
 }
 
+/** Statuts acceptés par le backend (liste blanche, sans accents). */
+export type CashboxVoucherStatus = "en attente" | "approuve" | "rejete";
+
 // ---------------------------------------------------------------------------
 // API
 // ---------------------------------------------------------------------------
@@ -187,7 +204,7 @@ export const cashboxApi = {
     apiClient.get<CashboxDailyResponseDto>(`/cashbox-dailies/${id}`),
 
   getDailiesSummary: () =>
-    apiClient.get<Record<string, unknown>>("/cashbox-dailies/summary"),
+    apiClient.get<CashboxDailySummaryDto>("/cashbox-dailies/summary"),
 
   openDaily: (data: CashboxDailyOpenDto) =>
     apiClient.post<CashboxDailyResponseDto>("/cashbox-dailies", data),
@@ -219,12 +236,29 @@ export const cashboxApi = {
       { params }
     ),
 
+  getVoucher: (id: string) =>
+    apiClient.get<CashboxVoucherResponseDto>(`/cashbox-tickets/${id}`),
+
   addVoucher: (data: CashboxVoucherCreateDto) =>
     apiClient.post<CashboxVoucherResponseDto>("/cashbox-tickets", data),
+
+  updateVoucher: (id: string, data: CashboxVoucherCreateDto) =>
+    apiClient.put<CashboxVoucherResponseDto>(`/cashbox-tickets/${id}`, data),
+
+  deleteVoucher: (id: string) => apiClient.delete(`/cashbox-tickets/${id}`),
 
   addVoucherDetail: (voucherId: string, data: CashboxVoucherDetailCreateDto) =>
     apiClient.post<CashboxVoucherResponseDto>(
       `/cashbox-tickets/${voucherId}/details`,
       data
+    ),
+
+  deleteVoucherDetail: (voucherId: string, detailId: string) =>
+    apiClient.delete(`/cashbox-tickets/${voucherId}/details/${detailId}`),
+
+  updateVoucherStatus: (id: string, status: CashboxVoucherStatus) =>
+    apiClient.patch<CashboxVoucherResponseDto>(
+      `/cashbox-tickets/${id}/status`,
+      { status }
     ),
 };

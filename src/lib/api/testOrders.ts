@@ -61,6 +61,7 @@ export interface TestOrder {
   reportIsDelivered?: boolean;
   invoiceId?: string;
   archive?: string;            // chemin fichier joint
+  testAffiliate?: string;      // référence de l'examen (examen de référence Immuno)
 }
 
 export interface MySpaceStats {
@@ -88,6 +89,8 @@ export interface TestOrderRequest {
   contratId?: string;
   referenceHopital?: string;
   examenReferenceInput?: string;
+  /** Référence de l'examen (examen de référence Immuno) — colonne test_affiliate côté backend. */
+  testAffiliate?: string;
   isUrgent?: boolean;
   option?: boolean;
   assignedToUserId?: string;
@@ -99,6 +102,8 @@ export const testOrdersApi = {
     page?: number;
     size?: number;
     status?: string;
+    /** Filtre par statut du compte rendu : NONE / DRAFT / VALIDATED / DELIVERED. */
+    reportStatus?: string;
     typeOrderId?: string;
     isUrgent?: boolean;
     patientId?: string;
@@ -151,6 +156,17 @@ export const testOrdersApi = {
     return apiClient.post(`/test-orders/${testOrderId}/images`, fd, {
       headers: { "Content-Type": "multipart/form-data" },
     });
+  },
+
+  /** Téléverse la pièce jointe (archive) d'un bon — @RequestParam("archive") côté backend. */
+  uploadArchive: (testOrderId: string, file: File) => {
+    const fd = new FormData();
+    fd.append("archive", file);
+    return apiClient.post<{ data: string }>(
+      `/test-orders/${testOrderId}/archive`,
+      fd,
+      { headers: { "Content-Type": "multipart/form-data" } }
+    );
   },
 
   // retourne List<ImageDto> côté backend

@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { X, Send } from "lucide-react";
+import { X, Send, Loader2 } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { AxiosError } from "axios";
 import type { UseFormReturn } from "react-hook-form";
@@ -218,7 +218,11 @@ function MessagesPanel({ ticket, currentUserId }: MessagesPanelProps) {
             className="flex-shrink-0 inline-flex items-center justify-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
             aria-label="Envoyer"
           >
-            <Send className="h-4 w-4" />
+            {sendMessageMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
           </button>
         </form>
       )}
@@ -458,6 +462,9 @@ function SupportPageInner() {
                     disabled={statusMutation.isPending}
                     className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors disabled:opacity-50"
                   >
+                    {statusMutation.isPending && (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    )}
                     Prendre en charge
                   </button>
                 )}
@@ -472,6 +479,9 @@ function SupportPageInner() {
                     disabled={statusMutation.isPending}
                     className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 transition-colors disabled:opacity-50"
                   >
+                    {statusMutation.isPending && (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    )}
                     Résoudre
                   </button>
                 )}
@@ -480,6 +490,9 @@ function SupportPageInner() {
                   disabled={closeMutation.isPending}
                   className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-50 text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50"
                 >
+                  {closeMutation.isPending && (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  )}
                   Fermer
                 </button>
               </PermissionGate>

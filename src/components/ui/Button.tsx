@@ -1,6 +1,7 @@
 "use client";
 
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type ButtonVariant = "primary" | "danger" | "secondary";
@@ -11,6 +12,8 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: ButtonSize;
   /** Icône affichée avant le libellé (dimensionner selon la taille : h-4 w-4 pour md, h-3.5 w-3.5 pour sm). */
   icon?: ReactNode;
+  /** Affiche un spinner et désactive le bouton pendant une action asynchrone. */
+  loading?: boolean;
 }
 
 const variantClasses: Record<ButtonVariant, string> = {
@@ -25,18 +28,27 @@ const sizeClasses: Record<ButtonSize, string> = {
   md: "gap-2 rounded-lg px-4 py-2 text-sm",
 };
 
+const spinnerSize: Record<ButtonSize, string> = {
+  sm: "h-3.5 w-3.5",
+  md: "h-4 w-4",
+};
+
 export function Button({
   variant = "primary",
   size = "md",
   icon,
+  loading = false,
   className,
   children,
   type = "button",
+  disabled,
   ...props
 }: ButtonProps) {
   return (
     <button
       type={type}
+      disabled={disabled || loading}
+      aria-busy={loading}
       className={cn(
         "inline-flex items-center justify-center font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
         variantClasses[variant],
@@ -45,7 +57,7 @@ export function Button({
       )}
       {...props}
     >
-      {icon}
+      {loading ? <Loader2 className={cn(spinnerSize[size], "animate-spin")} /> : icon}
       {children}
     </button>
   );

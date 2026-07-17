@@ -4,6 +4,8 @@ import type { PageResponse } from "@/types/api";
 export type InvoicePayment =
   | "ESPECES"
   | "MOBILEMONEY"
+  | "MOBILEMONEY-MTN"
+  | "MOBILEMONEY-MOOV"
   | "CARTEBANCAIRE"
   | "CHEQUES"
   | "VIREMENT"
@@ -21,6 +23,14 @@ export interface InvoiceDetail {
   total: number;
 }
 
+/** Remboursement rattaché à une facture d'avoir (statusInvoice = 1). */
+export interface InvoiceRefund {
+  code?: string;
+  reasonDescription?: string;
+  montant: number;
+  invoiceCode?: string;
+}
+
 export interface Invoice {
   id: string;
   code: string;
@@ -28,13 +38,26 @@ export interface Invoice {
   testOrderCode?: string;
   patientId: string;
   patientName?: string;
+  patientCode?: string;
   contratId?: string;
   contratName?: string;
+  clientName?: string;
+  clientAddress?: string;
+  /** Date saisie à la création. Distincte de createdAt : c'est elle qu'affiche Laravel. */
+  date?: string;
+  subtotal?: number;
   total: number;
   paid: boolean;
   statusInvoice: number; // 0=vente, 1=avoir
   payment?: InvoicePayment;
+  /** Code renvoyé par la DGI après normalisation. */
   codeMecef?: string;
+  /** Code normalisé saisi par le caissier (24 caractères). Distinct de codeMecef. */
+  codeNormalise?: string;
+  qrcode?: string;
+  /** Code de la facture de vente d'origine, pour un avoir. */
+  referenceCode?: string;
+  refund?: InvoiceRefund;
   dueDate?: string;
   branchId: string;
   createdAt: string;
@@ -51,6 +74,8 @@ export interface InvoiceRequest {
 
 export interface MarkPaidRequest {
   payment: InvoicePayment;
+  /** Code de la facture normalisée (24 caractères) saisi par le caissier. */
+  code?: string;
 }
 
 export interface FinanceStats {
@@ -118,6 +143,15 @@ export const invoicesApi = {
 
   markAsPaid: (id: string, data: MarkPaidRequest) =>
     apiClient.patch<Invoice>(`/invoices/${id}/status`, data),
+
+  /**
+   * Vérifie qu'un code normalisé n'est pas déjà utilisé, avant encaissement.
+   * Réplique la route Laravel `invoices/checkCode` appelée par updateStatus().
+   */
+  checkCode: (code: string) =>
+    apiClient.get<{ exists: boolean }>("/invoices/check-code", {
+      params: { code },
+    }),
 
   confirmMecef: (id: string, uid: string) =>
     apiClient.post<Invoice>(`/invoices/${id}/confirm-mecef`, { uid }),

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Eye, ClipboardList } from "lucide-react";
+import { Eye, ClipboardList, Loader2 } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/common/DataTable";
@@ -24,11 +24,12 @@ import type { PageResponse } from "@/types/api";
 // Constantes
 // ---------------------------------------------------------------------------
 
-// Filtre statut — réplique exacte du <select> Laravel (3 options)
+// Filtre statut : En attente (DRAFT) / Validé (VALIDATED) / Livré (DELIVERED).
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "", label: "Tous" },
-  { value: "DRAFT", label: "Attente" },
-  { value: "VALIDATED", label: "Valider" },
+  { value: "DRAFT", label: "En attente" },
+  { value: "VALIDATED", label: "Validé" },
+  { value: "DELIVERED", label: "Livré" },
 ];
 
 const MONTHS: { value: number; label: string }[] = [
@@ -205,7 +206,8 @@ export default function ReportsPage() {
         enableSorting: true,
         cell: ({ row }) => {
           const s = row.original.status;
-          const isValidated = s === "VALIDATED" || s === "DELIVERED";
+          const isDelivered = s === "DELIVERED";
+          const isValidated = s === "VALIDATED" || isDelivered;
           return (
             <span
               className={
@@ -214,7 +216,7 @@ export default function ReportsPage() {
                   : "inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700"
               }
             >
-              {isValidated ? "Valider" : "Attente"}
+              {isDelivered ? "Livré" : isValidated ? "Valider" : "Attente"}
             </span>
           );
         },
@@ -456,6 +458,9 @@ export default function ReportsPage() {
               className="inline-flex w-full items-center justify-center rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-green-700 disabled:opacity-50"
               disabled={perfQuery.isFetching}
             >
+              {perfQuery.isFetching && (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              )}
               Filtrer
             </button>
           </div>

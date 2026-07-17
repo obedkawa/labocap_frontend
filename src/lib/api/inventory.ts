@@ -12,17 +12,23 @@ export interface Article {
   minimumStock?: number;
   description?: string;
   supplierName?: string;
+  lotNumber?: string;
+  expirationDate?: string;
 }
 
+/**
+ * Champs envoyés par le formulaire article. Calque le formulaire Laravel
+ * (`articles/create.blade.php`) : nom, quantité, unité, seuil d'alerte,
+ * date d'expiration. Les autres colonnes existent en base mais Laravel ne les
+ * expose pas (`prix`, `description`, `lot_number` y sont commentés) : on ne les
+ * envoie pas, et l'API les préserve au lieu de les écraser.
+ */
 export interface ArticleRequest {
   name: string;
-  code?: string;
-  supplierId?: string;
   initialQuantity: number;
-  purchasePrice: number;
   unit?: string;
   minimumStock?: number;
-  description?: string;
+  expirationDate?: string;
 }
 
 export interface MovementRequest {
@@ -60,6 +66,9 @@ export interface ArticlesPageResponse {
 export const inventoryApi = {
   findAll: (params?: Record<string, unknown>) =>
     apiClient.get<ArticlesPageResponse>("/articles", { params }),
+  /** Badge du menu « Stocks » : articles ayant atteint le stock minimum. */
+  countStockMinimum: () =>
+    apiClient.get<{ count: number }>("/articles/count-stock-minimum"),
   create: (data: ArticleRequest) => apiClient.post<Article>("/articles", data),
   update: (id: string, data: ArticleRequest) =>
     apiClient.put<Article>(`/articles/${id}`, data),
