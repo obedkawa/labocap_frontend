@@ -17,7 +17,6 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import {
   expensesApi,
-  type Expense,
   type ExpenseDetail,
   type PaymentMethod,
 } from "@/lib/api/expenses";

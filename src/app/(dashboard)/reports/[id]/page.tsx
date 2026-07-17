@@ -218,12 +218,21 @@ export default function ReportDetailPage({
         reviewedById: report.reviewedById ?? "",
         tagIds: report.tagIds ?? [],
       });
-      setStatusValue(report.status === "DRAFT" ? "0" : "1");
-      setShowComplementaire(
-        !!report.descriptionSupplementaire || !!report.descriptionSupplementaireMicro
-      );
     }
   }, [report, reset]);
+
+  // Dérive les états locaux (select d'état + bloc complémentaire) à partir du
+  // rapport chargé, pendant le rendu plutôt que dans l'effet ci-dessus (évite un
+  // rendu en cascade). Se déclenche à chaque changement de référence de `report`,
+  // comme le faisait l'effet. https://react.dev/learn/you-might-not-need-an-effect
+  const [prevReport, setPrevReport] = useState<ReportDetail | undefined>(undefined);
+  if (report && report !== prevReport) {
+    setPrevReport(report);
+    setStatusValue(report.status === "DRAFT" ? "0" : "1");
+    setShowComplementaire(
+      !!report.descriptionSupplementaire || !!report.descriptionSupplementaireMicro
+    );
+  }
 
   // Titre par défaut : pour un compte rendu NON validé (DRAFT) qui n'a pas encore
   // de titre, on pré-sélectionne le titre marqué « par défaut ». L'utilisateur reste
