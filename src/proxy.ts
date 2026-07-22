@@ -14,6 +14,8 @@ import { NextRequest, NextResponse } from "next/server";
  */
 
 const ACCESS_COOKIE = "access_token";
+const BRANCH_COOKIE = "selected_branch_id";
+const SELECT_BRANCH_PATH = "/select-branch";
 
 // Routes accessibles sans authentification.
 const PUBLIC_PATHS = ["/login", "/2fa", "/forgot-password", "/reset-password"];
@@ -27,6 +29,7 @@ function isPublic(pathname: string): boolean {
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const hasToken = request.cookies.has(ACCESS_COOKIE);
+  const hasBranch = request.cookies.has(BRANCH_COOKIE);
 
   // Utilisateur authentifié qui revient sur une page d'auth → renvoyé à l'accueil.
   if (hasToken && isPublic(pathname)) {
@@ -38,6 +41,18 @@ export function proxy(request: NextRequest) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(loginUrl);
+  }
+
+  // Authentifié mais aucune branche sélectionnée → écran de sélection de branche
+  // (analogue du middleware `BranchRequired` de Laravel). `/select-branch` et les
+  // pages publiques sont exemptés pour ne pas boucler.
+  if (
+    hasToken &&
+    !hasBranch &&
+    pathname !== SELECT_BRANCH_PATH &&
+    !isPublic(pathname)
+  ) {
+    return NextResponse.redirect(new URL(SELECT_BRANCH_PATH, request.url));
   }
 
   return NextResponse.next();

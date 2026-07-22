@@ -38,7 +38,7 @@ export function PageHeader({
           // `-top-6` (= -1.5rem) le colle exactement sous la barre du haut, et
           // `-mt-6/-mx-6` + `px-6/pt-6` couvrent le padding haut ET latéral avec un
           // fond OPAQUE, pour qu'aucun texte ne passe dans cet espace.
-          "sticky -top-6 z-20 -mx-6 -mt-6 border-b border-gray-200 bg-white px-6 pb-4 pt-6",
+          "sticky -top-6 z-20 -mx-6 -mt-6 bg-white px-6 pb-4 pt-6",
         className
       )}
     >
@@ -77,7 +77,10 @@ export function PageHeader({
       {/* Title row */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-gray-900 truncate">{title}</h1>
+          {/* Hyper : `.page-title { font-size: 18px }` */}
+          <h1 className="text-[18px] font-semibold text-gray-900 truncate">
+            {title}
+          </h1>
           {subtitle && (
             <p className="mt-1 text-sm text-gray-500">{subtitle}</p>
           )}

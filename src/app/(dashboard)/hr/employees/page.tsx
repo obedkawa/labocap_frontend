@@ -6,62 +6,49 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Pencil, Trash2, Eye } from "lucide-react";
+import { Trash2, Eye } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { AxiosError } from "axios";
 import type { UseFormReturn } from "react-hook-form";
 
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { DataTable } from "@/components/common/DataTable";
+import { DataTableCard } from "@/components/common/DataTableCard";
 import { CrudModal } from "@/components/common/CrudModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { PermissionGate } from "@/components/common/PermissionGate";
 import { FormField } from "@/components/ui/FormField";
+import { IconButton } from "@/components/ui/IconButton";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { hrApi, Employee, EmployeeRequest } from "@/lib/api/hr";
+import { usersApi, User } from "@/lib/api/users";
 
 // ---------------------------------------------------------------------------
-// Zod schema — aligné sur EmployeeRequestDto (firstName, lastName obligatoires)
+// Zod — calque du formulaire Laravel employees/create (Nom, Prénoms, Email,
+// Téléphone, Utilisateur). Pas de salaire/poste ici (édités via la fiche).
 // ---------------------------------------------------------------------------
 
 const employeeSchema = z.object({
-  firstName: z.string().min(1, "Le prénom est requis"),
-  lastName: z.string().min(1, "Le nom est requis"),
-  position: z.string().optional(),
-  salary: z.string().optional(),
-  hireDate: z.string().optional(),
-  phone: z.string().optional(),
+  firstName: z.string().min(1, "Le nom est requis"),
+  lastName: z.string().min(1, "Les prénoms sont requis"),
   email: z.string().email("Email invalide").optional().or(z.literal("")),
+  phone: z.string().optional(),
+  userId: z.string().optional(),
 });
 
 type EmployeeFormValues = z.infer<typeof employeeSchema>;
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
-
-function formatSalary(amount?: number): string {
-  if (amount == null) return "—";
-  return new Intl.NumberFormat("fr-FR").format(amount) + " FCFA";
-}
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
 
 function buildPayload(values: EmployeeFormValues): EmployeeRequest {
   return {
     firstName: values.firstName,
     lastName: values.lastName,
-    position: values.position || undefined,
-    salary:
-      values.salary === "" || values.salary === undefined
-        ? undefined
-        : Number(values.salary),
-    hireDate: values.hireDate || undefined,
-    phone: values.phone || undefined,
     email: values.email || undefined,
+    phone: values.phone || undefined,
+    userId: values.userId || undefined,
   };
 }
 
@@ -74,15 +61,11 @@ export default function EmployeesPage() {
   const queryClient = useQueryClient();
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
 
-  // ---- Queries & Mutations ------------------------------------------------
-
   const { data, isLoading } = useQuery({
     queryKey: ["employees"],
-    // size élevé : la recherche filtre côté client sur l'ensemble des employés.
     queryFn: () => hrApi.findAll({ size: 1000 }).then((r) => r.data),
   });
 
@@ -91,6 +74,13 @@ export default function EmployeesPage() {
     [data?.content]
   );
 
+  const { data: usersData } = useQuery({
+    queryKey: ["users", "for-employee-select"],
+    queryFn: () => usersApi.findAll({ size: 1000 }).then((r) => r.data),
+    enabled: createOpen,
+  });
+  const users: User[] = usersData?.content ?? [];
+
   const createMutation = useMutation({
     mutationFn: (payload: EmployeeRequest) => hrApi.create(payload),
     onSuccess: () => {
@@ -98,22 +88,6 @@ export default function EmployeesPage() {
       toast.success("Employé créé");
       setCreateOpen(false);
       createForm.reset();
-    },
-    onError: (err: AxiosError) => {
-      const msg =
-        (err.response?.data as { message?: string })?.message ??
-        "Une erreur est survenue";
-      toast.error(msg);
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: EmployeeRequest }) =>
-      hrApi.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["employees"] });
-      toast.success("Employé modifié");
-      setEditOpen(false);
     },
     onError: (err: AxiosError) => {
       const msg =
@@ -139,40 +113,16 @@ export default function EmployeesPage() {
     },
   });
 
-  // ---- Forms ---------------------------------------------------------------
-
   const createForm = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeSchema),
     defaultValues: {
       firstName: "",
       lastName: "",
-      position: "",
-      salary: "",
-      hireDate: "",
-      phone: "",
       email: "",
+      phone: "",
+      userId: "",
     },
   });
-
-  const editForm = useForm<EmployeeFormValues>({
-    resolver: zodResolver(employeeSchema),
-  });
-
-  // ---- Handlers ------------------------------------------------------------
-
-  function openEdit(employee: Employee) {
-    setSelectedEmployee(employee);
-    editForm.reset({
-      firstName: employee.firstName,
-      lastName: employee.lastName,
-      position: employee.position ?? "",
-      salary: employee.salary != null ? String(employee.salary) : "",
-      hireDate: employee.hireDate ?? "",
-      phone: employee.phone ?? "",
-      email: employee.email ?? "",
-    });
-    setEditOpen(true);
-  }
 
   function openDelete(employee: Employee) {
     setSelectedEmployee(employee);
@@ -183,85 +133,58 @@ export default function EmployeesPage() {
     createMutation.mutate(buildPayload(values));
   }
 
-  function onEditSubmit(values: EmployeeFormValues) {
-    if (!selectedEmployee) return;
-    updateMutation.mutate({ id: selectedEmployee.id, data: buildPayload(values) });
-  }
-
-  // ---- Columns -------------------------------------------------------------
+  // ---- Colonnes (calque employees/index Laravel) --------------------------
 
   const columns: ColumnDef<Employee>[] = [
     {
-      header: "Nom & Prénom",
+      header: "#",
+      id: "rownum",
+      cell: ({ row }) => row.index + 1,
+    },
+    {
+      header: "Nom & Prénoms",
       id: "fullname",
       cell: ({ row }) => (
         <span className="font-medium text-gray-900">
-          {row.original.lastName} {row.original.firstName}
+          {row.original.firstName} {row.original.lastName}
         </span>
       ),
     },
     {
-      header: "Poste",
-      accessorKey: "position",
-      cell: ({ row }) => row.original.position ?? "—",
-    },
-    {
-      header: "Salaire",
-      accessorKey: "salary",
-      cell: ({ row }) => formatSalary(row.original.salary),
-    },
-    {
-      header: "Date embauche",
-      accessorKey: "hireDate",
-      cell: ({ row }) =>
-        row.original.hireDate
-          ? new Date(row.original.hireDate).toLocaleDateString("fr-FR")
-          : "—",
-    },
-    {
-      header: "Téléphone",
-      accessorKey: "phone",
-      cell: ({ row }) => row.original.phone ?? "—",
+      header: "Contacts",
+      id: "contacts",
+      cell: ({ row }) => (
+        <div className="leading-tight">
+          <p className="m-0">{row.original.phone ?? "—"}</p>
+          <p className="m-0 text-gray-500">{row.original.email ?? "—"}</p>
+        </div>
+      ),
     },
     {
       header: "Actions",
       id: "actions",
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
-          <Link
-            href={`/hr/employees/${row.original.id}`}
-            className="inline-flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-xs font-medium bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors"
-            title="Voir le profil"
-          >
-            <Eye className="h-3.5 w-3.5" />
-            Profil
+          <Link href={`/hr/employees/${row.original.id}`} title="Voir le profil">
+            <IconButton
+              variant="view"
+              aria-label="Voir le profil"
+              icon={<Eye className="h-4 w-4" />}
+            />
           </Link>
-          <PermissionGate permission={PERMISSIONS.EDIT_EMPLOYEES}>
-            <button
-              onClick={() => openEdit(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-              aria-label="Modifier"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              Modifier
-            </button>
-          </PermissionGate>
           <PermissionGate permission={PERMISSIONS.DELETE_EMPLOYEES}>
-            <button
-              onClick={() => openDelete(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
+            <IconButton
+              variant="delete"
+              title="Supprimer"
               aria-label="Supprimer"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Supprimer
-            </button>
+              onClick={() => openDelete(row.original)}
+              icon={<Trash2 className="h-4 w-4" />}
+            />
           </PermissionGate>
         </div>
       ),
     },
   ];
-
-  // ---- Render --------------------------------------------------------------
 
   return (
     <div className="space-y-6">
@@ -274,42 +197,27 @@ export default function EmployeesPage() {
                 createForm.reset();
                 setCreateOpen(true);
               }}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+              className="inline-flex items-center gap-2 rounded-[.15rem] bg-blue-600 px-[.9rem] py-[.45rem] text-[.9rem] font-normal text-white transition-[background-color,box-shadow] hover:shadow-[0_2px_6px_0_rgba(114,124,245,0.5)]"
             >
-              Ajouter un employé
+              Ajouter un nouveau employé
             </button>
           ) : undefined
         }
       />
 
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5">
-        <DataTable columns={columns} data={employees} isLoading={isLoading} />
-      </div>
+      <DataTableCard columns={columns} data={employees} isLoading={isLoading} />
 
-      {/* ---- Modal création ---- */}
+      {/* ---- Modal création (calque employees/create Laravel) ---- */}
       <CrudModal
         isOpen={createOpen}
         onClose={() => setCreateOpen(false)}
-        title="Ajouter un employé"
-        size="xl"
+        title="Ajouter un nouveau employé"
+        size="lg"
         onSubmit={createForm.handleSubmit(onCreateSubmit)}
-        submitLabel="Ajouter un employé"
+        submitLabel="Ajouter un nouveau employé"
         isSubmitting={createMutation.isPending}
       >
-        <EmployeeForm form={createForm} />
-      </CrudModal>
-
-      {/* ---- Modal édition ---- */}
-      <CrudModal
-        isOpen={editOpen}
-        onClose={() => setEditOpen(false)}
-        title="Modifier un employé"
-        size="xl"
-        onSubmit={editForm.handleSubmit(onEditSubmit)}
-        submitLabel="Modifier"
-        isSubmitting={updateMutation.isPending}
-      >
-        <EmployeeForm form={editForm} />
+        <EmployeeForm form={createForm} users={users} />
       </CrudModal>
 
       {/* ---- Modal confirmation suppression ---- */}
@@ -333,14 +241,16 @@ export default function EmployeesPage() {
 }
 
 // ---------------------------------------------------------------------------
-// EmployeeForm — formulaire partagé création / édition
+// EmployeeForm — calque employees/create.blade (Nom, Prénoms, Email,
+// Téléphone, Utilisateur). Note obligatoire en tête, comme Laravel.
 // ---------------------------------------------------------------------------
 
 interface EmployeeFormProps {
   form: UseFormReturn<EmployeeFormValues>;
+  users: User[];
 }
 
-function EmployeeForm({ form }: EmployeeFormProps) {
+function EmployeeForm({ form, users }: EmployeeFormProps) {
   const {
     register,
     formState: { errors },
@@ -348,67 +258,33 @@ function EmployeeForm({ form }: EmployeeFormProps) {
 
   return (
     <div className="grid grid-cols-1 gap-4">
-      <FormField label="Prénom" required error={errors.firstName?.message}>
-        <input
-          type="text"
-          {...register("firstName")}
-          placeholder="Prénom de l'employé"
-          className={inputClass}
-        />
+      <p className="m-0 text-right text-xs text-red-600">*champs obligatoires</p>
+
+      <FormField label="Nom" required error={errors.firstName?.message}>
+        <input type="text" {...register("firstName")} className={inputClass} />
       </FormField>
 
-      <FormField label="Nom" required error={errors.lastName?.message}>
-        <input
-          type="text"
-          {...register("lastName")}
-          placeholder="Nom de l'employé"
-          className={inputClass}
-        />
+      <FormField label="Prénoms" required error={errors.lastName?.message}>
+        <input type="text" {...register("lastName")} className={inputClass} />
       </FormField>
 
-      <FormField label="Poste" error={errors.position?.message}>
-        <input
-          type="text"
-          {...register("position")}
-          placeholder="Ex : Technicien de laboratoire"
-          className={inputClass}
-        />
-      </FormField>
-
-      <FormField label="Salaire (FCFA)" error={errors.salary?.message}>
-        <input
-          type="number"
-          {...register("salary")}
-          placeholder="Ex : 150000"
-          min={0}
-          className={inputClass}
-        />
-      </FormField>
-
-      <FormField label="Date d'embauche" error={errors.hireDate?.message}>
-        <input
-          type="date"
-          {...register("hireDate")}
-          className={inputClass}
-        />
+      <FormField label="Email" error={errors.email?.message}>
+        <input type="email" {...register("email")} className={inputClass} />
       </FormField>
 
       <FormField label="Téléphone" error={errors.phone?.message}>
-        <input
-          type="tel"
-          {...register("phone")}
-          placeholder="97000000"
-          className={inputClass}
-        />
+        <input type="tel" {...register("phone")} className={inputClass} />
       </FormField>
 
-      <FormField label="Email" error={errors.email?.message} className="sm:col-span-2">
-        <input
-          type="email"
-          {...register("email")}
-          placeholder="exemple@domaine.com"
-          className={inputClass}
-        />
+      <FormField label="Utilisateur" error={errors.userId?.message}>
+        <select {...register("userId")} className={inputClass}>
+          <option value="">Associer à un utilisateur</option>
+          {users.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.firstname} {u.lastname}
+            </option>
+          ))}
+        </select>
       </FormField>
     </div>
   );

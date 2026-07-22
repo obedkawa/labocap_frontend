@@ -17,7 +17,10 @@ interface RowActionsProps {
   deletePermission?: Permission | Permission[];
   editLabel?: string;
   deleteLabel?: string;
-  /** Affiche de petits boutons icône seule au lieu des boutons libellés. */
+  /**
+   * Conservé pour compatibilité. Le défaut est désormais l'icône seule, comme
+   * dans l'app Laravel ; passer `false` réaffiche les libellés.
+   */
   iconOnly?: boolean;
 }
 
@@ -44,7 +47,7 @@ export function RowActions({
   deletePermission,
   editLabel = "Modifier",
   deleteLabel = "Supprimer",
-  iconOnly = false,
+  iconOnly = true,
 }: RowActionsProps) {
   return (
     <div className="flex items-center gap-2">

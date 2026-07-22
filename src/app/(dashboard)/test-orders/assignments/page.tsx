@@ -51,7 +51,7 @@ const loadOrderCodeOptions = (input: string): Promise<SelectOption[]> =>
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 function isDoctorRole(name?: string): boolean {
   if (!name) return false;

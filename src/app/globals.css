@@ -13,29 +13,132 @@
 }
 
 /* ──────────────────────────────────────────────────────────────────────── */
-/* Harmonisation partielle inspirée du thème Hyper (Laravel).                */
-/* NB : les couleurs des BOUTONS restent volontairement celles d'origine     */
-/* (bleu/rouge/vert Tailwind par défaut) — on ne remappe donc PAS blue/red/  */
-/* green. On garde seulement l'harmonisation des badges de statut (info/      */
-/* warning) et la teinte de bordure claire.                                  */
+/* Thème Hyper (CoderThemes / Bootstrap 5) — palette identique à l'app       */
+/* Laravel de référence. On remappe les échelles Tailwind utilisées dans le  */
+/* projet vers les tokens Hyper, de sorte que tout le front hérite des       */
+/* couleurs Laravel sans réécrire les classes page par page.                 */
+/*                                                                           */
+/*   primary #727cf5 · success #0acf97 · info #39afd1                        */
+/*   warning #ffbc00 · danger  #fa5c7c · dark #313a46                        */
 /* ──────────────────────────────────────────────────────────────────────── */
 @theme {
-  /* Info — cyan Hyper (badges de statut) */
+  /* Primary — indigo Hyper (#727cf5). blue-* et indigo-* pointent dessus. */
+  --color-blue-50: #f2f3fe;
+  --color-blue-100: #e4e6fd;
+  --color-blue-200: #cbcefb;
+  --color-blue-300: #a9adf9;
+  --color-blue-400: #8b91f7;
+  --color-blue-500: #727cf5;
+  --color-blue-600: #727cf5;
+  --color-blue-700: #5a64e0;
+  --color-blue-800: #4a53c4;
+  --color-blue-900: #3d45a3;
+  --color-indigo-50: #f2f3fe;
+  --color-indigo-100: #e4e6fd;
+  --color-indigo-500: #727cf5;
+  --color-indigo-600: #727cf5;
+  --color-indigo-700: #5a64e0;
+  --color-violet-50: #f2f3fe;
+  --color-violet-600: #6b5eae;
+  --color-purple-50: #f3f1fa;
+  --color-purple-100: #e6e2f4;
+  --color-purple-600: #6b5eae;
+  --color-purple-700: #5b5095;
+
+  /* Danger — rouge Hyper (#fa5c7c) */
+  --color-red-50: #fef3f5;
+  --color-red-100: #fee3e9;
+  --color-red-200: #fdcad5;
+  --color-red-300: #fca1b4;
+  --color-red-400: #fb7d97;
+  --color-red-500: #fa5c7c;
+  --color-red-600: #fa5c7c;
+  --color-red-700: #e63e60;
+  --color-red-800: #c22f4d;
+  --color-red-900: #a02742;
+
+  /* Success — vert Hyper (#0acf97) */
+  --color-green-50: #eefdf8;
+  --color-green-100: #d4fbef;
+  --color-green-200: #a9f5de;
+  --color-green-300: #6aeac7;
+  --color-green-500: #0acf97;
+  --color-green-600: #0acf97;
+  --color-green-700: #08a87b;
+  --color-green-800: #0a8564;
+  --color-green-900: #0a6d53;
+  --color-emerald-50: #eefdf8;
+  --color-emerald-500: #0acf97;
+  --color-emerald-600: #0acf97;
+  --color-emerald-700: #08a87b;
+
+  /* Info — cyan Hyper (#39afd1) */
   --color-cyan-500: #39afd1;
   --color-cyan-600: #39afd1;
+  --color-cyan-700: #2f93b0;
   --color-sky-500: #39afd1;
   --color-sky-600: #39afd1;
 
-  /* Warning — jaune Hyper (badges de statut) */
+  /* Warning — jaune Hyper (#ffbc00) */
+  --color-yellow-50: #fff9e6;
+  --color-yellow-100: #fff2c7;
+  --color-yellow-200: #ffe694;
+  --color-yellow-300: #ffd75c;
   --color-yellow-400: #ffca2c;
   --color-yellow-500: #ffbc00;
   --color-yellow-600: #e6a900;
+  --color-yellow-700: #b88700;
+  --color-yellow-800: #8a6600;
+  --color-amber-50: #fff9e6;
+  --color-amber-100: #fff2c7;
   --color-amber-400: #ffca2c;
   --color-amber-500: #ffbc00;
   --color-amber-600: #e6a900;
+  --color-amber-700: #b88700;
+  --color-orange-100: #ffe5d0;
+  --color-orange-700: #c25e00;
 
-  /* Bordures claires — teinte Hyper (#eef2f7) sur la nuance la plus utilisée */
+  /* Gris — neutres Hyper (body #6c757d, muted #98a6ad, dark #313a46) */
+  --color-gray-50: #fafbfe;
+  --color-gray-100: #f1f3fa;
   --color-gray-200: #eef2f7;
+  --color-gray-300: #dee2e6;
+  --color-gray-400: #98a6ad;
+  --color-gray-500: #98a6ad;
+  --color-gray-600: #6c757d;
+  --color-gray-700: #6c757d;
+  --color-gray-800: #343a40;
+  --color-gray-900: #313a46;
+}
+
+/* ── Sidebar Hyper, thème « dark » ──────────────────────────────────────
+   L'app Laravel force `leftSideBarTheme: "dark"` dans le `data-layout-config`
+   du <body>, soit `[data-leftbar-theme=dark] .leftside-menu { background:#313a46 }`
+   — et non le dégradé violet par défaut du thème.                          */
+.hyper-sidebar {
+  background: #313a46;
+  box-shadow: 0 0 35px 0 rgba(154, 161, 171, 0.15);
+}
+
+/* ── Topbar Hyper : `.navbar-custom` ───────────────────────────────────── */
+.hyper-topbar {
+  background-color: #fff;
+  box-shadow: 0 0 35px 0 rgba(154, 161, 171, 0.15);
+}
+
+/* ── Wizard (contrat employé) : mouvement identique à Bootstrap/Hyper ────
+   Barre de progression : `.progress-bar { transition: width .6s ease }`.
+   Panneau : `.tab-pane.fade { transition: opacity .15s linear }` — le
+   panneau actif apparaît en fondu (classe `.show`).                        */
+.wizard-progress > div {
+  transition: width 0.6s ease;
+}
+@keyframes wizard-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.wizard-pane {
+  animation: wizard-fade-in 0.15s linear;
 }
 
 body {
@@ -425,4 +528,202 @@ textarea::placeholder {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Composants Hyper (valeurs EXACTES extraites de adminassets/css/app.min.css
+   du projet Laravel) — pour reproduire à l'identique les formulaires Bootstrap
+   du thème Hyper (cartes, labels, champs, boutons).
+   --------------------------------------------------------------------------- */
+
+/* .card — Hyper : border:none + ombre douce + coins .25rem */
+.hyper-card {
+  background-color: #fff;
+  border: none;
+  border-radius: 0.25rem;
+  box-shadow: 0 0 35px 0 rgba(154, 161, 171, 0.15);
+}
+.hyper-card-body {
+  padding: 1.5rem 1.5rem;
+}
+
+/* .form-label — margin-bottom .5rem, hérite du corps (.9rem / #6c757d / 400) */
+.hyper-form-label {
+  display: inline-block;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 400;
+  line-height: 1.5;
+  color: #6c757d;
+}
+
+/* .mb-3 Hyper = 1.5rem (et non 1rem) : espacement entre groupes de champs */
+.hyper-field {
+  margin-bottom: 1.5rem;
+}
+
+/* .form-control — champ de saisie exact du thème Hyper */
+.hyper-form-control {
+  display: block;
+  width: 100%;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.9rem;
+  font-weight: 400;
+  line-height: 1.5;
+  color: #6c757d;
+  background-color: #fff;
+  background-clip: padding-box;
+  border: 1px solid #dee2e6;
+  border-radius: 0.25rem;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+.hyper-form-control:focus {
+  color: #6c757d;
+  background-color: #fff;
+  border-color: #c8cbcf;
+  outline: 0;
+  box-shadow: none;
+}
+.hyper-form-control::placeholder {
+  color: #adb5bd;
+  opacity: 1;
+}
+.hyper-form-control[readonly] {
+  background-color: #eef2f7;
+  opacity: 1;
+}
+
+/* .btn + .btn-success — bouton vert Hyper */
+.hyper-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 400;
+  line-height: 1.5;
+  text-align: center;
+  vertical-align: middle;
+  cursor: pointer;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.9rem;
+  border-radius: 0.15rem;
+  border: 1px solid transparent;
+  transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out,
+    border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+.hyper-btn-success {
+  color: #fff;
+  background-color: #0acf97;
+  border-color: #0acf97;
+}
+.hyper-btn-success:hover {
+  color: #fff;
+  background-color: #09b988;
+  border-color: #08ae80;
+  box-shadow: 0 2px 6px 0 rgba(10, 207, 151, 0.5);
+}
+.hyper-btn:disabled {
+  opacity: 0.65;
+  cursor: default;
+  box-shadow: none;
+}
+
+/* Infobulle Hyper (Bootstrap tooltip) — valeurs exactes de app.min.css.
+   Affichée par le composant global <HyperTooltip/> au survol de tout élément
+   portant un attribut `title`. */
+.hyper-tooltip {
+  position: fixed;
+  z-index: 1080;
+  font-family: var(--font-nunito), "Segoe UI", system-ui, sans-serif;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.5;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease-in-out;
+}
+.hyper-tooltip.show {
+  opacity: 0.9;
+}
+.hyper-tooltip__inner {
+  max-width: 200px;
+  padding: 0.4rem 0.8rem;
+  color: #f1f3fa;
+  text-align: center;
+  background-color: #343a40;
+  border-radius: 0.2rem;
+}
+.hyper-tooltip__arrow {
+  position: absolute;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-left: 0.4rem solid transparent;
+  border-right: 0.4rem solid transparent;
+}
+.hyper-tooltip[data-placement="top"] .hyper-tooltip__arrow {
+  bottom: -0.4rem;
+  transform: translateX(-50%);
+  border-top: 0.4rem solid #343a40;
+}
+.hyper-tooltip[data-placement="bottom"] .hyper-tooltip__arrow {
+  top: -0.4rem;
+  transform: translateX(-50%);
+  border-bottom: 0.4rem solid #343a40;
+}
+
+/* Champ « Signature » — reproduction fidèle de Dropify (plugin utilisé par
+   Laravel). Boîte 200px, bordure 2px #E5E5E5, et au survol des rayures
+   diagonales animées (keyframes « stripes » de dropify.css 0.2.2). */
+.hyper-dropify {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+  width: 100%;
+  height: 200px;
+  padding: 5px 10px;
+  color: #777;
+  background-color: #fff;
+  text-align: center;
+  border: 2px solid #e5e5e5;
+  transition: border-color 0.15s linear;
+}
+.hyper-dropify:hover {
+  border-color: #e5e5e5;
+  background-size: 30px 30px;
+  background-image: linear-gradient(
+    -45deg,
+    #f6f6f6 25%,
+    transparent 25%,
+    transparent 50%,
+    #f6f6f6 50%,
+    #f6f6f6 75%,
+    transparent 75%,
+    transparent
+  );
+  animation: hyper-dropify-stripes 2s linear infinite;
+}
+@keyframes hyper-dropify-stripes {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 60px 30px;
+  }
+}
+
+/* En-tête de carte : <h5 class="mb-4 text-uppercase"> — .9375rem / 500 */
+.hyper-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 0 1.5rem 0;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.1;
+  text-transform: uppercase;
+  color: #6c757d;
 }

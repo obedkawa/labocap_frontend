@@ -16,6 +16,7 @@ import {
 } from "@/lib/api/optionLoaders";
 import { NativeSelect } from "@/components/ui/NativeSelect";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
+import { IconButton } from "@/components/ui/IconButton";
 import { formatDate } from "@/lib/utils";
 import {
   macroscopyApi,
@@ -34,7 +35,7 @@ const loadOrderOptions = loadTestOrderOptions();
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
 
 // ---------------------------------------------------------------------------
 // Composant : badges d'étapes
@@ -626,13 +627,13 @@ export default function MacroscopyGlobalPage() {
                         </div>
                       </td>
                       <td className="px-3 py-2">
-                        <button
+                        <IconButton
+                          variant="delete"
+                          title="Supprimer"
+                          aria-label="Supprimer"
                           onClick={() => openDelete(macro)}
-                          className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          Supprimer
-                        </button>
+                          icon={<Trash2 className="h-4 w-4" />}
+                        />
                       </td>
                     </tr>
                   ))}
@@ -705,7 +706,7 @@ export default function MacroscopyGlobalPage() {
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                className={`rounded-full px-4 py-1.5 text-[.9rem] font-medium transition-colors ${
                   activeTab === tab.key
                     ? "bg-green-600 text-white"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"

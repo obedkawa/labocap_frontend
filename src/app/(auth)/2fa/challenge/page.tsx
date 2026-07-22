@@ -9,6 +9,7 @@ import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { authApi } from "@/lib/api/auth";
+import { resolvePostLoginRoute } from "@/lib/auth-flow";
 import { useSessionStorageValue } from "@/hooks/useHydrated";
 import { useAuthStore } from "@/stores/auth.store";
 
@@ -69,7 +70,8 @@ export default function TwoFactorChallengePage() {
         sessionStorage.removeItem("2fa_email");
         sessionStorage.removeItem("2fa_temp_token");
         setUser(result.user);
-        router.push("/home");
+        const next = await resolvePostLoginRoute();
+        router.push(next);
       }
     } catch (err) {
       const message =

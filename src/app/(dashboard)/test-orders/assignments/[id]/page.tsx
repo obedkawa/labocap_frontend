@@ -18,6 +18,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { NativeSelect } from "@/components/ui/NativeSelect";
 import { RHFSelect } from "@/components/ui/RHFSelect";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
+import { IconButton } from "@/components/ui/IconButton";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import {
@@ -33,7 +34,7 @@ import type { ApiError } from "@/types/api";
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 function isDoctorRole(name?: string): boolean {
   if (!name) return false;
@@ -465,14 +466,13 @@ export default function AssignmentDetailsPage() {
                         </td>
                         <td className="px-4 py-3">
                           {canManage && (
-                            <button
-                              type="button"
+                            <IconButton
+                              variant="delete"
+                              title="Supprimer"
+                              aria-label="Supprimer"
                               onClick={() => setDetailToDelete(d)}
-                              className="inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                              Supprimer
-                            </button>
+                              icon={<Trash2 className="h-4 w-4" />}
+                            />
                           )}
                         </td>
                       </tr>

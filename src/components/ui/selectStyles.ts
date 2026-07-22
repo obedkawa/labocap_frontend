@@ -37,13 +37,13 @@ export function buildSelectStyles(
       "&:hover": {
         borderColor: state.isFocused ? focusColor : "#9ca3af",
       },
-      fontSize: "0.875rem",
+      fontSize: "0.9rem",
     }),
     valueContainer: (base) => ({ ...base, padding: "2px 8px", gap: "4px" }),
     placeholder: (base) => ({
       ...base,
       color: "#9ca3af",
-      fontSize: "0.875rem",
+      fontSize: "0.9rem",
     }),
     menu: (base) => ({
       ...base,
@@ -75,7 +75,7 @@ export function buildSelectStyles(
           ? "#eff6ff"
           : "white",
       color: state.isSelected ? "white" : "#374151",
-      fontSize: "0.875rem",
+      fontSize: "0.9rem",
       cursor: "pointer",
       "&:active": {
         backgroundColor: state.isSelected ? "#2563eb" : "#dbeafe",
@@ -110,11 +110,11 @@ export function buildSelectStyles(
       "&:hover": { color: "#4b5563" },
     }),
     indicatorSeparator: (base) => ({ ...base, backgroundColor: "#e5e7eb" }),
-    input: (base) => ({ ...base, fontSize: "0.875rem", color: "#111827" }),
-    singleValue: (base) => ({ ...base, fontSize: "0.875rem", color: "#111827" }),
+    input: (base) => ({ ...base, fontSize: "0.9rem", color: "#111827" }),
+    singleValue: (base) => ({ ...base, fontSize: "0.9rem", color: "#111827" }),
     noOptionsMessage: (base) => ({
       ...base,
-      fontSize: "0.875rem",
+      fontSize: "0.9rem",
       color: "#9ca3af",
     }),
   };

@@ -24,6 +24,7 @@ import { CrudModal } from "@/components/common/CrudModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { FormField } from "@/components/ui/FormField";
 import { NativeSelect } from "@/components/ui/NativeSelect";
+import { IconButton } from "@/components/ui/IconButton";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import {
@@ -36,6 +37,9 @@ import {
   type TimeOff,
   type TimeoffStatus,
 } from "@/lib/api/hr";
+import { usersApi, type User } from "@/lib/api/users";
+import { fileUrl } from "@/lib/api/client";
+import { useUIStore } from "@/stores/ui.store";
 import type { ApiError } from "@/types/api";
 
 // ---------------------------------------------------------------------------
@@ -43,7 +47,7 @@ import type { ApiError } from "@/types/api";
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 const NC = "Non renseigné";
 
@@ -86,15 +90,27 @@ function initials(employee?: Employee): string {
   return (a + b) || "—";
 }
 
+function numOrUndef(s?: string): number | undefined {
+  return s === "" || s == null ? undefined : Number(s);
+}
+
 // ---------------------------------------------------------------------------
 // Schémas de formulaire
 // ---------------------------------------------------------------------------
 
 const employeeSchema = z.object({
-  firstName: z.string().min(1, "Le prénom est requis"),
-  lastName: z.string().min(1, "Le nom est requis"),
+  firstName: z.string().min(1, "Le nom est requis"),
+  lastName: z.string().min(1, "Les prénoms sont requis"),
   email: z.string().email("Email invalide").optional().or(z.literal("")),
   phone: z.string().optional(),
+  dateOfBirth: z.string().optional(),
+  placeOfBirth: z.string().optional(),
+  gender: z.string().optional(),
+  nationality: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  cnssNumber: z.string().optional(),
+  userId: z.string().optional(),
 });
 type EmployeeForm = z.infer<typeof employeeSchema>;
 
@@ -102,7 +118,15 @@ const contratSchema = z.object({
   type: z.string().optional(),
   startDate: z.string().min(1, "La date de début est requise"),
   endDate: z.string().optional(),
+  probationEndDate: z.string().optional(),
+  weeklyWorkHours: z.string().optional(),
+  workingDaysPerWeek: z.string().optional(),
+  terminationReason: z.string().optional(),
   salary: z.string().min(1, "Le salaire est requis"),
+  hourlyGrossRate: z.string().optional(),
+  transportAllowance: z.string().optional(),
+  iban: z.string().optional(),
+  bic: z.string().optional(),
 });
 type ContratForm = z.infer<typeof contratSchema>;
 
@@ -123,6 +147,7 @@ export default function EmployeeDetailPage({
   const employeeId = use(paramsPromise).id;
   const { can } = usePermissions();
   const queryClient = useQueryClient();
+  const { openTimeoffModal } = useUIStore();
   const canEdit = can(PERMISSIONS.EDIT_EMPLOYEES);
 
   // ---- Employé -------------------------------------------------------------
@@ -132,24 +157,44 @@ export default function EmployeeDetailPage({
   });
 
   const [editEmpOpen, setEditEmpOpen] = useState(false);
+  const [photoFile, setPhotoFile] = useState<File | undefined>(undefined);
   const empForm = useForm<EmployeeForm>({ resolver: zodResolver(employeeSchema) });
 
+  const { data: usersData } = useQuery({
+    queryKey: ["users", "for-employee-select"],
+    queryFn: () => usersApi.findAll({ size: 1000 }).then((r) => r.data),
+    enabled: editEmpOpen,
+  });
+  const users: User[] = usersData?.content ?? [];
+
   const updateEmpMutation = useMutation({
-    mutationFn: (d: EmployeeForm) =>
-      hrApi.update(employeeId, {
+    mutationFn: async (d: EmployeeForm) => {
+      await hrApi.update(employeeId, {
         firstName: d.firstName,
         lastName: d.lastName,
         email: d.email || undefined,
         phone: d.phone || undefined,
+        dateOfBirth: d.dateOfBirth || undefined,
+        placeOfBirth: d.placeOfBirth || undefined,
+        gender: d.gender || undefined,
+        nationality: d.nationality || undefined,
+        address: d.address || undefined,
+        city: d.city || undefined,
+        cnssNumber: d.cnssNumber || undefined,
+        userId: d.userId || undefined,
         // Préservés : le backend écrase position/salary/hireDate si absents.
         position: employee?.position,
         salary: employee?.salary,
         hireDate: employee?.hireDate,
-      } as EmployeeRequest),
+      } as EmployeeRequest);
+      // Upload de la photo séparément (endpoint multipart dédié) si fournie.
+      if (photoFile) await hrApi.uploadPhoto(employeeId, photoFile);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["employee", employeeId] });
       queryClient.invalidateQueries({ queryKey: ["employees"] });
       toast.success("Employé modifié");
+      setPhotoFile(undefined);
       setEditEmpOpen(false);
     },
     onError: (e: AxiosError<ApiError>) =>
@@ -158,11 +203,20 @@ export default function EmployeeDetailPage({
 
   function openEditEmp() {
     if (!employee) return;
+    setPhotoFile(undefined);
     empForm.reset({
       firstName: employee.firstName,
       lastName: employee.lastName,
       email: employee.email ?? "",
       phone: employee.phone ?? "",
+      dateOfBirth: employee.dateOfBirth ?? "",
+      placeOfBirth: employee.placeOfBirth ?? "",
+      gender: employee.gender ?? "",
+      nationality: employee.nationality ?? "",
+      address: employee.address ?? "",
+      city: employee.city ?? "",
+      cnssNumber: employee.cnssNumber ?? "",
+      userId: employee.userId ?? "",
     });
     setEditEmpOpen(true);
   }
@@ -176,6 +230,7 @@ export default function EmployeeDetailPage({
   const contrats = contratsData?.content ?? [];
 
   const [contratModalOpen, setContratModalOpen] = useState(false);
+  const [contratTab, setContratTab] = useState<"contrat" | "paie">("contrat");
   const [editingContrat, setEditingContrat] = useState<EmployeeContrat | null>(null);
   const [deleteContrat, setDeleteContrat] = useState<EmployeeContrat | null>(null);
   const contratForm = useForm<ContratForm>({ resolver: zodResolver(contratSchema) });
@@ -186,7 +241,15 @@ export default function EmployeeDetailPage({
         type: d.type || undefined,
         startDate: d.startDate,
         endDate: d.endDate || undefined,
+        probationEndDate: d.probationEndDate || undefined,
+        weeklyWorkHours: numOrUndef(d.weeklyWorkHours),
+        workingDaysPerWeek: numOrUndef(d.workingDaysPerWeek),
+        terminationReason: d.terminationReason || undefined,
         salary: Number(d.salary),
+        hourlyGrossRate: numOrUndef(d.hourlyGrossRate),
+        transportAllowance: numOrUndef(d.transportAllowance),
+        iban: d.iban || undefined,
+        bic: d.bic || undefined,
       };
       return editingContrat
         ? hrApi.updateContrat(employeeId, editingContrat.id, payload)
@@ -215,16 +278,30 @@ export default function EmployeeDetailPage({
 
   function openNewContrat() {
     setEditingContrat(null);
-    contratForm.reset({ type: "", startDate: "", endDate: "", salary: "" });
+    setContratTab("contrat");
+    contratForm.reset({
+      type: "", startDate: "", endDate: "", probationEndDate: "",
+      weeklyWorkHours: "", workingDaysPerWeek: "", terminationReason: "",
+      salary: "", hourlyGrossRate: "", transportAllowance: "", iban: "", bic: "",
+    });
     setContratModalOpen(true);
   }
   function openEditContrat(c: EmployeeContrat) {
     setEditingContrat(c);
+    setContratTab("contrat");
     contratForm.reset({
       type: c.type ?? "",
       startDate: c.startDate ?? "",
       endDate: c.endDate ?? "",
+      probationEndDate: c.probationEndDate ?? "",
+      weeklyWorkHours: c.weeklyWorkHours != null ? String(c.weeklyWorkHours) : "",
+      workingDaysPerWeek: c.workingDaysPerWeek != null ? String(c.workingDaysPerWeek) : "",
+      terminationReason: c.terminationReason ?? "",
       salary: c.salary != null ? String(c.salary) : "",
+      hourlyGrossRate: c.hourlyGrossRate != null ? String(c.hourlyGrossRate) : "",
+      transportAllowance: c.transportAllowance != null ? String(c.transportAllowance) : "",
+      iban: c.iban ?? "",
+      bic: c.bic ?? "",
     });
     setContratModalOpen(true);
   }
@@ -257,22 +334,20 @@ export default function EmployeeDetailPage({
       cell: ({ row }) =>
         canEdit ? (
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => openEditContrat(row.original)}
-              className="inline-flex items-center justify-center rounded bg-sky-500 p-1.5 text-white hover:bg-sky-600"
+            <IconButton
+              variant="info"
               title="Modifier"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setDeleteContrat(row.original)}
-              className="inline-flex items-center justify-center rounded bg-red-600 p-1.5 text-white hover:bg-red-700"
+              aria-label="Modifier"
+              onClick={() => openEditContrat(row.original)}
+              icon={<Pencil className="h-4 w-4" />}
+            />
+            <IconButton
+              variant="delete"
               title="Supprimer"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+              aria-label="Supprimer"
+              onClick={() => setDeleteContrat(row.original)}
+              icon={<Trash2 className="h-4 w-4" />}
+            />
           </div>
         ) : null,
     },
@@ -284,7 +359,12 @@ export default function EmployeeDetailPage({
     queryFn: () =>
       hrApi.getTimeOffs(employeeId, { size: 100 }).then((r) => r.data),
   });
-  const conges = congesData?.content ?? [];
+  // Tri du plus récemment créé au plus ancien (fallback sur la date de début).
+  const conges = [...(congesData?.content ?? [])].sort(
+    (a, b) =>
+      new Date(b.createdAt ?? b.startDate).getTime() -
+      new Date(a.createdAt ?? a.startDate).getTime()
+  );
 
   const [deleteConge, setDeleteConge] = useState<TimeOff | null>(null);
 
@@ -344,7 +424,7 @@ export default function EmployeeDetailPage({
             ))}
           </NativeSelect>
         ) : (
-          <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700">
+          <span className="inline-flex items-center rounded px-[.4em] py-[.25em] text-xs font-bold bg-[rgba(10,207,151,0.18)] text-[#0acf97]">
             {statusLabel(row.original.status)}
           </span>
         ),
@@ -354,14 +434,13 @@ export default function EmployeeDetailPage({
       id: "actions",
       cell: ({ row }) =>
         canEdit ? (
-          <button
-            type="button"
-            onClick={() => setDeleteConge(row.original)}
-            className="inline-flex items-center justify-center rounded bg-red-600 p-1.5 text-white hover:bg-red-700"
+          <IconButton
+            variant="delete"
             title="Supprimer"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+            aria-label="Supprimer"
+            onClick={() => setDeleteConge(row.original)}
+            icon={<Trash2 className="h-4 w-4" />}
+          />
         ) : null,
     },
   ];
@@ -447,22 +526,20 @@ export default function EmployeeDetailPage({
       cell: ({ row }) =>
         canEdit ? (
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => openEditDoc(row.original)}
-              className="inline-flex items-center justify-center rounded bg-sky-500 p-1.5 text-white hover:bg-sky-600"
+            <IconButton
+              variant="info"
               title="Modifier"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setDeleteDoc(row.original)}
-              className="inline-flex items-center justify-center rounded bg-red-600 p-1.5 text-white hover:bg-red-700"
+              aria-label="Modifier"
+              onClick={() => openEditDoc(row.original)}
+              icon={<Pencil className="h-4 w-4" />}
+            />
+            <IconButton
+              variant="delete"
               title="Supprimer"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+              aria-label="Supprimer"
+              onClick={() => setDeleteDoc(row.original)}
+              icon={<Trash2 className="h-4 w-4" />}
+            />
           </div>
         ) : null,
     },
@@ -473,24 +550,24 @@ export default function EmployeeDetailPage({
     <div className="space-y-5">
       {/* En-tête : titre + Retour */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-gray-900">Employé</h1>
+        <h1 className="text-[18px] font-semibold text-gray-900">Employé</h1>
         <Link
           href="/hr/employees"
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+          className="inline-flex items-center gap-2 rounded-[.15rem] bg-blue-600 px-[.9rem] py-[.45rem] text-[.9rem] font-normal text-white transition-[background-color,box-shadow] hover:shadow-[0_2px_6px_0_rgba(114,124,245,0.5)]"
         >
           <ArrowLeft className="h-4 w-4" />
           Retour
         </Link>
       </div>
 
-      {/* Carte profil (bleue) */}
-      <div className="overflow-hidden rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 p-6 shadow-sm">
+      {/* Carte profil — bg-primary Hyper (#727cf5), calque profile-user-box */}
+      <div className="overflow-hidden rounded bg-blue-600 p-6">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-5">
             {employee?.photoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={employee.photoUrl}
+                src={fileUrl(employee.photoUrl)}
                 alt=""
                 className="h-24 w-24 rounded-full border-4 border-white/30 object-cover"
               />
@@ -523,7 +600,7 @@ export default function EmployeeDetailPage({
                 </li>
                 <li>
                   <div className="text-sm font-semibold text-white">
-                    {employee?.dateOfBirth || NC} ,&nbsp;{employee?.placeOfBirth || NC}
+                    {formatDate(employee?.dateOfBirth)} ,&nbsp;{employee?.placeOfBirth || NC}
                   </div>
                   <div className="text-xs text-blue-100">
                     Date et lieu de naissance
@@ -546,8 +623,9 @@ export default function EmployeeDetailPage({
               <button
                 type="button"
                 onClick={openEditEmp}
-                className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-blue-700 shadow-sm hover:bg-blue-50"
+                className="inline-flex items-center gap-2 rounded-[.15rem] bg-white px-[.9rem] py-[.45rem] text-[.9rem] font-normal text-gray-700 transition-shadow hover:shadow-[0_2px_6px_0_rgba(0,0,0,0.15)]"
               >
+                <Pencil className="h-4 w-4" />
                 Modifier
               </button>
             </div>
@@ -563,7 +641,7 @@ export default function EmployeeDetailPage({
             <button
               type="button"
               onClick={openNewContrat}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              className="inline-flex items-center gap-2 rounded-[.15rem] bg-blue-600 px-[.9rem] py-[.45rem] text-[.9rem] font-normal text-white transition-[background-color,box-shadow] hover:shadow-[0_2px_6px_0_rgba(114,124,245,0.5)]"
             >
               <Plus className="h-4 w-4" />
               Nouveau contrat
@@ -579,13 +657,14 @@ export default function EmployeeDetailPage({
         title="Congés"
         action={
           canEdit && (
-            <Link
-              href={`/hr/timeoff/nouvelle?employeeId=${employeeId}`}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            <button
+              type="button"
+              onClick={() => openTimeoffModal(employeeId)}
+              className="inline-flex items-center gap-2 rounded-[.15rem] bg-blue-600 px-[.9rem] py-[.45rem] text-[.9rem] font-normal text-white transition-[background-color,box-shadow] hover:shadow-[0_2px_6px_0_rgba(114,124,245,0.5)]"
             >
               <Plus className="h-4 w-4" />
               Demande de congé
-            </Link>
+            </button>
           )
         }
       >
@@ -600,7 +679,7 @@ export default function EmployeeDetailPage({
             <button
               type="button"
               onClick={openNewDoc}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              className="inline-flex items-center gap-2 rounded-[.15rem] bg-blue-600 px-[.9rem] py-[.45rem] text-[.9rem] font-normal text-white transition-[background-color,box-shadow] hover:shadow-[0_2px_6px_0_rgba(114,124,245,0.5)]"
             >
               <Plus className="h-4 w-4" />
               Nouveau document
@@ -613,21 +692,23 @@ export default function EmployeeDetailPage({
 
       {/* ============================ MODALES ============================ */}
 
-      {/* Modifier l'employé */}
+      {/* Modifier l'employé — calque employees/edit.blade (Informations personnelles) */}
       <CrudModal
         isOpen={editEmpOpen}
         onClose={() => setEditEmpOpen(false)}
-        title="Modifier l'employé"
+        title="Informations personnelles"
+        size="xl"
         onSubmit={empForm.handleSubmit((d) => updateEmpMutation.mutate(d))}
-        submitLabel="Modifier"
+        submitLabel="Mettre à jour"
         isSubmitting={updateEmpMutation.isPending}
       >
-        <div className="grid grid-cols-1 gap-4">
-          <FormField label="Nom" required error={empForm.formState.errors.lastName?.message}>
-            <input type="text" {...empForm.register("lastName")} className={inputClass} />
-          </FormField>
-          <FormField label="Prénom" required error={empForm.formState.errors.firstName?.message}>
+        <p className="mb-2 text-right text-xs text-red-600">*champs obligatoires</p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <FormField label="Nom" required error={empForm.formState.errors.firstName?.message}>
             <input type="text" {...empForm.register("firstName")} className={inputClass} />
+          </FormField>
+          <FormField label="Prénoms" required error={empForm.formState.errors.lastName?.message}>
+            <input type="text" {...empForm.register("lastName")} className={inputClass} />
           </FormField>
           <FormField label="Email" error={empForm.formState.errors.email?.message}>
             <input type="email" {...empForm.register("email")} className={inputClass} />
@@ -635,62 +716,173 @@ export default function EmployeeDetailPage({
           <FormField label="Téléphone" error={empForm.formState.errors.phone?.message}>
             <input type="tel" {...empForm.register("phone")} className={inputClass} />
           </FormField>
+          <FormField label="Date de naissance">
+            <input type="date" {...empForm.register("dateOfBirth")} className={inputClass} />
+          </FormField>
+          <FormField label="Lieu de naissance">
+            <input type="text" {...empForm.register("placeOfBirth")} className={inputClass} />
+          </FormField>
+          <FormField label="Sexe">
+            <NativeSelect {...empForm.register("gender")}>
+              <option value="">Selectionner le sexe</option>
+              <option value="Masculin">Masculin</option>
+              <option value="Feminin">Feminin</option>
+            </NativeSelect>
+          </FormField>
+          <FormField label="Nationalité">
+            <input type="text" {...empForm.register("nationality")} className={inputClass} />
+          </FormField>
+          <FormField label="Adresse">
+            <input type="text" {...empForm.register("address")} className={inputClass} />
+          </FormField>
+          <FormField label="Ville">
+            <input type="text" {...empForm.register("city")} className={inputClass} />
+          </FormField>
+          <FormField label="Numéro CNSS" className="sm:col-span-2">
+            <input type="text" {...empForm.register("cnssNumber")} className={inputClass} />
+          </FormField>
+          <FormField label="Utilisateur" className="sm:col-span-2">
+            <select {...empForm.register("userId")} className={inputClass}>
+              <option value="">Associer à un utilisateur</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.firstname} {u.lastname}
+                </option>
+              ))}
+            </select>
+          </FormField>
+          <FormField label="Photo de l'employé" className="sm:col-span-2">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setPhotoFile(e.target.files?.[0])}
+              className="block w-full text-sm text-gray-500 file:mr-4 file:rounded file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100"
+            />
+            {photoFile && <p className="mt-1 text-xs text-gray-500">{photoFile.name}</p>}
+          </FormField>
         </div>
       </CrudModal>
 
-      {/* Contrat (création / édition) */}
+      {/* Contrat (création / édition) — wizard 2 onglets Contrat / Paie */}
       <CrudModal
         isOpen={contratModalOpen}
         onClose={() => { setContratModalOpen(false); setEditingContrat(null); }}
-        title={editingContrat ? "Modifier le contrat" : "Nouveau contrat"}
+        title={
+          employee
+            ? `Contrat de ${employee.lastName} ${employee.firstName}`
+            : "Contrat"
+        }
+        size="xl"
         onSubmit={contratForm.handleSubmit((d) => saveContratMutation.mutate(d))}
-        submitLabel={editingContrat ? "Modifier" : "Ajouter"}
+        submitLabel={editingContrat ? "Mettre à jour" : "Ajouter un contrat pour un employé"}
         isSubmitting={saveContratMutation.isPending}
       >
-        <div className="grid grid-cols-1 gap-4">
-          <FormField label="Type de contrat">
-            <NativeSelect {...contratForm.register("type")}>
-              <option value="">Sélectionner un type de contrat</option>
-              {CONTRACT_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </NativeSelect>
-          </FormField>
-          <FormField
-            label="Date de début"
-            required
-            error={contratForm.formState.errors.startDate?.message}
+        {/* Onglets (nav-pills Laravel) */}
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setContratTab("contrat")}
+            className={`rounded-[.15rem] px-3 py-2 text-[.9rem] font-medium transition-colors ${
+              contratTab === "contrat"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
           >
-            <input type="date" {...contratForm.register("startDate")} className={inputClass} />
-          </FormField>
-          <FormField label="Date de fin" error={contratForm.formState.errors.endDate?.message}>
-            <input type="date" {...contratForm.register("endDate")} className={inputClass} />
-          </FormField>
-          <FormField
-            label="Salaire brute/Mois (FCFA)"
-            required
-            error={contratForm.formState.errors.salary?.message}
+            Contrat
+          </button>
+          <button
+            type="button"
+            onClick={() => setContratTab("paie")}
+            className={`rounded-[.15rem] px-3 py-2 text-[.9rem] font-medium transition-colors ${
+              contratTab === "paie"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
           >
-            <input
-              type="number"
-              min={0}
-              step="1"
-              {...contratForm.register("salary")}
-              className={inputClass}
-            />
-          </FormField>
+            Paie
+          </button>
         </div>
+
+        {/* Barre de progression du wizard (calque Laravel : bg-success,
+            transition width .6s ease) */}
+        <div className="wizard-progress mb-4 h-1 w-full overflow-hidden rounded-full bg-gray-200">
+          <div
+            className="h-full rounded-full bg-green-600"
+            style={{ width: contratTab === "contrat" ? "50%" : "100%" }}
+          />
+        </div>
+
+        {/* Onglet Contrat — le panneau actif apparaît en fondu (.tab-pane.fade) */}
+        {contratTab === "contrat" && (
+          <div key="contrat" className="wizard-pane grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FormField label="Type de contrat" className="sm:col-span-2">
+              <NativeSelect {...contratForm.register("type")}>
+                <option value="">Selectionner un type de contrat</option>
+                {CONTRACT_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </NativeSelect>
+            </FormField>
+            <FormField
+              label="Date de début"
+              required
+              error={contratForm.formState.errors.startDate?.message}
+            >
+              <input type="date" {...contratForm.register("startDate")} className={inputClass} />
+            </FormField>
+            <FormField label="Date de fin">
+              <input type="date" {...contratForm.register("endDate")} className={inputClass} />
+            </FormField>
+            <FormField label="Date d'évaluation" className="sm:col-span-2">
+              <input type="date" {...contratForm.register("probationEndDate")} className={inputClass} />
+            </FormField>
+            <FormField label="Heure/Semaine">
+              <input type="number" min={0} {...contratForm.register("weeklyWorkHours")} className={inputClass} />
+            </FormField>
+            <FormField label="Jour/Semaine">
+              <input type="number" min={0} {...contratForm.register("workingDaysPerWeek")} className={inputClass} />
+            </FormField>
+            <FormField label="Raison du fin de contrat" className="sm:col-span-2">
+              <textarea rows={3} {...contratForm.register("terminationReason")} className={inputClass} />
+            </FormField>
+          </div>
+        )}
+
+        {/* Onglet Paie */}
+        {contratTab === "paie" && (
+          <div key="paie" className="wizard-pane grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FormField
+              label="Salaire brute/Mois (FCFA)"
+              required
+              error={contratForm.formState.errors.salary?.message}
+            >
+              <input type="number" min={0} step="1" {...contratForm.register("salary")} className={inputClass} />
+            </FormField>
+            <FormField label="Taux brute/Heures">
+              <input type="number" min={0} {...contratForm.register("hourlyGrossRate")} className={inputClass} />
+            </FormField>
+            <FormField label="Indemnite de transport">
+              <input type="number" min={0} {...contratForm.register("transportAllowance")} className={inputClass} />
+            </FormField>
+            <FormField label="Numéro de compte bancaire (IBAN)">
+              <input type="text" {...contratForm.register("iban")} className={inputClass} />
+            </FormField>
+            <FormField label="BIC">
+              <input type="text" {...contratForm.register("bic")} className={inputClass} />
+            </FormField>
+          </div>
+        )}
       </CrudModal>
 
       {/* Document (création / édition) */}
       <CrudModal
         isOpen={docModalOpen}
         onClose={() => { setDocModalOpen(false); setEditingDoc(null); }}
-        title={editingDoc ? "Modifier le document" : "Nouveau document"}
+        title={editingDoc ? "Modifier le document" : "Ajouter un nouveau fichier"}
         onSubmit={docForm.handleSubmit((d) => saveDocMutation.mutate(d))}
-        submitLabel={editingDoc ? "Modifier" : "Ajouter"}
+        submitLabel={editingDoc ? "Mettre à jour" : "Ajouter un nouveau fichier"}
         isSubmitting={saveDocMutation.isPending}
       >
         <div className="grid grid-cols-1 gap-4">
@@ -762,9 +954,9 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div className="rounded border border-gray-200 bg-white p-6">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+        <h3 className="text-[18px] font-semibold text-gray-900">{title}</h3>
         {action}
       </div>
       {children}

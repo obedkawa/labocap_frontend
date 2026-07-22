@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -34,7 +34,7 @@ import { useUIStore } from "@/stores/ui.store";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAppSettings } from "@/hooks/useAppSettings";
 import { useHydrated } from "@/hooks/useHydrated";
-import { useAuthStore } from "@/stores/auth.store";
+import { useAuthStore, isSuperAdmin } from "@/stores/auth.store";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { testOrdersApi } from "@/lib/api/testOrders";
 import { inventoryApi } from "@/lib/api/inventory";
@@ -65,8 +65,10 @@ interface CollapseItemProps {
 }
 
 interface SubItemProps {
-  href: string;
+  /** Lien de navigation. Omettre et fournir `onClick` pour un déclencheur (ex. modal). */
+  href?: string;
   label: string;
+  onClick?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -89,12 +91,12 @@ function NavItem({ href, icon, label, collapsed, badge = 0 }: NavItemProps) {
   return (
     <Link
       href={href}
-      className={`flex items-center px-4 py-2.5 rounded-md mx-2 transition-colors text-sm ${
+      className={`flex items-center px-4 py-2.5 rounded-md mx-2 transition-colors text-[.9375rem] ${
         collapsed ? "justify-center" : "gap-3"
       } ${
         isActive
-          ? "bg-gray-700 text-white"
-          : "text-gray-300 hover:bg-gray-800 hover:text-white"
+          ? "bg-[#727cf5] text-white"
+          : "text-[#8391a2] hover:bg-white/5 hover:text-[#bccee4]"
       }`}
       title={collapsed ? label : undefined}
     >
@@ -136,7 +138,7 @@ function CollapseItem({
         onMouseLeave={() => setOpen(false)}
       >
         <div
-          className="flex items-center justify-center px-4 py-2.5 mx-2 text-gray-300 cursor-pointer hover:bg-gray-800 hover:text-white rounded-md"
+          className="flex items-center justify-center px-4 py-2.5 mx-2 text-[#8391a2] cursor-pointer hover:bg-[#727cf5] hover:text-white rounded-md"
           title={label}
         >
           <span className="flex-shrink-0 w-5 h-5">{icon}</span>
@@ -144,8 +146,8 @@ function CollapseItem({
         {open && (
           // `pl-1` sert de pont de survol entre l'icône et le panneau.
           <div className="fixed left-16 z-50 pl-1" style={{ top: flyoutTop }}>
-            <div className="min-w-[210px] rounded-md border border-gray-700 bg-gray-900 py-2 shadow-xl">
-              <div className="px-4 pb-2 mb-1 border-b border-gray-700 text-xs uppercase tracking-wider text-gray-400 font-semibold">
+            <div className="min-w-[210px] rounded-md border border-white/10 bg-[#313a46] py-2 shadow-xl">
+              <div className="px-4 pb-2 mb-1 border-b border-white/10 text-xs uppercase tracking-wider text-[#8391a2] font-semibold">
                 {label}
               </div>
               {children}
@@ -160,7 +162,7 @@ function CollapseItem({
     <div>
       <button
         onClick={() => setOpen((prev) => !prev)}
-        className="flex items-center gap-3 px-4 py-2.5 rounded-md mx-2 w-[calc(100%-16px)] text-left text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
+        className="flex items-center gap-3 px-4 py-2.5 rounded-md mx-2 w-[calc(100%-16px)] text-left text-[.9375rem] text-[#8391a2] hover:bg-white/5 hover:text-[#bccee4] transition-colors"
       >
         <span className="flex-shrink-0 w-5 h-5">{icon}</span>
         <span className="flex-1 truncate">{label}</span>
@@ -174,7 +176,7 @@ function CollapseItem({
         </span>
       </button>
       {open && (
-        <div className="ml-4 border-l border-gray-700 mt-0.5 mb-0.5">
+        <div className="ml-4 border-l border-white/15 mt-0.5 mb-0.5">
           {children}
         </div>
       )}
@@ -182,19 +184,26 @@ function CollapseItem({
   );
 }
 
-function SubItem({ href, label }: SubItemProps) {
+function SubItem({ href, label, onClick }: SubItemProps) {
   const pathname = usePathname();
-  const isActive = pathname === href;
+  const isActive = !!href && pathname === href;
+  const cls = `flex w-full items-center pl-8 pr-4 py-2 text-left text-[.9375rem] transition-colors ${
+    isActive
+      ? "text-white bg-white/5 rounded-r-md"
+      : "text-[#8391a2] hover:text-[#bccee4] hover:bg-white/5 rounded-r-md"
+  }`;
+
+  // Déclencheur (ex. modal global) : bouton au lieu d'un lien.
+  if (!href) {
+    return (
+      <button type="button" onClick={onClick} className={cls}>
+        {label}
+      </button>
+    );
+  }
 
   return (
-    <Link
-      href={href}
-      className={`flex items-center pl-8 pr-4 py-2 text-sm transition-colors ${
-        isActive
-          ? "text-white bg-gray-700 rounded-r-md"
-          : "text-gray-400 hover:text-white hover:bg-gray-800 rounded-r-md"
-      }`}
-    >
+    <Link href={href} className={cls}>
       {label}
     </Link>
   );
@@ -208,11 +217,12 @@ function SectionLabel({
   collapsed: boolean;
 }) {
   if (collapsed) {
-    return <div className="mx-2 my-2 border-t border-gray-700" />;
+    return <div className="mx-2 my-2 border-t border-white/15" />;
   }
   return (
     <div className="px-4 mt-5 mb-2">
-      <span className="text-xs uppercase text-gray-500 font-semibold tracking-wider">
+      {/* Hyper : `[data-leftbar-theme=dark] .side-nav-title { color:#8391a2 }` */}
+      <span className="text-xs uppercase text-[#8391a2] font-bold tracking-wider">
         {label}
       </span>
     </div>
@@ -224,19 +234,42 @@ function SectionLabel({
 // ---------------------------------------------------------------------------
 
 export function Sidebar() {
-  const { sidebarCollapsed } = useUIStore();
+  const { sidebarCollapsed, mobileSidebarOpen, setMobileSidebarOpen } = useUIStore();
   const { can } = usePermissions();
+  const { openTimeoffModal } = useUIStore();
   const { user } = useAuthStore();
   const mounted = useHydrated();
+  const pathname = usePathname();
+
+  // À la navigation (clic sur un lien du menu), on referme le menu overlay mobile
+  // — comme Laravel où le menu se masque après le choix d'une entrée sur petit écran.
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [pathname, setMobileSidebarOpen]);
+
+  // Détection du petit écran (< 768px). Sur mobile, le menu est TOUJOURS déployé
+  // (libellés visibles) : le mode réduit « condensed » est réservé au desktop,
+  // exactement comme dans Laravel/Hyper.
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767.98px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
 
   // Le rôle médecin est « Docteur » (slug « docteur ») en base — on accepte les
-  // deux orthographes (FR/EN) sur le nom comme sur le slug.
+  // deux orthographes (FR/EN) sur le nom comme sur le slug. Le Super Admin, qui a
+  // tous les droits, accède aussi à « Mon espace ».
   const isDoctor =
     mounted &&
-    user?.roles?.some((r) => {
-      const tokens = `${r.name ?? ""} ${r.slug ?? ""}`.toLowerCase();
-      return tokens.includes("docteur") || tokens.includes("doctor");
-    });
+    (isSuperAdmin(user) ||
+      (user?.roles?.some((r) => {
+        const tokens = `${r.name ?? ""} ${r.slug ?? ""}`.toLowerCase();
+        return tokens.includes("docteur") || tokens.includes("doctor");
+      }) ??
+        false));
 
   const { data: immunoPendingCount } = useQuery({
     queryKey: ["immuno-pending-count"],
@@ -261,7 +294,8 @@ export function Sidebar() {
     refetchOnWindowFocus: false,
   });
 
-  const collapsed = sidebarCollapsed;
+  // Sur mobile, jamais réduit : on affiche toujours les libellés (comme Laravel).
+  const collapsed = isMobile ? false : sidebarCollapsed;
 
   // Logo + nom du labo depuis les paramètres (repli sur le défaut si absent).
   const { data: appSettings } = useAppSettings();
@@ -269,19 +303,40 @@ export function Sidebar() {
   const appName = appSettings?.app_name?.trim() || "Labo AnaPath";
 
   return (
-    <aside
-      className={`bg-gray-900 text-white flex flex-col flex-shrink-0 overflow-hidden transition-all duration-300 ease-in-out ${
-        collapsed ? "w-16" : "w-64"
-      }`}
-    >
+    <>
+      {/* Fond assombri sous 768px quand le menu overlay est ouvert (Hyper). */}
+      {mobileSidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          onClick={() => setMobileSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        className={[
+          "hyper-sidebar text-white flex flex-col overflow-hidden",
+          "transition-[transform,width] duration-300 ease-in-out",
+          // Mobile (< 768px) : menu hors écran par défaut, en overlay fixe une
+          // fois ouvert — calque de `.leftside-menu { display:none }` +
+          // `.sidebar-enable .leftside-menu` du thème Hyper.
+          // z-40 : sous la topbar (z-50) pour que le hamburger reste visible,
+          // au-dessus du fond assombri (z-30) — comme Hyper (navbar 1001 / menu 10).
+          "fixed inset-y-0 left-0 z-40 w-64",
+          mobileSidebarOpen ? "translate-x-0" : "-translate-x-full",
+          // Desktop (>= 768px) : dans le flux, largeur pilotée par le mode réduit.
+          "md:static md:z-auto md:translate-x-0 md:flex-shrink-0",
+          collapsed ? "md:w-16" : "md:w-64",
+        ].join(" ")}
+      >
       {/* Logo — depuis les paramètres (setting_apps.logo), repli sur l'initiale. */}
-      <div className="h-16 flex items-center justify-center flex-shrink-0 border-b border-gray-800">
+      <div className="h-[70px] flex items-center justify-center flex-shrink-0 border-b border-white/15">
         {collapsed ? (
           logoSrc ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={logoSrc} alt={appName} className="h-9 w-9 rounded-lg object-contain" />
           ) : (
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+            <div className="w-8 h-8 bg-[#727cf5] rounded-lg flex items-center justify-center text-white font-bold text-sm">
               {appName.charAt(0).toUpperCase()}
             </div>
           )
@@ -291,7 +346,7 @@ export function Sidebar() {
               // eslint-disable-next-line @next/next/no-img-element
               <img src={logoSrc} alt={appName} className="h-9 w-auto max-w-[90px] rounded object-contain flex-shrink-0" />
             ) : (
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+              <div className="w-8 h-8 bg-[#727cf5] rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
                 {appName.charAt(0).toUpperCase()}
               </div>
             )}
@@ -468,7 +523,7 @@ export function Sidebar() {
         {/* Signaler un problème */}
         <CollapseItem icon={<AlertCircle className="w-5 h-5" />} label="Signaler un problème" collapsed={collapsed}>
           <SubItem href="/support" label="Historiques" />
-          <SubItem href="/support?new=1" label="Signaler" />
+          <SubItem href="/support/signaler" label="Signaler" />
         </CollapseItem>
 
         {/* Utilisateurs */}
@@ -494,7 +549,7 @@ export function Sidebar() {
                 Tous les employés / Demande de congé / Toutes les demandes.
                 Laravel n'a aucune entrée « Paie » (la paie vit dans la fiche employé). */}
             <SubItem href="/hr/employees" label="Tous les employés" />
-            {can(PERMISSIONS.MANAGE_TIMEOFF) && <SubItem href="/hr/timeoff/nouvelle" label="Demande de congé" />}
+            {can(PERMISSIONS.MANAGE_TIMEOFF) && <SubItem label="Demande de congé" onClick={openTimeoffModal} />}
             {can(PERMISSIONS.MANAGE_TIMEOFF) && <SubItem href="/hr/timeoff" label="Toutes les demandes" />}
           </CollapseItem>
         )}
@@ -517,5 +572,6 @@ export function Sidebar() {
         <div className="h-4" />
       </nav>
     </aside>
+    </>
   );
 }

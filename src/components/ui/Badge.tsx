@@ -16,20 +16,22 @@ interface BadgeProps {
   className?: string;
 }
 
+// Badges « lighten » du thème Hyper : teinte du statut à 18 % d'opacité,
+// texte à la couleur pleine (ex. `.badge-success-lighten`).
 const variantClasses: Record<BadgeVariant, string> = {
-  success: "bg-green-100 text-green-800",
-  warning: "bg-yellow-100 text-yellow-800",
-  danger: "bg-red-100 text-red-800",
-  info: "bg-blue-100 text-blue-800",
+  success: "bg-[rgba(10,207,151,0.18)] text-[#0acf97]",
+  warning: "bg-[rgba(255,188,0,0.18)] text-[#ffbc00]",
+  danger: "bg-[rgba(250,92,124,0.18)] text-[#fa5c7c]",
+  info: "bg-[rgba(57,175,209,0.18)] text-[#39afd1]",
   primary: "bg-blue-600 text-white",
-  secondary: "bg-gray-100 text-gray-600",
+  secondary: "bg-[rgba(49,58,70,0.18)] text-[#313a46]",
 };
 
 export function Badge({ variant, children, className }: BadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium",
+        "inline-flex items-center whitespace-nowrap rounded px-[.4em] py-[.25em] text-[.75em] font-bold",
         variantClasses[variant],
         className
       )}

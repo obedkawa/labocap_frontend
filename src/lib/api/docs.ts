@@ -139,9 +139,39 @@ export const docsApi = {
     });
   },
 
+  /**
+   * Édite le titre d'un document (et remplace optionnellement le fichier, sans
+   * nouvelle version). Calque Laravel `doc.update`.
+   */
+  updateTitle: (id: string, title: string, file?: File | null) => {
+    const fd = new FormData();
+    fd.append("title", title);
+    if (file) fd.append("file", file);
+    return apiClient.put<Doc>(`/docs/${id}`, fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+
+  /** Documents d'une catégorie (volet droit de l'explorateur). */
+  byCategory: (categoryId: string) =>
+    apiClient.get<Doc[]>(`/docs/by-category/${categoryId}`),
+
   getVersions: (id: string) => apiClient.get<DocVersion[]>(`/docs/${id}/versions`),
 
   delete: (id: string) => apiClient.delete(`/docs/${id}`),
+
+  /** Corbeille : documents supprimés logiquement. */
+  trash: (params?: Record<string, unknown>) =>
+    apiClient.get<{ content: Doc[]; totalElements: number; totalPages: number }>(
+      "/docs/trash",
+      { params }
+    ),
+
+  /** Restaure un document depuis la corbeille. */
+  restore: (id: string) => apiClient.post<Doc>(`/docs/${id}/restore`),
+
+  /** Suppression définitive d'un document. */
+  permanentDelete: (id: string) => apiClient.delete(`/docs/${id}/permanent`),
 
   // --- GED avancée ---
 

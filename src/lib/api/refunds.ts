@@ -41,6 +41,13 @@ export interface RefundCreateRequest {
   note?: string;
 }
 
+export interface RefundUpdateRequest {
+  invoiceId: string;
+  refundReasonId: string;
+  montant: number;
+  note?: string;
+}
+
 export interface RefundReasonRequest {
   label: string;
 }
@@ -73,6 +80,22 @@ export const refundsApi = {
 
   create: (data: RefundCreateRequest) =>
     apiClient.post<RefundRequest>("/refund-requests", data),
+
+  /**
+   * Édite une demande + remplace éventuellement la pièce jointe PDF.
+   * Endpoint multipart : partie `data` (JSON) + partie `file` optionnelle.
+   */
+  update: (id: string, data: RefundUpdateRequest, file?: File | null) => {
+    const form = new FormData();
+    form.append(
+      "data",
+      new Blob([JSON.stringify(data)], { type: "application/json" })
+    );
+    if (file) form.append("file", file);
+    return apiClient.put<RefundRequest>(`/refund-requests/${id}`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
 
   updateStatus: (id: string, status: string) =>
     apiClient.patch<{ id: string | null; status: string }>(

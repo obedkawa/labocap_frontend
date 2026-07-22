@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import type { AxiosError } from "axios";
 
 import { PageHeader } from "@/components/ui/PageHeader";
+import { IconButton } from "@/components/ui/IconButton";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { CrudModal } from "@/components/common/CrudModal";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -20,7 +21,7 @@ import {
 import type { ApiError } from "@/types/api";
 
 const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 export default function ReportTemplatesPage() {
   const { can } = usePermissions();
@@ -203,22 +204,18 @@ export default function ReportTemplatesPage() {
                     <td className="px-4 py-3">
                       {canManage && (
                         <div className="flex items-center gap-2">
-                          <button
-                            type="button"
+                          <IconButton
+                            variant="edit"
+                            title="Modifier"
                             onClick={() => openEdit(t)}
-                            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                            Modifier
-                          </button>
-                          <button
-                            type="button"
+                            icon={<Pencil className="h-4 w-4" />}
+                          />
+                          <IconButton
+                            variant="delete"
+                            title="Supprimer"
                             onClick={() => setDeleteTarget(t)}
-                            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-600 text-white hover:bg-red-700"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            Supprimer
-                          </button>
+                            icon={<Trash2 className="h-4 w-4" />}
+                          />
                         </div>
                       )}
                     </td>

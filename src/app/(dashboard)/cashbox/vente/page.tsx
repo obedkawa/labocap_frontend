@@ -39,7 +39,7 @@ const depositSchema = z.object({
 type DepositFormData = z.infer<typeof depositSchema>;
 
 const depositInputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -141,6 +141,8 @@ export default function CashboxVentePage() {
   // === Dépôt bancaire
   const queryClient = useQueryClient();
   const [depositOpen, setDepositOpen] = useState(false);
+  // Pièce jointe du dépôt (scan du reçu) — obligatoire, comme Laravel.
+  const [depositFile, setDepositFile] = useState<File | null>(null);
 
   const depositForm = useForm<DepositFormData>({
     resolver: zodResolver(depositSchema),
@@ -165,18 +167,22 @@ export default function CashboxVentePage() {
 
   const depositMutation = useMutation({
     mutationFn: (values: DepositFormData) =>
-      banksApi.createDeposit({
-        bankId: values.bankId,
-        amount: Number(values.amount),
-        date: values.date,
-        description: values.description || undefined,
-      }),
+      banksApi.createDeposit(
+        {
+          bankId: values.bankId,
+          amount: Number(values.amount),
+          date: values.date,
+          description: values.description || undefined,
+        },
+        depositFile,
+      ),
     onSuccess: () => {
       // le solde caisse + l'historique des opérations changent
       queryClient.invalidateQueries({ queryKey: ["cashboxes"] });
       queryClient.invalidateQueries({ queryKey: ["cashbox-operations"] });
       toast.success("Dépôt bancaire enregistré");
       setDepositOpen(false);
+      setDepositFile(null);
       depositForm.reset({
         bankId: "",
         amount: "",
@@ -369,11 +375,19 @@ export default function CashboxVentePage() {
         isOpen={depositOpen}
         onClose={() => {
           setDepositOpen(false);
+          setDepositFile(null);
           depositForm.reset();
         }}
         title="Enregistrer un dépôt bancaire"
         size="lg"
-        onSubmit={depositForm.handleSubmit((v) => depositMutation.mutate(v))}
+        onSubmit={depositForm.handleSubmit((v) => {
+          // Laravel rend la pièce jointe obligatoire sur le dépôt.
+          if (!depositFile) {
+            toast.error("La pièce jointe (scan du reçu) est obligatoire.");
+            return;
+          }
+          depositMutation.mutate(v);
+        })}
         submitLabel="Enregistrer"
         isSubmitting={depositMutation.isPending}
       >
@@ -450,6 +464,20 @@ export default function CashboxVentePage() {
               placeholder="Référence / commentaire (optionnel)"
               className={`${depositInputClass} resize-none`}
             />
+          </div>
+
+          {/* Attachement — obligatoire (scan du reçu de dépôt), calque Laravel. */}
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-700">
+              Attachement <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="file"
+              accept=".pdf,image/*"
+              onChange={(e) => setDepositFile(e.target.files?.[0] ?? null)}
+              className={`${depositInputClass} file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100`}
+            />
+            <p className="text-xs text-gray-400">Scan du reçu de dépôt.</p>
           </div>
         </div>
       </CrudModal>

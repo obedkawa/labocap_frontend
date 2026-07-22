@@ -12,7 +12,7 @@ import {
   PaginationState,
   ColumnFiltersState,
 } from "@tanstack/react-table";
-import { ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, RefreshCw, Minus, Plus, X } from "lucide-react";
+import { ChevronUp, ChevronDown, ChevronsUpDown, RefreshCw, Minus, Plus, X } from "lucide-react";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -167,75 +167,78 @@ export function DataTable<T>({
   // Bouton « Fermer » : la carte disparaît (revient au rechargement de la page).
   if (closed) return null;
 
-  const toolBtn =
-    "flex h-8 w-8 items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200 hover:text-gray-900";
+  // `.card-widgets` Hyper : petits liens-icônes discrets en haut à droite.
+  const widgetBtn = "text-gray-400 transition-colors hover:text-gray-600";
+  const showSearch = !hideToolbarSearch && (onSearchChange !== undefined || !isServerSide);
 
   return (
-    <div className="w-full space-y-3">
-      {/* Barre de recherche */}
-      {!hideToolbarSearch && (onSearchChange !== undefined || !isServerSide) && (
-        <div className="flex items-center justify-between gap-4">
-          <input
-            type="text"
-            placeholder="Rechercher..."
-            value={onSearchChange ? (searchValue ?? "") : localSearch}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            className="w-full max-w-xs rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
+    <div className="w-full">
+      {/* card-widgets (Actualiser · Réduire · Fermer) + card-title, comme Laravel */}
+      {!hideToolbar && (
+        <div className="relative">
+          <div className="absolute right-0 top-0 flex items-center gap-2">
+            <button type="button" onClick={handleRefresh} className={widgetBtn} title="Actualiser" aria-label="Actualiser">
+              <RefreshCw className={cn("h-[.95rem] w-[.95rem]", refreshing && "animate-spin")} />
+            </button>
+            <button type="button" onClick={() => setCollapsed((c) => !c)} className={widgetBtn} title={collapsed ? "Agrandir" : "Réduire"} aria-label={collapsed ? "Agrandir" : "Réduire"}>
+              {collapsed ? <Plus className="h-[.95rem] w-[.95rem]" /> : <Minus className="h-[.95rem] w-[.95rem]" />}
+            </button>
+            <button type="button" onClick={() => setClosed(true)} className={widgetBtn} title="Fermer" aria-label="Fermer">
+              <X className="h-[.95rem] w-[.95rem]" />
+            </button>
+          </div>
+          {title && <h5 className="mb-0 text-[.9375rem] font-semibold text-gray-800">{title}</h5>}
         </div>
       )}
 
-      {/* Tableau */}
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-        {/* Barre d'outils : Actualiser · Réduire · Fermer */}
-        {!hideToolbar && (
-        <div className="flex items-center justify-between gap-2 border-b border-gray-200 bg-white px-3 py-2">
-          <span className="truncate text-sm font-semibold text-gray-700">
-            {title ?? ""}
-          </span>
-          <div className="flex items-center gap-0.5">
-            <button
-              type="button"
-              onClick={handleRefresh}
-              className={toolBtn}
-              title="Actualiser"
-              aria-label="Actualiser"
+      {!collapsed && (
+      <div className={cn(!hideToolbar && "pt-3")}>
+        {/* Contrôles : « Afficher [x] enregistrements par page » (gauche) + « Rechercher: » (droite) */}
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <label className="flex items-center gap-2 text-[.9rem] text-gray-700">
+            <span>Afficher</span>
+            <NativeSelect
+              className="w-auto"
+              value={currentPageSize}
+              onChange={(e) => {
+                const size = Number(e.target.value);
+                if (isServerSide) onPageSizeChange?.(size);
+                else table.setPageSize(size);
+              }}
             >
-              <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} strokeWidth={2.25} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setCollapsed((c) => !c)}
-              className={toolBtn}
-              title={collapsed ? "Agrandir" : "Réduire"}
-              aria-label={collapsed ? "Agrandir" : "Réduire"}
-            >
-              {collapsed ? <Plus className="h-4 w-4" strokeWidth={2.25} /> : <Minus className="h-4 w-4" strokeWidth={2.25} />}
-            </button>
-            <button
-              type="button"
-              onClick={() => setClosed(true)}
-              className={toolBtn}
-              title="Fermer"
-              aria-label="Fermer"
-            >
-              <X className="h-4 w-4" strokeWidth={2.25} />
-            </button>
-          </div>
-        </div>
-        )}
+              {[10, 25, 50, 100].map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </NativeSelect>
+            <span>enregistrements par page</span>
+          </label>
 
-        {!collapsed && (
+          {showSearch && (
+            <label className="flex items-center gap-2 text-[.9rem] text-gray-700">
+              <span>Rechercher:</span>
+              <input
+                type="text"
+                value={onSearchChange ? (searchValue ?? "") : localSearch}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="rounded border border-gray-300 px-3 py-[.28rem] text-[.9rem] shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </label>
+          )}
+        </div>
+
+        {/* Tableau */}
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="border-b-2 border-gray-300 bg-gray-200">
+          <table className="w-full text-[.9rem]">
+            <thead className="border-b border-gray-200 bg-gray-100">
               <tr>
                 {table.getHeaderGroups().flatMap((hg) =>
                   hg.headers.map((header) => (
                     <th
                       key={header.id}
                       className={cn(
-                        "border-r border-gray-300 px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-800 last:border-r-0",
+                        "px-[.95rem] py-[.95rem] text-left text-[.9rem] font-bold text-gray-800",
                         header.column.getCanSort() && "cursor-pointer select-none"
                       )}
                       onClick={header.column.getToggleSortingHandler()}
@@ -286,15 +289,16 @@ export function DataTable<T>({
                     <tr
                       key={row.id}
                       className={cn(
-                        "hover:bg-blue-50 transition-colors",
+                        "transition-colors hover:bg-gray-50",
                         // `even:` l'emporterait sur la couleur fournie par la page
                         // (classe + pseudo-classe) : on ne raye que les lignes sans couleur propre.
-                        !custom && "even:bg-gray-50",
+                        // Hyper `.table-striped` : `--bs-table-striped-bg:#f1f3fa`.
+                        !custom && "odd:bg-gray-100",
                         custom
                       )}
                     >
                       {row.getVisibleCells().map((cell) => (
-                        <td key={cell.id} className="border-r border-gray-300 px-4 py-3 text-gray-800 last:border-r-0">
+                        <td key={cell.id} className="border-b border-gray-200 px-[.95rem] py-[.95rem] align-middle text-gray-700">
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </td>
                       ))}
@@ -305,81 +309,57 @@ export function DataTable<T>({
             </tbody>
           </table>
         </div>
-        )}
-      </div>
 
-      {/* Pagination — masquée quand le tableau est réduit */}
-      {!collapsed && (
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        {/* Sélecteur de taille */}
-        <div className="flex items-center gap-2 text-sm text-gray-600">
-          <span>Lignes par page :</span>
-          <NativeSelect
-            value={currentPageSize}
-            onChange={(e) => {
-              const size = Number(e.target.value);
-              if (isServerSide) {
-                onPageSizeChange?.(size);
-              } else {
-                table.setPageSize(size);
-              }
-            }}
-          >
-            {[10, 20, 25, 50].map((size) => (
-              <option key={size} value={size}>
-                {size}
-              </option>
-            ))}
-          </NativeSelect>
+        {/* Bas : « Afficher page X sur N » (gauche) + pagination « Précédent/Suivant » (droite) */}
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="mb-0 text-[.9rem] text-gray-600">
+            Afficher page {currentPageIndex + 1} sur {Math.max(totalPages, 1)}
+          </p>
+
+          {/* pagination-rounded Hyper : liens ronds sans bordure, actif en primaire */}
+          <div className="flex items-center gap-[3px]">
+            <button
+              type="button"
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+              className="flex h-8 items-center justify-center rounded-full px-3 text-[.9rem] text-gray-600 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Précédent
+            </button>
+
+            {totalPages > 0 &&
+              getPageNumbers().map((page, idx) =>
+                page === "..." ? (
+                  <span key={`ellipsis-${idx}`} className="px-1 text-gray-400">
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={page}
+                    type="button"
+                    onClick={() => table.setPageIndex(page as number)}
+                    className={cn(
+                      "flex h-8 min-w-[2rem] items-center justify-center rounded-full px-2 text-[.9rem] transition-colors",
+                      currentPageIndex === page
+                        ? "bg-blue-600 text-white"
+                        : "text-gray-600 hover:bg-gray-100"
+                    )}
+                  >
+                    {(page as number) + 1}
+                  </button>
+                )
+              )}
+
+            <button
+              type="button"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+              className="flex h-8 items-center justify-center rounded-full px-3 text-[.9rem] text-gray-600 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Suivant
+            </button>
+          </div>
         </div>
-
-        {/* Numéros de pages */}
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-            className="flex h-8 w-8 items-center justify-center rounded border border-gray-300 text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label="Page précédente"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-
-          {totalPages > 0 &&
-            getPageNumbers().map((page, idx) =>
-              page === "..." ? (
-                <span key={`ellipsis-${idx}`} className="px-1 text-gray-400">
-                  …
-                </span>
-              ) : (
-                <button
-                  key={page}
-                  onClick={() => table.setPageIndex(page as number)}
-                  className={cn(
-                    "flex h-8 min-w-[2rem] items-center justify-center rounded border px-2 text-sm transition-colors",
-                    currentPageIndex === page
-                      ? "border-blue-600 bg-blue-600 text-white"
-                      : "border-gray-300 text-gray-600 hover:bg-gray-50"
-                  )}
-                >
-                  {(page as number) + 1}
-                </button>
-              )
-            )}
-
-          <button
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-            className="flex h-8 w-8 items-center justify-center rounded border border-gray-300 text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label="Page suivante"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* Infos */}
-        <p className="text-sm text-gray-600">
-          Page {currentPageIndex + 1} sur {Math.max(totalPages, 1)}
-        </p>
       </div>
       )}
     </div>

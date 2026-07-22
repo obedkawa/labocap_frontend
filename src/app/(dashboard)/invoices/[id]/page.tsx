@@ -11,6 +11,7 @@ import { NativeSelect } from "@/components/ui/NativeSelect";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAppSettings } from "@/hooks/useAppSettings";
 import { PERMISSIONS } from "@/lib/constants/permissions";
+import { DEFAULT_REPORT_FOOTER } from "@/lib/constants/report";
 import {
   invoicesApi,
   type Invoice,
@@ -124,7 +125,7 @@ export default function InvoiceDetailPage({
   });
 
   const { data: appSettings } = useAppSettings();
-  const reportFooter = appSettings?.report_footer;
+  const reportFooter = appSettings?.report_footer?.trim() || DEFAULT_REPORT_FOOTER;
 
   const markPaidMutation = useMutation({
     mutationFn: () =>
@@ -253,14 +254,20 @@ export default function InvoiceDetailPage({
               </span>
             </p>
             <p>
-              {/* La facture affiche « Référence » (code de la facture d'origine
-                  pour un avoir, vide pour une vente), et non le contrat. */}
-              <strong>Référence: </strong>
-              <span>
-                {isAvoir
-                  ? (refund?.invoiceCode ?? invoice.referenceCode ?? "")
-                  : (invoice.referenceCode ?? "")}
-              </span>
+              {/* Calque Laravel (show.blade) : une facture de vente affiche
+                  « Contrat » (nom du contrat tarifaire), un avoir affiche
+                  « Référence » (code de la facture d'origine). */}
+              {isAvoir ? (
+                <>
+                  <strong>Référence: </strong>
+                  <span>{refund?.invoiceCode ?? invoice.referenceCode ?? ""}</span>
+                </>
+              ) : (
+                <>
+                  <strong>Contrat: </strong>
+                  <span>{invoice.contratName ?? ""}</span>
+                </>
+              )}
             </p>
             <p>
               <strong>CODE MECeF / DGI: </strong>
@@ -286,9 +293,10 @@ export default function InvoiceDetailPage({
               <span className="uppercase">{invoice.patientCode ?? ""}</span>
             </p>
             <p>
-              {/* `telephone1`/`telephone2` n'existent pas en base : vide, comme en Laravel. */}
+              {/* « Contact client » : téléphone(s) du patient lié (la facture n'a
+                  pas de colonne telephone en base migrée). */}
               <strong>Contact client: </strong>
-              <span> </span>
+              <span>{invoice.clientContact ?? " "}</span>
             </p>
             <p>
               <strong>Demande d&apos;examen: </strong>
@@ -367,7 +375,7 @@ export default function InvoiceDetailPage({
                 placeholder="Code MECeF/DGI"
                 minLength={24}
                 maxLength={24}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
 

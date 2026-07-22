@@ -55,6 +55,8 @@ export interface CashboxDailyResponseDto {
   updatedAt: string | null;
   /** Agent ayant ouvert/fermé la session — colonne « Utilisateur » de Laravel. */
   userName: string | null;
+  /** Commentaire de clôture — « Commentaire » du récapitulatif / impression. */
+  description: string | null;
 }
 
 export interface CashboxDailyOpenDto {
@@ -88,6 +90,8 @@ export interface CashboxDailyCloseDto {
   totalCalculated: number;
   totalConfirmation: number;
   totalEcart: number;
+  /** Commentaire de clôture (obligatoire en cas d'écart). */
+  description?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -160,7 +164,7 @@ export interface CashboxVoucherResponseDto {
 }
 
 export interface CashboxVoucherCreateDto {
-  description: string;
+  description?: string;
   supplierId?: string;
   expenseCategoryId?: string;
   cashboxId?: string;
@@ -242,8 +246,23 @@ export const cashboxApi = {
   addVoucher: (data: CashboxVoucherCreateDto) =>
     apiClient.post<CashboxVoucherResponseDto>("/cashbox-tickets", data),
 
-  updateVoucher: (id: string, data: CashboxVoucherCreateDto) =>
-    apiClient.put<CashboxVoucherResponseDto>(`/cashbox-tickets/${id}`, data),
+  /**
+   * Édite l'en-tête d'un bon + remplace éventuellement la pièce jointe.
+   * Endpoint multipart : partie `data` (JSON) + partie `file` optionnelle.
+   */
+  updateVoucher: (id: string, data: CashboxVoucherCreateDto, file?: File | null) => {
+    const form = new FormData();
+    form.append(
+      "data",
+      new Blob([JSON.stringify(data)], { type: "application/json" })
+    );
+    if (file) form.append("file", file);
+    return apiClient.put<CashboxVoucherResponseDto>(
+      `/cashbox-tickets/${id}`,
+      form,
+      { headers: { "Content-Type": "multipart/form-data" } }
+    );
+  },
 
   deleteVoucher: (id: string) => apiClient.delete(`/cashbox-tickets/${id}`),
 

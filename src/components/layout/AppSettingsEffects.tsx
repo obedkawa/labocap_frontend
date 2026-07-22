@@ -22,14 +22,21 @@ export function AppSettingsEffects() {
   useEffect(() => {
     if (!favicon) return;
     const head = document.head;
-    // Remplace toutes les icônes existantes par celle des paramètres.
-    head
-      .querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]')
-      .forEach((el) => el.parentElement?.removeChild(el));
-    const link = document.createElement("link");
-    link.rel = "icon";
+    // NE PAS supprimer les <link rel="icon"> injectés par Next (app/favicon.ico) :
+    // ce sont des nœuds gérés par React. Les retirer à la main casse la
+    // réconciliation du <head> (« Cannot read properties of null (reading
+    // 'removeChild') » à la navigation/HMR). On gère notre propre <link> dédié,
+    // ajouté en dernier — le navigateur retient toujours la dernière icône déclarée.
+    let link = head.querySelector<HTMLLinkElement>(
+      'link[rel="icon"][data-app-favicon]'
+    );
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "icon";
+      link.setAttribute("data-app-favicon", "");
+      head.appendChild(link);
+    }
     link.href = favicon;
-    head.appendChild(link);
   }, [favicon]);
 
   useEffect(() => {

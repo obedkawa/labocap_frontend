@@ -65,7 +65,7 @@ type ConsultationFormData = z.infer<typeof consultationSchema>;
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 // ---------------------------------------------------------------------------
 // Composant formulaire partagé
@@ -229,7 +229,7 @@ function ConsultationForm({
           {existingFiles.length > 0 ? (
             <ul className="divide-y divide-gray-100 rounded-md border border-gray-200">
               {existingFiles.map((f) => (
-                <li key={f.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                <li key={f.id} className="flex items-center justify-between px-3 py-2 text-[.9rem]">
                   <span className="truncate text-gray-700">
                     {f.typeFileLabel || f.path.split("/").pop()}
                   </span>
@@ -253,7 +253,7 @@ function ConsultationForm({
             multiple
             disabled={!hasType}
             onChange={(e) => onFilesChange?.(Array.from(e.target.files ?? []))}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50"
+            className="rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] file:mr-3 file:rounded file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50"
           />
           {!hasType && (
             <p className="text-xs text-amber-600">
@@ -591,7 +591,7 @@ export default function ConsultationsPage() {
                 setDateFrom(e.target.value);
                 setPage(0);
               }}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -605,7 +605,7 @@ export default function ConsultationsPage() {
                 setDateTo(e.target.value);
                 setPage(0);
               }}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
           {(dateFrom || dateTo) && (
@@ -616,7 +616,7 @@ export default function ConsultationsPage() {
                 setDateTo("");
                 setPage(0);
               }}
-              className="mt-5 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+              className="mt-5 rounded-md border border-gray-300 bg-white px-3 py-2 text-[.9rem] text-gray-600 hover:bg-gray-50 transition-colors"
             >
               Réinitialiser
             </button>

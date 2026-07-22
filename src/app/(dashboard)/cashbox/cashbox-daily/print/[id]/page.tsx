@@ -6,6 +6,7 @@ import { Printer, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
 import { cashboxApi, type CashboxDailyResponseDto } from "@/lib/api/cashbox";
+import { useAppSettings } from "@/hooks/useAppSettings";
 
 function formatFCFA(v: number | null | undefined) {
   if (v === null || v === undefined) return "—";
@@ -38,6 +39,10 @@ export default function CashboxDailyPrintPage({ params }: PageProps) {
     queryKey: ["cashbox-daily", id],
     queryFn: () => cashboxApi.getDaily(id).then((r) => r.data),
   });
+
+  const { data: appSettings } = useAppSettings();
+  const logoSrc = appSettings?.logo?.trim() || appSettings?.logo_white?.trim() || "";
+  const appName = appSettings?.app_name?.trim() || "Labo AnaPath";
 
   // Déclenche l'impression automatiquement une fois les données chargées.
   useEffect(() => {
@@ -76,18 +81,33 @@ export default function CashboxDailyPrintPage({ params }: PageProps) {
         </button>
       </div>
 
-      <RecapPrint daily={daily} />
+      <RecapPrint daily={daily} logoSrc={logoSrc} appName={appName} />
     </div>
   );
 }
 
-function RecapPrint({ daily }: { daily: CashboxDailyResponseDto }) {
+function RecapPrint({
+  daily,
+  logoSrc,
+  appName,
+}: {
+  daily: CashboxDailyResponseDto;
+  logoSrc: string;
+  appName: string;
+}) {
   const opening = daily.openingBalance ?? 0;
   const cashCalc = daily.cashCalculated ?? 0;
   const soldeEspeces = opening + cashCalc;
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm print:border-0 print:shadow-none">
+      {/* Logo du laboratoire en tête du reçu (calque print.blade). */}
+      {logoSrc ? (
+        <div className="mb-4 flex justify-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={logoSrc} alt={appName} className="h-16 w-auto object-contain" />
+        </div>
+      ) : null}
       <h1 className="mb-6 text-center text-lg font-bold text-gray-900">
         {daily.code} — {formatDateTime(daily.createdAt)}
         {daily.updatedAt ? ` → ${formatDateTime(daily.updatedAt)}` : ""}
@@ -147,6 +167,18 @@ function RecapPrint({ daily }: { daily: CashboxDailyResponseDto }) {
           </tr>
         </tbody>
       </table>
+
+      {/* Commentaire de clôture (calque print.blade). */}
+      <div className="mt-6">
+        <label className="mb-1 block text-sm font-medium text-gray-600">
+          Commentaire
+        </label>
+        <input
+          value={daily.description ?? ""}
+          readOnly
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+        />
+      </div>
 
       <p className="mt-8 text-right text-lg font-bold text-gray-900">
         SOLDE DE FERMETURE : {formatFCFA(daily.closingBalance)}

@@ -19,13 +19,15 @@ export interface Employee {
   userId?: string;
   branchId?: string;
   createdAt?: string;
-  // Champs profil affichés par la fiche Laravel (Adresse, naissance, CNSS).
-  // Absents de la base migrée / du DTO backend → rendus « Non renseigné ».
+  // Champs profil du calque Laravel (désormais stockés côté backend, cf. V56).
   address?: string;
   dateOfBirth?: string;
   placeOfBirth?: string;
   cnssNumber?: string;
   photoUrl?: string;
+  gender?: string;
+  nationality?: string;
+  city?: string;
 }
 
 export interface EmployeeRequest {
@@ -36,6 +38,14 @@ export interface EmployeeRequest {
   hireDate?: string;
   phone?: string;
   email?: string;
+  address?: string;
+  dateOfBirth?: string;
+  placeOfBirth?: string;
+  cnssNumber?: string;
+  photoUrl?: string;
+  gender?: string;
+  nationality?: string;
+  city?: string;
   userId?: string;
 }
 
@@ -96,6 +106,16 @@ export interface EmployeeContrat {
   startDate: string;
   endDate?: string;
   salary?: number;
+  // Onglet « Contrat »
+  probationEndDate?: string;
+  weeklyWorkHours?: number;
+  workingDaysPerWeek?: number;
+  terminationReason?: string;
+  // Onglet « Paie »
+  hourlyGrossRate?: number;
+  transportAllowance?: number;
+  iban?: string;
+  bic?: string;
   createdAt?: string;
 }
 
@@ -104,6 +124,14 @@ export interface EmployeeContratRequest {
   endDate?: string;
   type?: string;
   salary: number;
+  probationEndDate?: string;
+  weeklyWorkHours?: number;
+  workingDaysPerWeek?: number;
+  terminationReason?: string;
+  hourlyGrossRate?: number;
+  transportAllowance?: number;
+  iban?: string;
+  bic?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -133,6 +161,13 @@ export const hrApi = {
   update: (id: string, data: EmployeeRequest) =>
     apiClient.put<Employee>(`/employees/${id}`, data),
   delete: (id: string) => apiClient.delete(`/employees/${id}`),
+  uploadPhoto: (id: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiClient.post<Employee>(`/employees/${id}/photo`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
 
   // Congés — /api/v1/employees/{employeeId}/timeoffs
   getTimeOffs: (employeeId: string, params?: Record<string, unknown>) =>

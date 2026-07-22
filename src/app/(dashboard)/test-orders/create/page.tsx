@@ -93,7 +93,7 @@ type QuickPatientFormData = z.infer<typeof quickPatientSchema>;
 // Shared input className
 // ---------------------------------------------------------------------------
 const inputCls =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 // ---------------------------------------------------------------------------
 // Déduplication des options react-select par libellé
@@ -444,7 +444,7 @@ export default function TestOrderCreatePage() {
                     type="text"
                     {...register("examenReferenceInput")}
                     placeholder="Référence de l'examen externe..."
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                   {errors.examenReferenceInput && (
                     <p className="text-xs text-red-500">
@@ -596,7 +596,7 @@ export default function TestOrderCreatePage() {
                 type="text"
                 {...register("referenceHopital")}
                 placeholder="Numéro de référence..."
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
 
@@ -608,7 +608,7 @@ export default function TestOrderCreatePage() {
               <input
                 type="date"
                 {...register("prelevementDate")}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
               {errors.prelevementDate && (
                 <p className="text-xs text-red-500">
@@ -625,7 +625,7 @@ export default function TestOrderCreatePage() {
               <input
                 type="file"
                 onChange={(e) => setExamenFile(e.target.files?.[0] ?? null)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
 

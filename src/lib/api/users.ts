@@ -1,13 +1,24 @@
 import apiClient from "./client";
 
+export interface Branch {
+  id: string;
+  name: string;
+  code?: string;
+  location?: string;
+}
+
 export interface User {
   id: string;
   firstname: string;
   lastname: string;
   email: string;
   phone?: string;
+  whatsapp?: string;
+  commission?: number;
   roles?: Role[];
+  branches?: Branch[];
   permissions?: string[];
+  signature?: string;
   isActive: boolean;
   createdAt: string;
 }
@@ -15,6 +26,10 @@ export interface User {
 export interface UserRequest {
   firstname: string;
   lastname: string;
+  whatsapp?: string;
+  commission?: number;
+  signature?: string;
+  branchIds?: string[];
   email: string;
   phone?: string;
   password?: string;
@@ -30,8 +45,11 @@ export interface PermissionResponseDto {
 export interface Role {
   id: string;
   name: string;
+  slug?: string;
   description?: string;
   permissions: PermissionResponseDto[];
+  createdByName?: string;
+  createdAt?: string;
 }
 
 export interface RoleRequest {
@@ -45,6 +63,7 @@ export interface Permission {
   name: string;
   slug: string;
   description?: string;
+  createdAt?: string;
 }
 
 export interface SettingsData {
@@ -107,6 +126,11 @@ export const usersApi = {
   update: (id: string, data: Partial<UserRequest>) =>
     apiClient.put<User>(`/users/${id}`, data),
   delete: (id: string) => apiClient.delete(`/users/${id}`),
+  /** Bascule le statut actif/inactif (PATCH /users/{id}/status). */
+  toggleStatus: (id: string) => apiClient.patch<User>(`/users/${id}/status`),
+  /** Liste des branches, pour le sélecteur multi-branches du formulaire user. */
+  getBranches: () =>
+    apiClient.get<PageResponse<Branch>>("/branches", { params: { size: 100 } }),
   getRoles: () =>
     apiClient.get<PageResponse<Role>>("/roles", { params: { size: 100 } }),
   createRole: (data: RoleRequest) =>

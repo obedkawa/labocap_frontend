@@ -84,14 +84,17 @@ export function CrudModal({
     <div
       ref={overlayRef}
       onClick={handleOverlayClick}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      // Ancrage HAUT (comme les modales Bootstrap/Laravel) : l'en-tête reste fixe
+      // et c'est le bas qui s'allonge/raccourcit quand la hauteur du corps change
+      // (ex. bascule d'onglets du wizard contrat), au lieu d'un recentrage vertical.
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:py-8"
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-title"
     >
       <div
         className={cn(
-          "relative w-full rounded-xl bg-white shadow-xl flex flex-col max-h-[90vh]",
+          "relative w-full rounded bg-white shadow-xl flex flex-col max-h-[90vh]",
           sizeClasses[size],
           contentClassName
         )}

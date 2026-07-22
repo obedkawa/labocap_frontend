@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Calculator, Lock } from "lucide-react";
+import { ArrowLeft, Calculator, Lock, Printer } from "lucide-react";
 import type { AxiosError } from "axios";
 
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -15,7 +15,7 @@ import { cashboxApi } from "@/lib/api/cashbox";
 import type { ApiError } from "@/types/api";
 
 const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 const readonlyClass = `${inputClass} bg-gray-50 text-gray-600`;
 
 function formatFCFA(v: number) {
@@ -137,6 +137,7 @@ export default function CashboxFermeturePage({ params }: PageProps) {
         totalCalculated,
         totalConfirmation: totalCounted,
         totalEcart,
+        description: comment.trim() || undefined,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cashbox-dailies"] });
@@ -383,15 +384,27 @@ export default function CashboxFermeturePage({ params }: PageProps) {
                   >
                     Précédent
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleConfirm}
-                    disabled={closeMutation.isPending}
-                    className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-5 py-2 text-sm font-medium text-white hover:bg-green-700 transition-colors disabled:opacity-50"
-                  >
-                    <Lock className="h-4 w-4" />
-                    Confirmer et fermer la caisse
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {/* Bouton « Imprimer » (calque Laravel étape 2) : ouvre la page
+                        d'impression de la session dans un nouvel onglet. */}
+                    <Link
+                      href={`/cashbox/cashbox-daily/print/${id}`}
+                      target="_blank"
+                      className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      <Printer className="h-4 w-4" />
+                      Imprimer
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={handleConfirm}
+                      disabled={closeMutation.isPending}
+                      className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-5 py-2 text-sm font-medium text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+                    >
+                      <Lock className="h-4 w-4" />
+                      Confirmer et fermer la caisse
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -421,7 +434,7 @@ function StepPill({
 }) {
   return (
     <div
-      className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium ${
+      className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-[.9rem] font-medium ${
         active
           ? "bg-blue-600 text-white"
           : done

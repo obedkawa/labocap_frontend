@@ -3,14 +3,35 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Menu, User, LogOut, Search, ChevronDown } from "lucide-react";
+import { User, LogOut, Search, ChevronDown } from "lucide-react";
+
+/** Icône hamburger identique à Laravel (`mdi mdi-menu`) — barres serrées. */
+function MdiMenuIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
+      <path d="M3,6H21V8H3V6M3,11H21V13H3V11M3,16H21V18H3V16Z" />
+    </svg>
+  );
+}
 import { useUIStore } from "@/stores/ui.store";
 import { useAuthStore } from "@/stores/auth.store";
+import { useBranchStore } from "@/stores/branch.store";
 import { authApi } from "@/lib/api/auth";
 
 export function Topbar() {
-  const { toggleSidebar } = useUIStore();
+  const { toggleSidebar, toggleMobileSidebar } = useUIStore();
+
+  // Calque du `.button-menu-mobile` Hyper : sous 768px, on ouvre/ferme le menu
+  // en overlay ; au-dessus, on bascule le mode réduit (condensed) du menu.
+  const handleMenuToggle = () => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      toggleMobileSidebar();
+    } else {
+      toggleSidebar();
+    }
+  };
   const { user, clearAuth } = useAuthStore();
+  const clearBranch = useBranchStore((state) => state.clearBranch);
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -37,6 +58,7 @@ export function Topbar() {
       // ignore logout errors
     } finally {
       clearAuth();
+      clearBranch();
       router.push("/login");
     }
   };
@@ -62,14 +84,14 @@ export function Topbar() {
   // ignoré (position: static), et le menu profil passait alors sous le PageHeader
   // collant du contenu (z-20). `shrink-0` empêche la barre d'être compressée.
   return (
-    <header className="relative z-40 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-white/90 px-3 backdrop-blur-sm sm:px-4">
+    <header className="hyper-topbar relative z-50 flex h-[70px] shrink-0 items-center justify-between gap-3 px-3 sm:px-4">
       {/* Left: hamburger */}
       <button
-        onClick={toggleSidebar}
-        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+        onClick={handleMenuToggle}
+        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-[#313a46] transition-colors hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
         aria-label="Afficher/masquer le menu"
       >
-        <Menu className="h-5 w-5" />
+        <MdiMenuIcon className="h-6 w-6" />
       </button>
 
       {/* Center: search bar */}
@@ -81,7 +103,7 @@ export function Topbar() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Rechercher un patient, un examen…"
-            className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2 pl-10 pr-3 text-sm text-gray-800 transition-all placeholder:text-gray-400 hover:border-gray-300 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10"
+            className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2 pl-10 pr-3 text-[.9rem] text-gray-800 transition-all placeholder:text-gray-400 hover:border-gray-300 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10"
           />
         </div>
       </form>
@@ -96,7 +118,7 @@ export function Topbar() {
             {initials}
           </div>
           <div className="hidden text-left leading-tight sm:block">
-            <p className="text-sm font-semibold text-gray-800">
+            <p className="text-[.9rem] font-semibold text-gray-800">
               {fullName || user?.firstname}
             </p>
             {roleName && <p className="text-xs text-gray-500">{roleName}</p>}
@@ -126,7 +148,7 @@ export function Topbar() {
             <div className="p-1.5">
               <Link
                 href="/profile"
-                className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-[.9rem] font-medium text-gray-700 transition-colors hover:bg-gray-50"
                 onClick={() => setIsOpen(false)}
               >
                 <User className="h-4 w-4 text-gray-400" />
