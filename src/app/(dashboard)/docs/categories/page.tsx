@@ -13,7 +13,6 @@ import {
   History,
   Pencil,
   RotateCcw,
-  Share2,
   Trash2,
   Upload,
   XCircle,
