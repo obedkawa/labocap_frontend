@@ -77,7 +77,7 @@ const YEAR_OR_MONTH_OPTIONS = [
 ];
 
 const fieldInput =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 function PatientFormFields({ register, control, errors, code }: PatientFormFieldsProps) {
   return (
@@ -89,7 +89,7 @@ function PatientFormFields({ register, control, errors, code }: PatientFormField
           type="text"
           value={code}
           readOnly
-          className="w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-500 cursor-not-allowed"
+          className="w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-[.9rem] text-gray-500 cursor-not-allowed"
         />
       </div>
 

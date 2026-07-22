@@ -47,7 +47,7 @@ type ArticleFormValues = z.infer<typeof articleSchema>;
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
 
 /** Boutons d'action : carrés pleins colorés, comme les `btn` du thème Laravel. */
 const actionBtn =
@@ -333,10 +333,10 @@ export default function ArticlesPage() {
 
       {/* ---- Compteurs (toujours affichés, comme Laravel) ---- */}
       <div className="flex flex-wrap gap-3">
-        <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-4 py-1.5 text-sm font-medium text-red-700">
+        <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-4 py-1.5 text-[.9rem] font-medium text-red-700">
           Rupture de stock : {outOfStockCount}
         </span>
-        <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-4 py-1.5 text-sm font-medium text-amber-700">
+        <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-4 py-1.5 text-[.9rem] font-medium text-amber-700">
           Seuil d&apos;alerte attenint : {lowStockCount}
         </span>
       </div>

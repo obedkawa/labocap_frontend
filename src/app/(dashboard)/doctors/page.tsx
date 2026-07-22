@@ -16,6 +16,7 @@ import { CrudModal } from "@/components/common/CrudModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { PermissionGate } from "@/components/common/PermissionGate";
 import { FormField } from "@/components/ui/FormField";
+import { IconButton } from "@/components/ui/IconButton";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { doctorsApi, Doctor, DoctorRequest } from "@/lib/api/doctors";
@@ -38,7 +39,7 @@ type DoctorFormValues = z.infer<typeof doctorSchema>;
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -226,24 +227,22 @@ export default function DoctorsPage() {
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
           <PermissionGate permission={PERMISSIONS.EDIT_DOCTORS}>
-            <button
-              onClick={() => openEdit(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+            <IconButton
+              variant="edit"
+              title="Modifier"
               aria-label="Modifier"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              Modifier
-            </button>
+              onClick={() => openEdit(row.original)}
+              icon={<Pencil className="h-4 w-4" />}
+            />
           </PermissionGate>
           <PermissionGate permission={PERMISSIONS.DELETE_DOCTORS}>
-            <button
-              onClick={() => openDelete(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
+            <IconButton
+              variant="delete"
+              title="Supprimer"
               aria-label="Supprimer"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Supprimer
-            </button>
+              onClick={() => openDelete(row.original)}
+              icon={<Trash2 className="h-4 w-4" />}
+            />
           </PermissionGate>
         </div>
       ),

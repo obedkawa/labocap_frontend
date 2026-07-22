@@ -7,6 +7,7 @@ import {
   Download,
   Eye,
   History,
+  Pencil,
   Plus,
   Share2,
   Trash2,
@@ -57,6 +58,11 @@ export default function DocsPage() {
   const [nvTitle, setNvTitle] = useState("");
   const [nvFile, setNvFile] = useState<File | null>(null);
   const nvFileRef = useRef<HTMLInputElement>(null);
+
+  // --- Modal: édition du titre (calque doc.update)
+  const [editDoc, setEditDoc] = useState<Doc | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editFile, setEditFile] = useState<File | null>(null);
 
   // --- Modal: historique des versions
   const [historyDoc, setHistoryDoc] = useState<Doc | null>(null);
@@ -148,6 +154,22 @@ export default function DocsPage() {
     },
   });
 
+  // --- Mutation: édition du titre
+  const updateTitleMutation = useMutation({
+    mutationFn: ({ id, title, file }: { id: string; title: string; file?: File | null }) =>
+      docsApi.updateTitle(id, title, file),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["docs"] });
+      toast.success("Document mis à jour");
+      setEditDoc(null);
+      setEditTitle("");
+      setEditFile(null);
+    },
+    onError: (err: AxiosError<ApiError>) => {
+      toast.error(err.response?.data?.message ?? "Erreur lors de la mise à jour");
+    },
+  });
+
   // --- Colonnes
   const columns: ColumnDef<Doc>[] = [
     {
@@ -222,6 +244,22 @@ export default function DocsPage() {
             >
               <History className="h-4 w-4" />
             </button>
+
+            {/* Éditer le titre (calque doc.update) */}
+            <PermissionGate permission={PERMISSIONS.EDIT_DOCS}>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditDoc(doc);
+                  setEditTitle(doc.title);
+                  setEditFile(null);
+                }}
+                className="inline-flex items-center justify-center rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-yellow-600 transition-colors"
+                title="Modifier le titre"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            </PermissionGate>
 
             {/* Partager par rôle */}
             <PermissionGate permission={PERMISSIONS.EDIT_DOCS}>
@@ -331,6 +369,52 @@ export default function DocsPage() {
         isLoading={deleteMutation.isPending}
       />
 
+      {/* Modal: édition du titre (calque doc/edit.blade) */}
+      <CrudModal
+        isOpen={editDoc !== null}
+        onClose={() => setEditDoc(null)}
+        title="Modifier le document"
+        submitLabel="Mettre à jour"
+        isSubmitting={updateTitleMutation.isPending}
+        onSubmit={() => {
+          if (!editDoc || !editTitle.trim()) return;
+          updateTitleMutation.mutate({
+            id: editDoc.id,
+            title: editTitle.trim(),
+            file: editFile,
+          });
+        }}
+      >
+        <div className="space-y-4">
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-700">
+              Titre <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              placeholder="Titre du document"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-700">
+              Remplacer le fichier (optionnel)
+            </label>
+            <input
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.docx,.xlsx,.doc,.xls"
+              onChange={(e) => setEditFile(e.target.files?.[0] ?? null)}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] file:mr-3 file:rounded file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100"
+            />
+            <p className="text-xs text-gray-400">
+              Laisser vide conserve le fichier actuel (pas de nouvelle version).
+            </p>
+          </div>
+        </div>
+      </CrudModal>
+
       {/* Modal: partage par rôle */}
       <CrudModal
         isOpen={shareDoc !== null}
@@ -385,7 +469,7 @@ export default function DocsPage() {
               value={nvTitle}
               onChange={(e) => setNvTitle(e.target.value)}
               placeholder="Titre de cette version"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -397,7 +481,7 @@ export default function DocsPage() {
               type="file"
               accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.docx,.xlsx,.doc,.xls"
               onChange={(e) => setNvFile(e.target.files?.[0] ?? null)}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100"
+              className="rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] file:mr-3 file:rounded file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100"
             />
             {nvFile && (
               <p className="text-xs text-gray-500">

@@ -25,8 +25,24 @@ import { FormToggle } from "@/components/ui/FormToggle";
 import { testOrdersApi, type TestOrderRequest } from "@/lib/api/testOrders";
 import { openDocFile } from "@/lib/api/docs";
 import { typeOrdersApi, type TypeOrder } from "@/lib/api/examens";
+import { usersApi } from "@/lib/api/users";
+import type { User } from "@/types/auth";
 import type { ApiError as ApiErrorType } from "@/types/api";
 import apiClient from "@/lib/api/client";
+
+/** « Affecter à » = utilisateur ayant le rôle docteur (signataire), comme Laravel. */
+function isDoctorRole(name?: string): boolean {
+  if (!name) return false;
+  const n = name.toLowerCase();
+  return (
+    n.includes("docteur") ||
+    n.includes("doctor") ||
+    n.includes("medecin") ||
+    n.includes("médecin") ||
+    n.includes("anapath") ||
+    n.includes("anatomopath")
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,6 +72,9 @@ const editOrderSchema = z.object({
   examenReferenceOrderId: z.string().optional(),
   prelevementDate: z.string().min(1, "La date de prélèvement est requise"),
   isUrgent: z.boolean(),
+  // « Affecter à » (docteur signataire) et « Option d'envoi des résultats ».
+  attribuateDoctorId: z.string().optional(),
+  option: z.string().optional(), // "0" = Appel, "1" = SMS
 });
 
 type EditOrderFormData = z.infer<typeof editOrderSchema>;
@@ -120,6 +139,8 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
       examenReferenceOrderId: order.testAffiliate ?? "",
       prelevementDate: order.prelevementDate ?? "",
       isUrgent: order.isUrgent,
+      attribuateDoctorId: order.attribuateDoctorId ?? order.assignedToUserId ?? "",
+      option: order.option == null ? "" : order.option ? "1" : "0",
     });
     // Interne : amorce l'option affichée du select avec la référence enregistrée
     // (test_affiliate = code). Le champ montre donc la valeur courante, et
@@ -171,6 +192,20 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
     queryKey: ["type-orders"],
     queryFn: () => typeOrdersApi.findAll().then((r) => r.data),
   });
+
+  // Utilisateurs ayant le rôle docteur → select « Affecter à » (signataire).
+  const { data: doctorUsersData } = useQuery({
+    queryKey: ["users-doctors"],
+    queryFn: () =>
+      usersApi.findAll({ size: 500 }).then((r) => r.data.content as User[]),
+  });
+  const doctorUserOptions =
+    (doctorUsersData ?? [])
+      .filter((u) => (u.roles ?? []).some((r) => isDoctorRole(r.name)))
+      .map((u) => ({
+        value: u.id,
+        label: `${u.lastname ?? ""} ${u.firstname ?? ""}`.trim(),
+      })) ?? [];
 
   // Options React Select
 
@@ -234,6 +269,13 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
     if (data.doctorId) payload.doctorId = data.doctorId;
     if (data.hospitalId) payload.hospitalId = data.hospitalId;
     if (data.referenceHopital) payload.referenceHopital = data.referenceHopital;
+    // « Affecter à » → docteur signataire (le backend aligne attribuateDoctorId
+    // ET assignedToUserId sur cet utilisateur).
+    if (data.attribuateDoctorId)
+      payload.assignedToUserId = data.attribuateDoctorId;
+    // Option d'envoi des résultats : "0" = Appel (false), "1" = SMS (true).
+    if (data.option === "0" || data.option === "1")
+      payload.option = data.option === "1";
     // Examen de référence → colonne test_affiliate. Externe : texte. Interne :
     // code de la demande nouvellement choisie, sinon on conserve la valeur existante.
     if (isImmunoExterne && data.examenReferenceInput)
@@ -354,7 +396,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
                     type="text"
                     {...register("examenReferenceInput")}
                     placeholder="Référence de l'examen externe..."
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                   {errors.examenReferenceInput && (
                     <p className="text-xs text-red-500">
@@ -478,7 +520,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
                 type="text"
                 {...register("referenceHopital")}
                 placeholder="Numéro de référence..."
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
 
@@ -490,7 +532,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
               <input
                 type="date"
                 {...register("prelevementDate")}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
               {errors.prelevementDate && (
                 <p className="text-xs text-red-500">
@@ -516,7 +558,7 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
               <input
                 type="file"
                 onChange={(e) => setExamenFile(e.target.files?.[0] ?? null)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
               {order?.archive && (
                 <p className="text-xs text-gray-400">
@@ -543,6 +585,47 @@ export default function TestOrderEditPage({ params }: EditPageProps) {
                   />
                 )}
               />
+            </div>
+
+            {/* Affecter à (docteur signataire) — calque Laravel edit.blade */}
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700">
+                Affecter à
+              </label>
+              <Controller
+                name="attribuateDoctorId"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    instanceId="order-signataire"
+                    inputId="attribuateDoctorId"
+                    options={doctorUserOptions}
+                    placeholder="Sélectionnez un docteur signataire"
+                    value={
+                      doctorUserOptions.find((o) => o.value === field.value) ??
+                      null
+                    }
+                    onChange={(opt) => field.onChange(opt?.value ?? "")}
+                    isClearable
+                    classNamePrefix="react-select"
+                  />
+                )}
+              />
+            </div>
+
+            {/* Option d'envoi des résultats — Appel / SMS */}
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700">
+                Option d&apos;envoi des résultats
+              </label>
+              <select
+                {...register("option")}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="">Sélectionner une option d&apos;envoi</option>
+                <option value="0">Appel</option>
+                <option value="1">SMS</option>
+              </select>
             </div>
 
           </div>

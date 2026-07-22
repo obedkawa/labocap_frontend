@@ -66,7 +66,7 @@ export function ConfirmModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-xl bg-white shadow-xl"
+        className="w-full max-w-md rounded bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Body */}

@@ -14,6 +14,7 @@ import { CrudModal } from "@/components/common/CrudModal";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Badge } from "@/components/ui/Badge";
+import { IconButton } from "@/components/ui/IconButton";
 import { formatCFA, formatDate } from "@/lib/utils";
 import {
   testOrdersApi,
@@ -414,22 +415,20 @@ export default function TestOrderDetailsPage({ params }: Props) {
             id: "actions",
             cell: ({ row }: { row: { original: TestOrderDetail } }) => (
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleOpenEditDetail(row.original)}
-                  className="inline-flex items-center justify-center rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-blue-600 transition-colors"
+                <IconButton
+                  variant="edit"
                   title="Modifier"
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDeleteDetailId(row.original.id)}
-                  className="inline-flex items-center justify-center rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-red-600 transition-colors"
+                  aria-label="Modifier"
+                  onClick={() => handleOpenEditDetail(row.original)}
+                  icon={<Pencil className="h-4 w-4" />}
+                />
+                <IconButton
+                  variant="delete"
                   title="Supprimer"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                  aria-label="Supprimer"
+                  onClick={() => setDeleteDetailId(row.original.id)}
+                  icon={<Trash2 className="h-4 w-4" />}
+                />
               </div>
             ),
           } as ColumnDef<TestOrderDetail>,
@@ -492,10 +491,11 @@ export default function TestOrderDetailsPage({ params }: Props) {
           {order.status !== "VALIDATED" && (
             <Link
               href={`/test-orders/${orderId}/edit`}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              title="Modifier"
+              aria-label="Modifier"
+              className="inline-flex items-center justify-center rounded-sm bg-blue-600 p-[.4rem] text-white transition-shadow hover:shadow-[0_2px_6px_0_rgba(114,124,245,0.5)]"
             >
-              <Pencil className="h-3.5 w-3.5" />
-              Modifier
+              <Pencil className="h-4 w-4" />
             </Link>
           )}
         </div>
@@ -622,21 +622,20 @@ export default function TestOrderDetailsPage({ params }: Props) {
                 <span className="text-sm text-gray-700 font-medium w-20 flex-shrink-0">
                   Image {img.index + 1}
                 </span>
-                <button
-                  type="button"
+                <IconButton
+                  variant="view"
+                  title="Voir"
+                  aria-label="Voir"
                   onClick={() => openDocFile(img.filename)}
-                  className="inline-flex items-center gap-1 text-blue-600 text-sm hover:underline"
-                >
-                  <Eye className="h-3.5 w-3.5" />
-                  Voir
-                </button>
-                <button
-                  type="button"
+                  icon={<Eye className="h-4 w-4" />}
+                />
+                <IconButton
+                  variant="delete"
+                  title="Supprimer"
+                  aria-label="Supprimer"
                   onClick={() => setDeleteImageIndex(img.index)}
-                  className="text-red-600 text-sm hover:underline"
-                >
-                  Supprimer
-                </button>
+                  icon={<Trash2 className="h-4 w-4" />}
+                />
               </div>
             ))}
           </div>
@@ -685,7 +684,7 @@ export default function TestOrderDetailsPage({ params }: Props) {
                 type="text"
                 readOnly
                 value={examPrice > 0 ? formatCFA(examPrice) : ""}
-                className="w-32 rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-700 cursor-not-allowed"
+                className="w-32 rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-[.9rem] text-gray-700 cursor-not-allowed"
               />
             </div>
             <div>
@@ -696,7 +695,7 @@ export default function TestOrderDetailsPage({ params }: Props) {
                 type="text"
                 readOnly
                 value={examDiscount > 0 ? formatCFA(examDiscount) : ""}
-                className="w-32 rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-700 cursor-not-allowed"
+                className="w-32 rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-[.9rem] text-gray-700 cursor-not-allowed"
               />
             </div>
             <div>
@@ -707,7 +706,7 @@ export default function TestOrderDetailsPage({ params }: Props) {
                 type="text"
                 readOnly
                 value={calculatedTotal > 0 ? formatCFA(calculatedTotal) : ""}
-                className="w-32 rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-700 cursor-not-allowed"
+                className="w-32 rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-[.9rem] text-gray-700 cursor-not-allowed"
               />
             </div>
             <button
@@ -810,7 +809,7 @@ export default function TestOrderDetailsPage({ params }: Props) {
                 type="text"
                 readOnly
                 value={editPrice > 0 ? formatCFA(editPrice) : ""}
-                className="w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-700 cursor-not-allowed"
+                className="w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-[.9rem] text-gray-700 cursor-not-allowed"
               />
             </div>
             <div>
@@ -821,7 +820,7 @@ export default function TestOrderDetailsPage({ params }: Props) {
                 type="text"
                 readOnly
                 value={editDiscount > 0 ? formatCFA(editDiscount) : ""}
-                className="w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-700 cursor-not-allowed"
+                className="w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-[.9rem] text-gray-700 cursor-not-allowed"
               />
             </div>
             <div>
@@ -832,7 +831,7 @@ export default function TestOrderDetailsPage({ params }: Props) {
                 type="text"
                 readOnly
                 value={editCalculatedTotal > 0 ? formatCFA(editCalculatedTotal) : ""}
-                className="w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-700 cursor-not-allowed"
+                className="w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-[.9rem] text-gray-700 cursor-not-allowed"
               />
             </div>
           </div>

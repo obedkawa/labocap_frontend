@@ -46,7 +46,7 @@ function formatAmount(v?: number | null) {
 }
 
 const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 read-only:bg-gray-50 read-only:text-gray-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 read-only:bg-gray-50 read-only:text-gray-500";
 
 // ---------------------------------------------------------------------------
 // Page
@@ -275,7 +275,7 @@ export default function ContractDetailPage({
                   type="button"
                   onClick={() => closeMutation.mutate()}
                   disabled={closeMutation.isPending}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-2 text-sm font-medium text-white ring-1 ring-inset ring-white/25 transition-colors hover:bg-white/25 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-2 text-[.9rem] font-medium text-white ring-1 ring-inset ring-white/25 transition-colors hover:bg-white/25 disabled:opacity-50"
                 >
                   {closeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
                   Clôturer
@@ -286,7 +286,7 @@ export default function ContractDetailPage({
                   type="button"
                   onClick={() => activateMutation.mutate()}
                   disabled={activateMutation.isPending}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-50 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-[.9rem] font-medium text-emerald-700 transition-colors hover:bg-emerald-50 disabled:opacity-50"
                 >
                   {activateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                   Activer
@@ -407,7 +407,7 @@ export default function ContractDetailPage({
             <div className="border-t border-gray-100 px-5 py-4">
               <Link
                 href={`/invoices/${invoice!.id}`}
-                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800"
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-3 py-2 text-[.9rem] font-medium text-white transition-colors hover:bg-gray-800"
               >
                 Voir la facture
               </Link>

@@ -412,7 +412,7 @@ function SignatureModalInner({
               value={retrieverName}
               onChange={(e) => setRetrieverName(e.target.value)}
               disabled={usePatientName}
-              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
+              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
               placeholder="Saisir le nom du récupérateur"
             />
             <label className="inline-flex items-center gap-2 text-sm text-gray-700">
@@ -786,7 +786,7 @@ function DemandesTab({
               value={search}
               onChange={(e) => handleFilterChange(() => setSearch(e.target.value))}
               placeholder="Code, patient, médecin..."
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
           <div>
@@ -865,7 +865,7 @@ function DemandesTab({
               onChange={(e) =>
                 handleFilterChange(() => setDateBegin(e.target.value))
               }
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
           <div>
@@ -882,7 +882,7 @@ function DemandesTab({
               onChange={(e) =>
                 handleFilterChange(() => setDateEnd(e.target.value))
               }
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
         </div>
@@ -1022,7 +1022,7 @@ function DemandesTab({
             type="button"
             onClick={() => setPage(Math.max(0, page - 1))}
             disabled={page === 0 || isLoading}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-[.9rem] text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Précédent
           </button>
@@ -1033,7 +1033,7 @@ function DemandesTab({
             type="button"
             onClick={() => setPage(page + 1)}
             disabled={page + 1 >= totalPages || isLoading}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-[.9rem] text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Suivant
           </button>

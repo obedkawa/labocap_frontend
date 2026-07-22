@@ -642,7 +642,7 @@ export default function TestOrdersPage() {
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(0); }}
               placeholder="Code, patient..."
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
@@ -652,7 +652,7 @@ export default function TestOrdersPage() {
               type="date"
               value={dateBegin}
               onChange={(e) => { setDateBegin(e.target.value); setPage(0); }}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
@@ -662,20 +662,20 @@ export default function TestOrdersPage() {
               type="date"
               value={dateEnd}
               onChange={(e) => { setDateEnd(e.target.value); setPage(0); }}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
         </div>
 
         {/* Barre de statistiques (Livrer / Valider / Cas urgent) */}
         <div className="mb-4 flex flex-wrap gap-3">
-          <div className="rounded-full bg-green-100 px-4 py-1.5 text-sm font-medium text-green-800 ring-1 ring-green-300">
+          <div className="rounded-full bg-green-100 px-4 py-1.5 text-[.9rem] font-medium text-green-800 ring-1 ring-green-300">
             Livrer : {statsLivrer ?? "…"}
           </div>
-          <div className="rounded-full bg-yellow-100 px-4 py-1.5 text-sm font-medium text-yellow-800 ring-1 ring-yellow-300">
+          <div className="rounded-full bg-yellow-100 px-4 py-1.5 text-[.9rem] font-medium text-yellow-800 ring-1 ring-yellow-300">
             Valider : {statsValider ?? "…"}
           </div>
-          <div className="rounded-full bg-red-100 px-4 py-1.5 text-sm font-medium text-red-800 ring-1 ring-red-300">
+          <div className="rounded-full bg-red-100 px-4 py-1.5 text-[.9rem] font-medium text-red-800 ring-1 ring-red-300">
             Cas urgent : {statsUrgent ?? "…"}
           </div>
         </div>

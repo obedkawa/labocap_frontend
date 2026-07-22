@@ -16,7 +16,7 @@ export function KpiCard({ title, value, trend, subtitle, icon, iconBg }: KpiCard
   const isPositive = (trend ?? 0) >= 0;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div className="rounded border border-gray-200 bg-white p-6">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <p className="truncate text-xs font-semibold uppercase tracking-wider text-gray-500">

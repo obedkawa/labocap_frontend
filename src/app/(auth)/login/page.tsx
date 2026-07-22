@@ -9,6 +9,7 @@ import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { authApi } from "@/lib/api/auth";
+import { resolvePostLoginRoute } from "@/lib/auth-flow";
 import { useAuthStore } from "@/stores/auth.store";
 
 const loginSchema = z.object({
@@ -61,7 +62,8 @@ export default function LoginPage() {
 
       if (result.user) {
         setUser(result.user);
-        router.push("/home");
+        const next = await resolvePostLoginRoute();
+        router.push(next);
       }
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string } }; message?: string };

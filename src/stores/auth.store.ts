@@ -5,7 +5,7 @@ import { User } from "@/types/auth";
 // Un Super Admin a tous les droits, quel que soit le détail des permissions
 // seedées : il court-circuite tous les contrôles (UI). Détection FR + EN sur
 // le nom comme sur le slug du rôle.
-const isSuperAdmin = (user: User | null): boolean =>
+export const isSuperAdmin = (user: User | null): boolean =>
   (user?.roles ?? []).some((r) => {
     const tokens = `${r.name ?? ""} ${r.slug ?? ""}`.toLowerCase();
     return tokens.includes("super-admin") || tokens.includes("super admin");

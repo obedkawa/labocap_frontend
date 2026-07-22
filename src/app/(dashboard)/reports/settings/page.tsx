@@ -9,6 +9,7 @@ import type { AxiosError } from "axios";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { PageHeader } from "@/components/ui/PageHeader";
+import { IconButton } from "@/components/ui/IconButton";
 import { DataTable } from "@/components/common/DataTable";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { CrudModal } from "@/components/common/CrudModal";
@@ -23,7 +24,7 @@ import { usersApi } from "@/lib/api/users";
 import type { ApiError } from "@/types/api";
 
 const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 type Tab = "titres" | "placeholder";
 
@@ -130,22 +131,18 @@ export default function ReportSettingsPage() {
       cell: ({ row }) =>
         canManage ? (
           <div className="flex items-center gap-2">
-            <button
-              type="button"
+            <IconButton
+              variant="edit"
+              title="Modifier"
               onClick={() => openEdit(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              Modifier
-            </button>
-            <button
-              type="button"
+              icon={<Pencil className="h-4 w-4" />}
+            />
+            <IconButton
+              variant="delete"
+              title="Supprimer"
               onClick={() => setDeleteTarget(row.original)}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-600 text-white hover:bg-red-700"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Supprimer
-            </button>
+              icon={<Trash2 className="h-4 w-4" />}
+            />
           </div>
         ) : null,
     },
@@ -198,7 +195,7 @@ export default function ReportSettingsPage() {
         <button
           type="button"
           onClick={() => setTab("titres")}
-          className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+          className={`rounded-full px-4 py-1.5 text-[.9rem] font-medium transition-colors ${
             tab === "titres"
               ? "bg-blue-600 text-white"
               : "bg-gray-100 text-gray-700 hover:bg-gray-200"
@@ -209,7 +206,7 @@ export default function ReportSettingsPage() {
         <button
           type="button"
           onClick={() => setTab("placeholder")}
-          className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+          className={`rounded-full px-4 py-1.5 text-[.9rem] font-medium transition-colors ${
             tab === "placeholder"
               ? "bg-blue-600 text-white"
               : "bg-gray-100 text-gray-700 hover:bg-gray-200"

@@ -1,4 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
+import { clearSelectedBranch, getSelectedBranchId } from "@/lib/branch-cookie";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080/api/v1";
@@ -25,6 +26,19 @@ const apiClient = axios.create({
     "Content-Type": "application/json",
     Accept: "application/json",
   },
+});
+
+/**
+ * Pose l'en-tête `X-Branch-Id` (branche active) sur chaque requête — équivalent
+ * stateless du `selected_branch_id` de session de Laravel. Le backend le revalide
+ * contre `branch_user` et isole la donnée sur cette branche.
+ */
+apiClient.interceptors.request.use((config) => {
+  const branchId = getSelectedBranchId();
+  if (branchId) {
+    config.headers.set("X-Branch-Id", branchId);
+  }
+  return config;
 });
 
 let isRefreshing = false;
@@ -55,6 +69,20 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config as InternalAxiosRequestConfig & {
       _retry?: boolean;
     };
+
+    // 428 = branche non sélectionnée ou accès révoqué (analogue de la redirection
+    // vers `select.branch` du middleware `BranchRequired` de Laravel). On efface la
+    // branche courante et on renvoie vers l'écran de sélection.
+    if (error.response?.status === 428) {
+      clearSelectedBranch();
+      if (
+        typeof window !== "undefined" &&
+        !window.location.pathname.startsWith("/select-branch")
+      ) {
+        window.location.href = "/select-branch";
+      }
+      return Promise.reject(error);
+    }
 
     // Endpoints d'authentification qui ne doivent JAMAIS déclencher un refresh
     // (un 401 y est une vraie erreur d'identifiants, et /auth/refresh éviterait

@@ -33,6 +33,7 @@ import {
 
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ConfirmModal } from "@/components/common/ConfirmModal";
+import { IconButton } from "@/components/ui/IconButton";
 
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuthStore } from "@/stores/auth.store";
@@ -135,13 +136,13 @@ function ActionButtons({ report, onDeleted }: ActionButtonsProps) {
             <FileText className="h-3.5 w-3.5" />
             Compte rendu
           </Link>
-          <button
+          <IconButton
+            variant="delete"
+            title="Supprimer"
+            aria-label="Supprimer"
             onClick={() => setConfirmOpen(true)}
-            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Supprimer
-          </button>
+            icon={<Trash2 className="h-4 w-4" />}
+          />
         </>
       )}
 

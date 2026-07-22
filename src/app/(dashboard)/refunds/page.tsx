@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Check, Eye, Loader2, X } from "lucide-react";
+import { Check, Eye, Loader2, Pencil, X } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { AxiosError } from "axios";
 
@@ -19,6 +19,7 @@ import {
   type RefundRequest,
   type RefundRequestLog,
 } from "@/lib/api/refunds";
+import { EditRefundModal } from "./EditRefundModal";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -77,6 +78,7 @@ function RefundsContent() {
   const queryClient = useQueryClient();
 
   const [detail, setDetail] = useState<RefundRequest | null>(null);
+  const [editing, setEditing] = useState<RefundRequest | null>(null);
 
   // Laravel affiche la liste entière, sans filtre ni pagination serveur.
   const { data, isLoading } = useQuery({
@@ -207,6 +209,18 @@ function RefundsContent() {
                 </button>
               </PermissionGate>
             )}
+            {/* Édition — Laravel ne l'offre que sur « En attente » et « Aprouvé ». */}
+            {["En attente", "Aprouvé"].includes(refund.status) &&
+              can(PERMISSIONS.EDIT_REFUNDS) && (
+                <button
+                  onClick={() => setEditing(refund)}
+                  className={`${actionBtn} bg-yellow-500 hover:bg-yellow-600`}
+                  aria-label="Modifier"
+                  title="Modifier"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              )}
             <button
               onClick={() => setDetail(refund)}
               className={`${actionBtn} bg-blue-600 hover:bg-blue-700`}
@@ -283,6 +297,11 @@ function RefundsContent() {
         data={allLogs}
         isLoading={isLoading}
       />
+
+      {/* ---- Modal édition ---- */}
+      {editing && (
+        <EditRefundModal refund={editing} onClose={() => setEditing(null)} />
+      )}
 
       {/* ---- Modal détail ---- */}
       {detail && (

@@ -268,7 +268,7 @@ export default function InvoicesPage() {
         ]}
         action={
           <div className="flex items-center gap-3">
-            <span className="inline-flex items-center rounded-full bg-green-100 px-3 py-1.5 text-sm font-semibold text-green-700">
+            <span className="inline-flex items-center rounded-full bg-green-100 px-3 py-1.5 text-[.9rem] font-semibold text-green-700">
               Total encaissé : {todayStats?.totalToday ?? 0}
             </span>
             {/* Laravel n'applique aucun gate à ce bouton (index.blade.php:21-22). */}
@@ -384,7 +384,7 @@ export default function InvoicesPage() {
                   setStartDate(e.target.value);
                   setPage(0);
                 }}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
 
@@ -400,17 +400,17 @@ export default function InvoicesPage() {
                   setEndDate(e.target.value);
                   setPage(0);
                 }}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
           </div>
 
           {/* 2 badges compteurs */}
           <div className="mb-4 flex flex-wrap gap-3">
-            <span className="inline-flex items-center rounded-full bg-gray-100 px-4 py-1.5 text-sm font-medium text-gray-700">
+            <span className="inline-flex items-center rounded-full bg-gray-100 px-4 py-1.5 text-[.9rem] font-medium text-gray-700">
               Factures de vente : {counts?.sales ?? 0}
             </span>
-            <span className="inline-flex items-center rounded-full bg-red-100 px-4 py-1.5 text-sm font-medium text-red-700">
+            <span className="inline-flex items-center rounded-full bg-red-100 px-4 py-1.5 text-[.9rem] font-medium text-red-700">
               Factures d&apos;avoir : {counts?.credits ?? 0}
             </span>
           </div>

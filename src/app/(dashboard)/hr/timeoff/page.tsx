@@ -57,8 +57,14 @@ export default function TimeoffAllRequestsPage() {
       hrApi.getTimeOffs(selectedEmployeeId, { size: 200 }).then((r) => r.data),
     enabled: !!selectedEmployeeId,
   });
+  // Tri du plus récemment créé au plus ancien (fallback sur la date de début).
   const timeOffs: TimeOff[] = useMemo(
-    () => timeoffData?.content ?? [],
+    () =>
+      [...(timeoffData?.content ?? [])].sort(
+        (a, b) =>
+          new Date(b.createdAt ?? b.startDate).getTime() -
+          new Date(a.createdAt ?? a.startDate).getTime()
+      ),
     [timeoffData?.content],
   );
 

@@ -3,6 +3,9 @@ import { Topbar } from "@/components/layout/topbar";
 import { Footer } from "@/components/layout/footer";
 import { AuthGuard } from "@/components/common/AuthGuard";
 import { AppSettingsEffects } from "@/components/layout/AppSettingsEffects";
+import { TimeoffRequestModal } from "@/components/hr/TimeoffRequestModal";
+import { HyperTooltip } from "@/components/common/HyperTooltip";
+import { AutoPlaceholders } from "@/components/common/AutoPlaceholders";
 
 export default function DashboardLayout({
   children,
@@ -31,6 +34,12 @@ export default function DashboardLayout({
           </div>
         </div>
       </div>
+      {/* Modal global « Ajouter un congé » — ouvrable depuis n'importe quelle page. */}
+      <TimeoffRequestModal />
+
+      {/* Infobulles globales façon Hyper + placeholders auto sur tous les champs. */}
+      <HyperTooltip />
+      <AutoPlaceholders />
     </AuthGuard>
   );
 }

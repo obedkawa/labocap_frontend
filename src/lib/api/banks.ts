@@ -52,6 +52,19 @@ export const banksApi = {
   // Dépôts bancaires
   listDeposits: (params?: Record<string, unknown>) =>
     apiClient.get<PageResponse<BankDeposit>>("/bank-deposits", { params }),
-  createDeposit: (data: BankDepositRequest) =>
-    apiClient.post<BankDeposit>("/bank-deposits", data),
+  /**
+   * Enregistre un dépôt bancaire avec sa pièce jointe (scan du reçu, obligatoire).
+   * Endpoint multipart : partie `data` (JSON) + partie `file`.
+   */
+  createDeposit: (data: BankDepositRequest, file?: File | null) => {
+    const form = new FormData();
+    form.append(
+      "data",
+      new Blob([JSON.stringify(data)], { type: "application/json" })
+    );
+    if (file) form.append("file", file);
+    return apiClient.post<BankDeposit>("/bank-deposits", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
 };

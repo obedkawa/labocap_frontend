@@ -28,6 +28,7 @@ import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { PermissionGate } from "@/components/common/PermissionGate";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PERMISSIONS } from "@/lib/constants/permissions";
+import { DEFAULT_REPORT_FOOTER } from "@/lib/constants/report";
 import {
   settingAppsApi,
   settingsStoreApi,
@@ -62,6 +63,7 @@ type FieldDef = {
   full?: boolean;
   placeholder?: string;
   options?: { value: string; label: string }[];
+  center?: boolean;
 };
 
 // Onglet Général → sous-onglet « Général »
@@ -126,7 +128,7 @@ const SMS_FIELDS: FieldDef[] = [
 // Laravel settings/app/setting #general3 : footer, revue, entête (fichier),
 // préfixe, afficher la signature).
 const REPORT_FIELDS: FieldDef[] = [
-  { key: "report_footer", label: "Pied de page du rapport", type: "textarea", full: true, placeholder: "Pied de page du rapport" },
+  { key: "report_footer", label: "Pied de page du rapport", type: "textarea", full: true, placeholder: "Pied de page du rapport", center: true },
   { key: "report_review_title", label: "Revue du rapport", placeholder: "Revue du rapport" },
   { key: "entete", label: "Entete", type: "image", full: true },
   {
@@ -144,6 +146,11 @@ const REPORT_FIELDS: FieldDef[] = [
     ],
   },
 ];
+
+// Valeurs par défaut proposées quand aucune valeur n'est encore enregistrée.
+const FIELD_DEFAULTS: Record<string, string> = {
+  report_footer: DEFAULT_REPORT_FOOTER,
+};
 
 // Toutes les clés « texte » gérées par la page (pour le chargement initial)
 const ALL_KV_FIELDS = [
@@ -204,7 +211,8 @@ export default function SettingsPage() {
       ]);
       const merged = { ...apps, ...store };
       const next: Record<string, string> = {};
-      for (const f of ALL_KV_FIELDS) next[f.key] = merged[f.key] ?? "";
+      for (const f of ALL_KV_FIELDS)
+        next[f.key] = merged[f.key] || FIELD_DEFAULTS[f.key] || "";
       setValues(next);
       return merged;
     },
@@ -545,7 +553,7 @@ function SubTabs({
         <button
           key={t.key}
           onClick={() => onChange(t.key)}
-          className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-all ${
+          className={`rounded-lg px-4 py-1.5 text-[.9rem] font-medium transition-all ${
             active === t.key
               ? "bg-white text-blue-700 shadow-sm"
               : "text-gray-500 hover:text-gray-700"
@@ -594,7 +602,7 @@ function FieldsGrid({
               onChange={(e) => onChange(f.key, e.target.value)}
               placeholder={f.placeholder}
               disabled={disabled}
-              className={`${inputClass} resize-none`}
+              className={`${inputClass} resize-none ${f.center ? "text-center" : ""}`}
             />
           ) : f.type === "select" ? (
             <NativeSelect
@@ -651,7 +659,7 @@ function ServicesCheckboxes({
         return (
           <label
             key={s.value}
-            className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
+            className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-[.9rem] transition-colors ${
               on
                 ? "border-blue-300 bg-blue-50 text-blue-700"
                 : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"

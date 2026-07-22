@@ -43,6 +43,8 @@ export interface Invoice {
   contratName?: string;
   clientName?: string;
   clientAddress?: string;
+  /** « Contact client » du reçu : téléphone(s) du patient lié, sinon vide. */
+  clientContact?: string;
   /** Date saisie à la création. Distincte de createdAt : c'est elle qu'affiche Laravel. */
   date?: string;
   subtotal?: number;

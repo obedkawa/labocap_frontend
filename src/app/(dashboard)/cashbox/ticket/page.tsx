@@ -13,6 +13,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/common/DataTable";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { IconButton } from "@/components/ui/IconButton";
 import { RHFSelect } from "@/components/ui/RHFSelect";
 import { FormField } from "@/components/ui/FormField";
 import { NativeSelect } from "@/components/ui/NativeSelect";
@@ -32,7 +33,7 @@ import type { PageResponse, ApiError } from "@/types/api";
 // ---------------------------------------------------------------------------
 
 const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 function formatAmount(v?: number) {
   if (v == null) return "—";
@@ -65,7 +66,6 @@ function StatusBadge({ status }: { status: string }) {
 // ---------------------------------------------------------------------------
 
 const schema = z.object({
-  description: z.string().min(1, "L'objet est requis"),
   expenseCategoryId: z.string().min(1, "La catégorie est requise"),
   supplierId: z.string().min(1, "Le fournisseur est requis"),
 });
@@ -120,7 +120,6 @@ export default function CashboxTicketsPage() {
     mutationFn: (d: FormData) =>
       cashboxApi
         .addVoucher({
-          description: d.description,
           expenseCategoryId: d.expenseCategoryId,
           supplierId: d.supplierId,
         })
@@ -128,7 +127,7 @@ export default function CashboxTicketsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cashbox-tickets"] });
       toast.success("Bon de caisse créé — ajoutez-y les articles");
-      form.reset({ description: "", expenseCategoryId: "", supplierId: "" });
+      form.reset({ expenseCategoryId: "", supplierId: "" });
     },
     onError: (e: AxiosError<ApiError>) =>
       toast.error(e.response?.data?.message ?? "Erreur lors de la création"),
@@ -228,23 +227,19 @@ export default function CashboxTicketsPage() {
       id: "actions",
       cell: ({ row }) => (
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setDetailTicket(row.original)}
-            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+          <IconButton
+            variant="view"
             title="Voir les détails"
-          >
-            <Eye className="h-3.5 w-3.5" />
-            Détail
-          </button>
+            onClick={() => setDetailTicket(row.original)}
+            icon={<Eye className="h-4 w-4" />}
+          />
           {row.original.status === "en attente" && (
             <Link
               href={`/cashbox/ticket/${row.original.id}`}
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+              className="inline-flex items-center justify-center rounded-sm bg-gray-600 p-[.4rem] text-white transition-shadow hover:shadow-[0_2px_6px_0_rgba(108,117,125,0.5)]"
               title="Modifier / articles"
             >
-              <Pencil className="h-3.5 w-3.5" />
-              Éditer
+              <Pencil className="h-4 w-4" />
             </Link>
           )}
         </div>
@@ -300,21 +295,6 @@ export default function CashboxTicketsPage() {
               placeholder="Choisir un fournisseur..."
               error={form.formState.errors.supplierId?.message}
             />
-
-            <div className="md:col-span-4">
-              <FormField
-                label="Objet"
-                required
-                error={form.formState.errors.description?.message}
-              >
-                <input
-                  type="text"
-                  {...form.register("description")}
-                  placeholder="Objet du bon de caisse"
-                  className={inputClass}
-                />
-              </FormField>
-            </div>
 
             <div className="md:col-span-4">
               <button

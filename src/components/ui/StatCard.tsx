@@ -23,7 +23,7 @@ export function StatCard({
   return (
     <div
       className={cn(
-        "rounded-xl border border-gray-200 bg-white p-5 shadow-sm",
+        "rounded border border-gray-200 bg-white p-6",
         className
       )}
     >

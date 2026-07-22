@@ -16,12 +16,13 @@ import { FormField } from "@/components/ui/FormField";
 import { PermissionGate } from "@/components/common/PermissionGate";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { cashboxApi } from "@/lib/api/cashbox";
+import { API_ORIGIN } from "@/lib/api/client";
 import { expenseCategoriesApi } from "@/lib/api/expenses";
 import { suppliersApi } from "@/lib/api/suppliers";
 import type { ApiError } from "@/types/api";
 
 const inputClass =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-[.9rem] shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 function formatAmount(v?: number) {
   if (v == null) return "—";
@@ -33,7 +34,6 @@ function formatAmount(v?: number) {
 // ---------------------------------------------------------------------------
 
 const headerSchema = z.object({
-  description: z.string().min(1, "L'objet est requis"),
   expenseCategoryId: z.string().min(1, "La catégorie est requise"),
   supplierId: z.string().min(1, "Le fournisseur est requis"),
 });
@@ -85,14 +85,16 @@ export default function CashboxTicketEditPage({ params }: PageProps) {
 
   const form = useForm<HeaderData>({
     resolver: zodResolver(headerSchema),
-    defaultValues: { description: "", expenseCategoryId: "", supplierId: "" },
+    defaultValues: { expenseCategoryId: "", supplierId: "" },
   });
+
+  // Pièce jointe du bon (optionnelle) — remplace l'existante si fournie.
+  const [ticketFile, setTicketFile] = useState<File | null>(null);
 
   // Réinitialise le formulaire quand le bon est chargé.
   useEffect(() => {
     if (voucher) {
       form.reset({
-        description: voucher.description ?? "",
         expenseCategoryId: voucher.expenseCategoryId ?? "",
         supplierId: voucher.supplierId ?? "",
       });
@@ -104,14 +106,21 @@ export default function CashboxTicketEditPage({ params }: PageProps) {
 
   const headerMutation = useMutation({
     mutationFn: (d: HeaderData) =>
-      cashboxApi.updateVoucher(id, {
-        description: d.description,
-        expenseCategoryId: d.expenseCategoryId,
-        supplierId: d.supplierId,
-      }),
+      cashboxApi.updateVoucher(
+        id,
+        {
+          // « Objet » retiré du formulaire (comme Laravel) : on conserve la
+          // description existante pour ne pas l'effacer.
+          description: voucher?.description ?? "",
+          expenseCategoryId: d.expenseCategoryId,
+          supplierId: d.supplierId,
+        },
+        ticketFile,
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cashbox-ticket", id] });
       queryClient.invalidateQueries({ queryKey: ["cashbox-tickets"] });
+      setTicketFile(null);
       toast.success("Bon de caisse enregistré");
     },
     onError: (e: AxiosError<ApiError>) =>
@@ -244,16 +253,24 @@ export default function CashboxTicketEditPage({ params }: PageProps) {
                   isDisabled={!isEditable}
                 />
 
-                <FormField
-                  label="Objet"
-                  required
-                  error={form.formState.errors.description?.message}
-                >
+                {/* Pièce jointe (optionnelle) — calque details.blade (dropify). */}
+                <FormField label="Pièce jointe">
+                  {voucher.ticketFile && (
+                    <a
+                      href={`${API_ORIGIN}/api/v1/files/${voucher.ticketFile}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mb-1 inline-block text-sm text-blue-600 hover:underline"
+                    >
+                      Pièce jointe actuelle — ouvrir
+                    </a>
+                  )}
                   <input
-                    type="text"
-                    {...form.register("description")}
-                    readOnly={!isEditable}
-                    className={`${inputClass} ${!isEditable ? "bg-gray-50 text-gray-500" : ""}`}
+                    type="file"
+                    accept=".pdf,image/*"
+                    disabled={!isEditable}
+                    onChange={(e) => setTicketFile(e.target.files?.[0] ?? null)}
+                    className={`${inputClass} file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100 ${!isEditable ? "bg-gray-50 text-gray-500" : ""}`}
                   />
                 </FormField>
               </div>

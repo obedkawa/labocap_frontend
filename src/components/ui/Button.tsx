@@ -16,16 +16,22 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
 }
 
+// Thème Hyper : couleurs pleines + ombre portée teintée au survol (comme
+// `.btn-primary:hover { box-shadow: 0 2px 6px 0 rgba(114,124,245,.5) }`).
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: "bg-blue-600 text-white hover:bg-blue-700",
-  danger: "bg-red-600 text-white hover:bg-red-700",
+  primary:
+    "bg-blue-600 text-white hover:bg-blue-600 hover:shadow-[0_2px_6px_0_rgba(114,124,245,0.5)]",
+  danger:
+    "bg-red-600 text-white hover:bg-red-600 hover:shadow-[0_2px_6px_0_rgba(250,92,124,0.5)]",
   secondary:
     "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50",
 };
 
+// Bootstrap/Hyper exact : `.btn { padding:.45rem .9rem; font-size:.9rem;
+// border-radius:.15rem }` et `.btn-sm { padding:.28rem .8rem; font-size:.875rem }`.
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: "gap-1 rounded px-2 py-1 text-xs",
-  md: "gap-2 rounded-lg px-4 py-2 text-sm",
+  sm: "gap-1 rounded-[.15rem] px-[.8rem] py-[.28rem] text-[.875rem]",
+  md: "gap-2 rounded-[.15rem] px-[.9rem] py-[.45rem] text-[.9rem]",
 };
 
 const spinnerSize: Record<ButtonSize, string> = {
@@ -50,7 +56,8 @@ export function Button({
       disabled={disabled || loading}
       aria-busy={loading}
       className={cn(
-        "inline-flex items-center justify-center font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+        // `.btn` : font-weight 400, line-height 1.5 (Bootstrap/Hyper).
+        "inline-flex items-center justify-center font-normal leading-normal transition-[background-color,box-shadow] disabled:cursor-not-allowed disabled:opacity-60",
         variantClasses[variant],
         sizeClasses[size],
         className
