@@ -285,7 +285,7 @@ export default function UsersPage() {
         onClose={() => setCreateOpen(false)}
         title="Ajouter un nouvel utilisateur"
         size="xl"
-        onSubmit={createForm.handleSubmit(onCreateSubmit)}
+        onSubmit={() => createForm.handleSubmit(onCreateSubmit)()}
         submitLabel="Ajouter un nouvel utilisateur"
         isSubmitting={createMutation.isPending}
       >
@@ -302,7 +302,7 @@ export default function UsersPage() {
         onClose={() => setEditOpen(false)}
         title="Modifier l'utilisateur"
         size="xl"
-        onSubmit={editForm.handleSubmit(onEditSubmit)}
+        onSubmit={() => editForm.handleSubmit(onEditSubmit)()}
         submitLabel="Mettre à jour"
         isSubmitting={updateMutation.isPending}
       >

@@ -113,7 +113,6 @@ export function HyperTooltip() {
       window.removeEventListener("scroll", hideNow, true);
       restore();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!state) return null;
