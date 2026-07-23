@@ -178,8 +178,10 @@ function RefundsContent() {
         const refund = row.original;
         return (
           <div className="flex items-center gap-2">
-            {/* Laravel n'offre le changement de statut que sur ces trois états. */}
-            {["En attente", "Aprouvé", "Rejeté"].includes(refund.status) && (
+            {/* Décision définitive : Accepter/Refuser ne sont proposés que tant
+               que la demande est « En attente ». Une fois acceptée ou refusée,
+               plus aucune action de statut. */}
+            {refund.status === "En attente" && (
               <PermissionGate permission={PERMISSIONS.PROCESS_REFUNDS}>
                 <button
                   onClick={() => approveMutation.mutate(refund.id)}
